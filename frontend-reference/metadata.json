@@ -1,0 +1,6 @@
+{
+  "name": "Lumina - AI English Learning Studio",
+  "description": "An interactive AI English tutor with Reading, Movie Context Finder, Listening & Dictation, Speaking Practice, Writing Lab, Knowledge Notebook, and Adaptive Analytics.",
+  "requestFramePermissions": ["microphone"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

@@ -1,0 +1,54 @@
+services:
+  db:
+    # pgvector/pgvector image = Postgres chính thức đã cài sẵn extension pgvector,
+    # tránh phải tự build image Postgres riêng chỉ để thêm 1 extension.
+    image: pgvector/pgvector:pg16
+    container_name: lumina_db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      # schema.sql chỉ chạy 1 LẦN DUY NHẤT lúc container tạo volume lần đầu
+      # (cơ chế docker-entrypoint-initdb.d của image Postgres chính thức).
+      # Từ sau lần đầu, mọi thay đổi schema phải đi qua Alembic migration,
+      # KHÔNG sửa tay schema.sql rồi mong container tự áp dụng lại.
+      - ./schema.sql:/docker-entrypoint-initdb.d/01_schema.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  api:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: lumina_api
+    restart: unless-stopped
+    env_file:
+      - ./backend/.env
+    environment:
+      # Ghi đè DATABASE_URL để trỏ vào service "db" trong cùng network compose,
+      # thay vì localhost — bên trong container, "db" là hostname do Docker
+      # DNS nội bộ cấp, không phải 127.0.0.1.
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
+      DATABASE_URL_SYNC: postgresql+psycopg2://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
+    ports:
+      - "8000:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      # Mount code để dev có hot-reload mà không cần rebuild image mỗi lần sửa file.
+      - ./backend/app:/app/app
+      # Mount storage để file upload/audio không mất khi container restart/rebuild.
+      - ./backend/storage:/app/storage
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+
+volumes:
+  postgres_data:

@@ -1,0 +1,194 @@
+erDiagram
+    USERS ||--o{ DOCUMENTS : uploads
+    USERS ||--o{ NOTEBOOK_FOLDERS : organizes
+    USERS ||--o{ VOCAB_ITEMS : owns
+    USERS ||--o{ READING_SESSIONS : attempts
+    USERS ||--o{ GENERATED_PASSAGES : requests
+    USERS ||--o{ CONTEXTUAL_GUESS_ATTEMPTS : attempts
+    USERS ||--o{ CUSTOM_STORIES : requests
+    USERS ||--o{ DICTATION_ATTEMPTS : attempts
+    USERS ||--o{ WRITING_SUBMISSIONS : submits
+    USERS ||--o{ CONVERSATION_SESSIONS : starts
+    USERS ||--o{ ERROR_LOG : generates
+    USERS ||--o{ REVIEW_PRIORITY_QUEUE : has
+    USERS ||--o{ QUIZZES : receives
+    USERS ||--o{ SKILL_PROGRESS : tracked_by
+    USERS ||--o{ MOVIE_CONTEXT_MATCHES : searches
+    USERS ||--|| STREAKS : has
+
+    NOTEBOOK_FOLDERS ||--o{ DOCUMENTS : contains
+    DOCUMENTS ||--o{ DOCUMENT_CHUNKS : split_into
+    DOCUMENTS ||--o{ VOCAB_ITEMS : source_of
+    DOCUMENTS ||--o{ READING_SESSIONS : used_in_classic_mode
+    GENERATED_PASSAGES ||--o{ READING_SESSIONS : used_in_skim_scan
+    DOCUMENTS ||--o{ PODCASTS : generates
+    DOCUMENTS ||--o{ WRITING_SUBMISSIONS : context_for
+
+    VOCAB_ITEMS ||--|| VOCAB_REVIEWS : has_sm2_state
+    VOCAB_ITEMS ||--o{ CONTEXTUAL_GUESS_ATTEMPTS : guessed_in
+
+    READING_SESSIONS ||--o{ READING_ANSWERS : contains
+    DOCUMENT_CHUNKS ||--o{ READING_ANSWERS : cited_by
+
+    PODCASTS ||--o{ TRANSCRIPT_SEGMENTS : has_words
+    PODCASTS ||--o{ DICTATION_ATTEMPTS : practiced_from
+
+    WRITING_SUBMISSIONS ||--o{ WRITING_INSIGHTS : contains
+    WRITING_SUBMISSIONS ||--o{ REPHRASE_REQUESTS : rephrased_as
+
+    PERSONAS ||--o{ ACCENTS : voices
+    PERSONAS ||--o{ PODCASTS : narrates
+    PERSONAS ||--o{ CONVERSATION_SESSIONS : voices
+
+    SCENARIOS ||--o{ CONVERSATION_SESSIONS : basis_for
+    CONVERSATION_SESSIONS ||--o{ CONVERSATION_TURNS : contains
+    CONVERSATION_SESSIONS ||--o| REALTIME_CONVERSATION_METRICS : upgrades_to
+
+    VIDEO_SOURCES ||--o{ VIDEO_SUBTITLE_INDEX : indexed_by
+    VIDEO_SUBTITLE_INDEX ||--o{ MOVIE_CONTEXT_MATCHES : matched_as_real
+    MOVIE_CONTEXT_TTS_FALLBACK ||--o{ MOVIE_CONTEXT_MATCHES : matched_as_tts_fallback
+
+    QUIZZES ||--o{ QUIZ_ATTEMPTS : attempted_as
+
+    USERS {
+        uuid id PK
+        string email
+        string target_level
+    }
+    NOTEBOOK_FOLDERS {
+        uuid id PK
+        uuid user_id FK
+        string name
+    }
+    DOCUMENTS {
+        uuid id PK
+        uuid user_id FK
+        uuid folder_id FK
+        string_array tags
+        boolean starred
+    }
+    DOCUMENT_CHUNKS {
+        uuid id PK
+        uuid document_id FK
+        vector embedding
+    }
+    VOCAB_ITEMS {
+        uuid id PK
+        uuid user_id FK
+        string_array synonyms
+        string_array antonyms
+    }
+    VOCAB_REVIEWS {
+        uuid id PK
+        uuid vocab_item_id FK
+        numeric ease_factor
+        timestamp next_review_at
+    }
+    READING_ANSWERS {
+        uuid id PK
+        jsonb options
+        int correct_option_index
+        int selected_option_index
+    }
+    READING_SESSIONS {
+        uuid id PK
+        uuid document_id FK "nullable, classic mode"
+        uuid generated_passage_id FK "nullable, skim & scan"
+        string mode
+    }
+    GENERATED_PASSAGES {
+        uuid id PK
+        uuid user_id FK
+        string topic
+        string level
+    }
+    CONTEXTUAL_GUESS_ATTEMPTS {
+        uuid id PK
+        uuid vocab_item_id FK "nullable"
+        string term
+        text challenge_sentence
+        jsonb options
+    }
+    PODCASTS {
+        uuid id PK
+        uuid document_id FK
+    }
+    WRITING_SUBMISSIONS {
+        uuid id PK
+        string cefr_level
+        string ielts_band
+    }
+    WRITING_INSIGHTS {
+        uuid id PK
+        uuid writing_submission_id FK
+        string insight_type
+    }
+    PERSONAS {
+        uuid id PK
+        string provider
+        string voice_id
+    }
+    ACCENTS {
+        uuid id PK
+        uuid persona_id FK
+    }
+    SCENARIOS {
+        uuid id PK
+    }
+    CONVERSATION_SESSIONS {
+        uuid id PK
+        uuid scenario_id FK
+        uuid persona_id FK
+    }
+    CONVERSATION_TURNS {
+        uuid id PK
+        text cefr_tip
+        text grammar_tip
+        numeric intent_score "nullable, chưa xác nhận"
+    }
+    REALTIME_CONVERSATION_METRICS {
+        uuid id PK
+        int avg_latency_ms
+    }
+    VIDEO_SOURCES {
+        uuid id PK
+    }
+    VIDEO_SUBTITLE_INDEX {
+        uuid id PK
+        uuid video_source_id FK
+    }
+    MOVIE_CONTEXT_TTS_FALLBACK {
+        uuid id PK
+        text phrase_text
+        uuid persona_id FK
+        text audio_url
+    }
+    MOVIE_CONTEXT_MATCHES {
+        uuid id PK
+        uuid user_id FK
+        string source_type
+        boolean is_saved
+    }
+    ERROR_LOG {
+        uuid id PK
+        uuid user_id FK
+        smallint spaced_repetition_level
+    }
+    SKILL_PROGRESS {
+        uuid id PK
+        uuid user_id FK
+        string skill_name
+        string cefr_level
+    }
+    REVIEW_PRIORITY_QUEUE {
+        uuid id PK
+        uuid user_id FK
+        numeric priority_score
+    }
+    QUIZZES {
+        uuid id PK
+    }
+    STREAKS {
+        uuid user_id PK
+        int current_streak
+    }

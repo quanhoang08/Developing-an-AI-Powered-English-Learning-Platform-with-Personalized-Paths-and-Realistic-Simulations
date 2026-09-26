@@ -1,5 +1,159 @@
 @import "tailwindcss";
 
+/*
+ * Design tokens. Toàn bộ view cũ dùng class indigo/purple/slate của Tailwind, nên thay đổi
+ * bảng màu ở đây sẽ đổi diện mạo cả app mà không phải sửa logic từng component:
+ *   indigo -> spruce (xanh thông, màu chủ đạo duy nhất)
+ *   purple -> coral  (màu nhấn ấm, dùng cho kỹ năng/điểm nhấn phụ)
+ *   slate  -> stone  (xám ấm thay cho xám lạnh, hợp với nền giấy kem)
+ */
+@theme {
+  --font-sans: "Be Vietnam Pro", ui-sans-serif, system-ui, sans-serif;
+  --font-display: "Bricolage Grotesque", "Be Vietnam Pro", ui-sans-serif, sans-serif;
+
+  --font-serif: "Source Serif 4", "Georgia", ui-serif, serif;
+
+  --color-paper: #faf6ee;
+  --color-paper-deep: #f2ebdd;
+
+  --color-indigo-50: #eef7f3;
+  --color-indigo-100: #d6ece3;
+  --color-indigo-200: #b0d9c9;
+  --color-indigo-300: #82c0aa;
+  --color-indigo-400: #52a189;
+  --color-indigo-500: #34866e;
+  --color-indigo-600: #256d59;
+  --color-indigo-700: #1f5749;
+  --color-indigo-800: #1c463c;
+  --color-indigo-900: #163a31;
+  --color-indigo-950: #0b211b;
+
+  --color-purple-50: #fff1ec;
+  --color-purple-100: #ffe0d5;
+  --color-purple-200: #ffc2ac;
+  --color-purple-300: #ff9d7d;
+  --color-purple-400: #f77a55;
+  --color-purple-500: #e85d38;
+  --color-purple-600: #d14a28;
+  --color-purple-700: #ae3c22;
+  --color-purple-800: #8c3320;
+  --color-purple-900: #742f1f;
+  --color-purple-950: #3f150c;
+
+  --color-slate-50: #faf7f1;
+  --color-slate-100: #f3eee4;
+  --color-slate-200: #e7e0d2;
+  --color-slate-300: #d5cbb8;
+  --color-slate-400: #a99f8c;
+  --color-slate-500: #7d7564;
+  --color-slate-600: #5f584a;
+  --color-slate-700: #47423a;
+  --color-slate-800: #2f2c26;
+  --color-slate-900: #201d18;
+  --color-slate-950: #120f0c;
+
+  --animate-float: float 6s ease-in-out infinite;
+  --animate-wiggle: wiggle 2.8s ease-in-out infinite;
+  --animate-rise: rise 0.55s cubic-bezier(0.22, 1, 0.36, 1) both;
+
+  @keyframes float {
+    0%, 100% { transform: translateY(0) rotate(var(--tilt, 0deg)); }
+    50% { transform: translateY(-8px) rotate(var(--tilt, 0deg)); }
+  }
+  @keyframes wiggle {
+    0%, 100% { transform: rotate(-4deg); }
+    50% { transform: rotate(4deg); }
+  }
+  @keyframes rise {
+    from { opacity: 0; transform: translateY(14px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+}
+
+@layer base {
+  html {
+    scroll-behavior: smooth;
+  }
+
+  body {
+    background-color: var(--color-paper);
+    background-image:
+      radial-gradient(60rem 40rem at 105% -10%, rgba(232, 93, 56, 0.07), transparent 60%),
+      radial-gradient(50rem 36rem at -10% 110%, rgba(52, 134, 110, 0.09), transparent 60%);
+  }
+
+  h1, h2, h3 {
+    font-family: var(--font-display);
+    letter-spacing: -0.02em;
+    text-wrap: balance;
+  }
+
+  p { text-wrap: pretty; }
+
+  ::selection {
+    background: var(--color-indigo-200);
+    color: var(--color-indigo-950);
+  }
+
+  /* Focus ring rõ ràng cho bàn phím, không làm phiền khi click chuột. */
+  :focus-visible {
+    outline: 2px solid var(--color-indigo-500);
+    outline-offset: 2px;
+  }
+
+  button, a, [role="button"] {
+    -webkit-tap-highlight-color: transparent;
+  }
+}
+
+/* Lớp nhiễu mịn phủ toàn trang để phá cảm giác phẳng, vô trùng của màu flat. */
+body::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  pointer-events: none;
+  opacity: 0.035;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0.9 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+
+@layer components {
+  /* Thẻ "giấy": bỏ viền xám cứng, dùng bóng ấm đổ theo một hướng sáng duy nhất. */
+  .surface {
+    background: #fffdf8;
+    border-radius: 1.5rem;
+    box-shadow:
+      0 1px 0 rgba(255, 255, 255, 0.9) inset,
+      0 0 0 1px rgba(95, 88, 74, 0.08),
+      0 8px 24px -12px rgba(95, 70, 30, 0.18);
+    transition: transform 0.25s cubic-bezier(0.22, 1, 0.36, 1), box-shadow 0.25s ease;
+  }
+  .surface-lift:hover {
+    transform: translateY(-3px);
+    box-shadow:
+      0 1px 0 rgba(255, 255, 255, 0.9) inset,
+      0 0 0 1px rgba(95, 88, 74, 0.1),
+      0 18px 36px -16px rgba(95, 70, 30, 0.3);
+  }
+
+  /* Nhãn nhỏ dạng "tem" vuông thay cho pill bo tròn quen thuộc. */
+  .tag {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    padding: 0.125rem 0.45rem;
+    border-radius: 0.375rem;
+    font-size: 0.6875rem;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+  }
+
+  .num {
+    font-variant-numeric: tabular-nums;
+    font-family: var(--font-display);
+  }
+}
+
 @layer utilities {
   .material-symbols-outlined {
     font-variation-settings:
@@ -11,7 +165,7 @@
     vertical-align: middle;
     line-height: 1;
   }
-  
+
   .material-symbols-outlined.fill-current {
     font-variation-settings:
       'FILL' 1,
@@ -23,18 +177,18 @@
 
 /* Custom Scrollbar */
 ::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
+  width: 8px;
+  height: 8px;
 }
 ::-webkit-scrollbar-track {
   background: transparent;
 }
 ::-webkit-scrollbar-thumb {
-  background: rgba(100, 116, 139, 0.2);
+  background: rgba(125, 117, 100, 0.25);
   border-radius: 9999px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(100, 116, 139, 0.4);
+  background: rgba(125, 117, 100, 0.45);
 }
 
 @keyframes pulse-slow {
@@ -46,3 +200,11 @@
   animation: pulse-slow 3s infinite ease-in-out;
 }
 
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

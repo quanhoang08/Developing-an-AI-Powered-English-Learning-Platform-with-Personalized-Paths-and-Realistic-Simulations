@@ -1,3 +1,5 @@
+// Modal xem 1 cảnh phim khớp idiom đã tìm (ListeningView). Player là ảnh tĩnh + progress bar
+// giả lập (chưa có video thật/kho phụ đề — tier "Định hướng mở rộng", chưa build).
 import React, { useState } from "react";
 import { MovieMatch } from "../types";
 import {

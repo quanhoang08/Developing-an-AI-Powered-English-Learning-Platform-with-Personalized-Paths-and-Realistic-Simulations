@@ -36,8 +36,15 @@ services:
       # Ghi đè DATABASE_URL để trỏ vào service "db" trong cùng network compose,
       # thay vì localhost — bên trong container, "db" là hostname do Docker
       # DNS nội bộ cấp, không phải 127.0.0.1.
-      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
-      DATABASE_URL_SYNC: postgresql+psycopg2://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
+      DATABASE_URL_SYNC: postgresql+psycopg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
+      # Ollama chạy trên máy host, không nằm trong compose: "localhost" trong container là chính
+      # container nên phải trỏ qua host.docker.internal. Chỉ ghi đè ở đây, không sửa .env — chạy
+      # backend/pytest trực tiếp trên máy vẫn cần localhost.
+      OLLAMA_BASE_URL: http://host.docker.internal:11434
+    # Docker Desktop (Windows/Mac) tự có host.docker.internal; dòng này để Linux cũng chạy được.
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     ports:
       - "8000:8000"
     depends_on:
@@ -46,9 +53,19 @@ services:
     volumes:
       # Mount code để dev có hot-reload mà không cần rebuild image mỗi lần sửa file.
       - ./backend/app:/app/app
+      # Mount migrations/tests/alembic.ini để `docker compose exec api alembic upgrade head` và
+      # pytest luôn dùng bản mới nhất trên máy, không phụ thuộc lần build image gần nhất.
+      - ./backend/migrations:/app/migrations
+      - ./backend/tests:/app/tests
+      - ./backend/alembic.ini:/app/alembic.ini
+      - ./backend/pytest.ini:/app/pytest.ini
       # Mount storage để file upload/audio không mất khi container restart/rebuild.
       - ./backend/storage:/app/storage
-    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+    # --reload (watchfiles) bị bỏ: sau nhiều lần rebuild trong 1 phiên dev dài, watcher gặp
+    # "Cannot allocate memory (os error 12)" — giới hạn inotify của Docker Desktop/WSL2 VM,
+    # không phải hết RAM thật (container chỉ dùng ~140MB). Do luôn rebuild thủ công
+    # (`docker compose up -d --build`) sau mỗi lần sửa code, --reload không còn cần thiết.
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000
 
 volumes:
   postgres_data:

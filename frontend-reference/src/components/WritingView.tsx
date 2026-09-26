@@ -1,5 +1,11 @@
+// Trang Writing Lab — nối với API Writing thật ở backend (/api/writing/submissions, /submit).
+// State khởi tạo (essayTitle/essayText/insights mẫu) vẫn là placeholder demo cho tới khi người
+// học bấm "Analyze & Correct with AI" lần đầu.
 import React, { useState } from "react";
 import { WritingInsight } from "../types";
+import { createWritingSubmission, submitWritingEssay } from "../api";
+import { WordHoverLookup } from "./WordHoverLookup";
+import { RearrangePanel } from "./RearrangePanel";
 import {
   PenTool,
   Sparkles,
@@ -17,6 +23,8 @@ import {
   Bookmark
 } from "lucide-react";
 
+const MIN_SUBMISSION_WORDS = 30;
+
 export const WritingView: React.FC = () => {
   const [essayTitle, setEssayTitle] = useState("Impact of Generative AI on Modern Education");
   const [essayText, setEssayText] = useState(
@@ -26,6 +34,10 @@ In addition, AI tools can automate administrative tasks for teachers, allowing t
   );
 
   const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [analyzeError, setAnalyzeError] = useState<string | null>(null);
+  // Bài luận sau khi áp dụng các sửa lỗi của AI; null cho tới khi chấm xong lần đầu.
+  // Hover tra nghĩa chỉ bật ở vùng này (không bật ở ô soạn thảo).
+  const [reviewedText, setReviewedText] = useState<string | null>(null);
   const [overallScore, setOverallScore] = useState(82);
   const [cefrLevel, setCefrLevel] = useState("B2 Upper");
   const [ieltsScore, setIeltsScore] = useState("6.5 IELTS");
@@ -54,26 +66,47 @@ In addition, AI tools can automate administrative tasks for teachers, allowing t
     }
   ]);
 
+  // Gọi FastAPI Writing thật: tạo 1 submission free_topic (đề = essayTitle) rồi nộp bài ngay
+  // để chấm điểm — mỗi lần bấm "Analyze" là 1 submission mới (không sửa lại bài cũ).
   const handleAnalyzeWriting = async () => {
+    const wordCountNow = essayText.trim().split(/\s+/).filter(Boolean).length;
+    if (wordCountNow < MIN_SUBMISSION_WORDS) {
+      setAnalyzeError(`Essay must be at least ${MIN_SUBMISSION_WORDS} words (currently ${wordCountNow}).`);
+      return;
+    }
+    setAnalyzeError(null);
     setIsAnalyzing(true);
     try {
-      const res = await fetch("/api/ai/writing-analysis", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ title: essayTitle, text: essayText })
-      });
-      const data = await res.json();
-      if (data.overallScore) setOverallScore(data.overallScore);
-      if (data.cefrLevel) setCefrLevel(data.cefrLevel);
-      if (data.ieltsScore) setIeltsScore(data.ieltsScore);
-      if (data.insights && data.insights.length > 0) setInsights(data.insights);
-    } catch (e) {
-      console.error(e);
+      const submission = await createWritingSubmission(essayTitle || "Untitled Essay");
+      const result = await submitWritingEssay(submission.submission_id, essayText);
+      setOverallScore(Math.round(result.score));
+      setCefrLevel(result.cefr_level);
+      setIeltsScore(`${result.ielts_band} IELTS`);
+      setReviewedText(
+        result.insights.reduce(
+          (text, insight) =>
+            insight.original_text && insight.suggested_text ? text.replace(insight.original_text, insight.suggested_text) : text,
+          essayText,
+        ),
+      );
+      setInsights(
+        result.insights.map((insight) => ({
+          type: insight.insight_type as WritingInsight["type"],
+          title: insight.title,
+          description: insight.description,
+          originalText: insight.original_text ?? undefined,
+          suggestedText: insight.suggested_text ?? undefined,
+        })),
+      );
+    } catch (error) {
+      const raw = error instanceof Error ? error.message : "Failed to analyze essay";
+      setAnalyzeError(raw);
     } finally {
       setIsAnalyzing(false);
     }
   };
 
+  // Thay 1 từ trong bài luận bằng synonym gợi ý khi người học bấm chọn.
   const applySynonym = (targetWord: string, replacement: string) => {
     const updated = essayText.replace(new RegExp(`\\b${targetWord}\\b`, "i"), replacement);
     setEssayText(updated);
@@ -82,14 +115,15 @@ In addition, AI tools can automate administrative tasks for teachers, allowing t
   const wordCount = essayText.trim().split(/\s+/).filter(Boolean).length;
 
   return (
-    <div className="p-6 md:p-8 max-w-7xl mx-auto space-y-6">
+    <div className="p-6 md:p-10 max-w-7xl mx-auto space-y-8">
       {/* Title Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-200/80">
+      <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900 tracking-tight flex items-center gap-2">
-            <PenTool className="w-6 h-6 text-indigo-600" /> Writing & Correction Lab
+          <p className="text-sm italic text-slate-500 mb-1">Write, get corrected, get better</p>
+          <h1 className="font-display text-4xl font-bold text-slate-900 flex items-center gap-3">
+            <PenTool className="w-8 h-8 text-purple-500 -rotate-12" /> Writing & Correction Lab
           </h1>
-          <p className="text-xs text-slate-500 mt-1">
+          <p className="text-sm text-slate-500 mt-2 max-w-xl">
             Compose essays and get instant AI scoring, grammar fixes, and academic vocabulary upgrades.
           </p>
         </div>
@@ -97,28 +131,34 @@ In addition, AI tools can automate administrative tasks for teachers, allowing t
         <button
           onClick={handleAnalyzeWriting}
           disabled={isAnalyzing}
-          className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs rounded-2xl shadow-md shadow-indigo-200 flex items-center justify-center gap-2 transition-all cursor-pointer active:scale-95 disabled:opacity-50"
+          className="px-6 py-3 bg-indigo-700 hover:bg-indigo-800 text-white font-bold text-sm rounded-2xl shadow-[0_16px_26px_-14px_rgba(31,87,73,0.9)] flex items-center justify-center gap-2 transition-all cursor-pointer hover:-translate-y-0.5 active:scale-95 disabled:opacity-50"
         >
           {isAnalyzing ? <Sparkles className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4 text-amber-300" />}
           {isAnalyzing ? "Analyzing Essay..." : "Analyze & Correct with AI"}
         </button>
       </div>
 
+      {analyzeError && (
+        <p role="alert" className="text-sm text-red-700 bg-red-50 rounded-xl px-4 py-3 border-l-4 border-red-400">
+          {analyzeError}
+        </p>
+      )}
+
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
         {/* Left Writing Editor (7 Cols) */}
-        <div className="lg:col-span-7 bg-white rounded-3xl border border-slate-200/80 p-6 shadow-xs flex flex-col justify-between min-h-[560px]">
-          <div className="space-y-4">
+        <div className="surface lg:col-span-7 p-7 md:p-9 flex flex-col justify-between min-h-[560px]">
+          <div className="space-y-5">
             {/* Title Input */}
             <input
               type="text"
               value={essayTitle}
               onChange={(e) => setEssayTitle(e.target.value)}
-              placeholder="Essay Title..."
-              className="w-full text-lg font-extrabold text-slate-900 border-b border-slate-100 pb-2 focus:outline-none focus:border-indigo-500 transition-colors"
+              placeholder="Essay title..."
+              className="w-full font-display text-3xl font-bold text-slate-900 placeholder-slate-300 bg-transparent border-b-2 border-dashed border-slate-200 pb-3 focus:outline-none focus:border-indigo-500 transition-colors"
             />
 
             {/* Rich Text Toolbar */}
-            <div className="flex items-center gap-1 p-1.5 bg-slate-100/80 rounded-xl border border-slate-200 text-slate-600">
+            <div className="flex items-center gap-1 p-1.5 bg-paper-deep/80 rounded-full w-fit text-slate-600">
               <button className="p-1.5 hover:bg-white rounded-lg transition-colors cursor-pointer" title="Bold">
                 <Bold className="w-4 h-4" />
               </button>
@@ -143,26 +183,38 @@ In addition, AI tools can automate administrative tasks for teachers, allowing t
               value={essayText}
               onChange={(e) => setEssayText(e.target.value)}
               placeholder="Write your essay here..."
-              className="w-full p-4 text-xs sm:text-sm text-slate-800 bg-slate-50/50 border border-slate-200/80 rounded-2xl focus:outline-none focus:ring-2 focus:ring-indigo-500/20 leading-relaxed font-sans"
+              className="w-full px-5 py-4 text-[17px] text-slate-800 bg-[#fffef9] ring-1 ring-slate-900/10 rounded-2xl focus:outline-none focus:ring-2 focus:ring-indigo-500/60 leading-8 font-serif [background-image:repeating-linear-gradient(transparent,transparent_31px,rgba(169,159,140,0.25)_31px,rgba(169,159,140,0.25)_32px)] bg-local"
             />
+
+            {reviewedText !== null && (
+              <div className="space-y-2">
+                <h4 className="text-sm italic text-slate-400">
+                  AI-corrected essay — hover a word to see its meaning
+                </h4>
+                <WordHoverLookup className="whitespace-pre-wrap rounded-2xl bg-emerald-50 border-l-4 border-emerald-400 p-5 text-[17px] font-serif leading-8 text-slate-800">
+                  {reviewedText}
+                </WordHoverLookup>
+              </div>
+            )}
           </div>
 
-          <div className="pt-4 border-t border-slate-100 flex items-center justify-between text-xs text-slate-500">
-            <span>{wordCount} Words • {essayText.length} Characters</span>
+          <div className="pt-5 mt-4 border-t border-dashed border-slate-200 flex items-center justify-between text-xs text-slate-500">
+            <span className="num">{wordCount} Words • {essayText.length} Characters</span>
             <span className="font-semibold text-indigo-600">Auto-saved to Notebook</span>
           </div>
         </div>
 
         {/* Right AI Feedback Panel (5 Cols) */}
-        <div className="lg:col-span-5 bg-white rounded-3xl border border-slate-200/80 p-6 shadow-xs space-y-6">
+        <div className="surface lg:col-span-5 p-7 space-y-7 lg:self-start">
           {/* Overall Score Header */}
-          <div className="p-5 rounded-2xl bg-gradient-to-br from-indigo-900 to-purple-900 text-white flex items-center justify-between">
-            <div>
-              <span className="text-[10px] font-bold uppercase tracking-wider text-indigo-300">
-                Writing Score
+          <div className="relative overflow-hidden p-6 rounded-3xl bg-indigo-900 text-white flex items-center justify-between">
+            <div className="absolute -right-8 -top-10 w-40 h-40 rounded-full bg-purple-500/30 blur-2xl pointer-events-none" aria-hidden="true" />
+            <div className="relative">
+              <span className="text-sm italic text-indigo-300">
+                Writing score
               </span>
               <div className="flex items-baseline gap-2 mt-1">
-                <span className="text-3xl font-extrabold">{overallScore}</span>
+                <span className="num text-6xl font-bold">{overallScore}</span>
                 <span className="text-xs text-indigo-200">/ 100</span>
               </div>
               <p className="text-xs text-indigo-100 font-semibold mt-1">
@@ -170,26 +222,26 @@ In addition, AI tools can automate administrative tasks for teachers, allowing t
               </p>
             </div>
 
-            <div className="w-16 h-16 rounded-2xl bg-white/10 backdrop-blur-md border border-white/20 flex flex-col items-center justify-center text-center">
-              <Award className="w-7 h-7 text-amber-300" />
+            <div className="relative w-16 h-16 rounded-2xl bg-white/10 flex flex-col items-center justify-center text-center rotate-6">
+              <Award className="w-8 h-8 text-amber-300" />
             </div>
           </div>
 
           {/* AI Insights Cards List */}
           <div className="space-y-4">
-            <h4 className="text-xs font-bold uppercase tracking-wider text-slate-400">
-              AI Corrections & Vocabulary Upgrades
+            <h4 className="font-display text-xl font-bold text-slate-900">
+              Corrections & vocabulary upgrades
             </h4>
 
             {insights.map((ins, idx) => (
               <div
                 key={idx}
-                className={`p-4 rounded-2xl border space-y-2 ${
+                className={`p-5 rounded-2xl border-l-4 space-y-2 ${
                   ins.type === "grammar"
-                    ? "bg-rose-50/60 border-rose-200"
+                    ? "bg-rose-50 border-rose-400"
                     : ins.type === "vocabulary"
-                    ? "bg-indigo-50/60 border-indigo-200"
-                    : "bg-amber-50/60 border-amber-200"
+                    ? "bg-indigo-50 border-indigo-400"
+                    : "bg-amber-50 border-amber-400"
                 }`}
               >
                 <div className="flex items-center justify-between">
@@ -204,7 +256,7 @@ In addition, AI tools can automate administrative tasks for teachers, allowing t
                   >
                     {ins.title}
                   </span>
-                  <span className="text-[10px] uppercase font-bold px-1.5 py-0.5 rounded bg-white/80">
+                  <span className="tag bg-white/80 text-slate-600">
                     {ins.type}
                   </span>
                 </div>
@@ -224,7 +276,7 @@ In addition, AI tools can automate administrative tasks for teachers, allowing t
                         <button
                           key={sIdx}
                           onClick={() => applySynonym(ins.originalText || "good", syn)}
-                          className="px-2.5 py-1 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold shadow-xs transition-transform active:scale-95 cursor-pointer"
+                          className="px-3 py-1.5 rounded-full bg-indigo-700 hover:bg-indigo-800 text-white text-xs font-bold transition-all hover:-translate-y-0.5 active:scale-95 cursor-pointer"
                         >
                           "{syn}"
                         </button>
@@ -240,7 +292,7 @@ In addition, AI tools can automate administrative tasks for teachers, allowing t
                 )}
 
                 {ins.suggestion && (
-                  <p className="text-xs font-medium text-amber-900 bg-white/80 p-2.5 rounded-xl border border-amber-200/60">
+                  <p className="text-sm font-medium font-serif text-amber-950 bg-white/80 p-3 rounded-xl">
                     "{ins.suggestion}"
                   </p>
                 )}
@@ -249,6 +301,8 @@ In addition, AI tools can automate administrative tasks for teachers, allowing t
           </div>
         </div>
       </div>
+
+      <RearrangePanel skill="writing" />
     </div>
   );
 };

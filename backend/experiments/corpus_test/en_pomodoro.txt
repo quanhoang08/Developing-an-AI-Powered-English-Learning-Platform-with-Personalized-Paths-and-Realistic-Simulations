@@ -1,0 +1,8 @@
+The Pomodoro Technique
+The Pomodoro Technique is a time management method developed by Francesco Cirillo in the late 1980s. Cirillo named it after the tomato-shaped kitchen timer he used as a university student; pomodoro is the Italian word for tomato.
+The basic cycle has five steps. First, choose one task. Second, set a timer for 25 minutes and work on the task without interruption. Third, when the timer rings, take a short break of five minutes. Each 25-minute work period is called one pomodoro.
+After four pomodoros in a row, the worker takes a longer break of 15 to 30 minutes. This longer break lets the brain rest before the next set of cycles begins.
+If a distraction appears during a pomodoro, the worker writes it down on a separate list and returns to the task at once. A pomodoro that is interrupted cannot be counted, and it must be restarted from the beginning.
+Language learners use the method to study vocabulary, grammar or listening in short focused blocks. Many find that the fixed limit makes it easier to start, because the task feels smaller than a whole evening of study.
+Critics note that 25 minutes is not ideal for every task. Deep creative work may need longer uninterrupted periods, so some people adjust the length to 50 minutes of work followed by a 10-minute break.
+The technique also encourages tracking. At the end of each day the learner counts how many pomodoros were completed, which gives a simple measure of effort.

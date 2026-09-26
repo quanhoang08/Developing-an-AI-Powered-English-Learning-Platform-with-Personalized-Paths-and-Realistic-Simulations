@@ -1,12 +1,15 @@
 import React from "react";
-import { Search, Flame, Trophy, Bell, Sparkles, Command } from "lucide-react";
+import { Search, Flame, Trophy, Bell, Command } from "lucide-react";
 import { ActiveTab } from "../types";
+import { useLearningStats } from "../stats";
+import { AuthPanel } from "./AuthPanel";
 
 interface HeaderProps {
   activeTab: ActiveTab;
   searchQuery: string;
   setSearchQuery: (q: string) => void;
   openFlashcards: () => void;
+  onAuthChanged: () => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -14,7 +17,10 @@ export const Header: React.FC<HeaderProps> = ({
   searchQuery,
   setSearchQuery,
   openFlashcards,
+  onAuthChanged,
 }) => {
+  const { stats } = useLearningStats();
+  // Đổi tiêu đề header theo tab đang xem.
   const getTabTitle = () => {
     switch (activeTab) {
       case "dashboard":
@@ -37,60 +43,72 @@ export const Header: React.FC<HeaderProps> = ({
   };
 
   return (
-    <header className="h-16 bg-white/90 backdrop-blur-md border-b border-slate-200/80 px-6 flex items-center justify-between sticky top-0 z-10 shadow-xs">
+    <header className="h-16 bg-paper/80 backdrop-blur-xl border-b border-slate-200/60 px-6 flex items-center justify-between sticky top-0 z-10">
       {/* Title / Search */}
-      <div className="flex items-center gap-6 flex-1 max-w-xl">
-        <h2 className="text-lg font-bold text-slate-900 tracking-tight shrink-0 hidden md:block">
+      <div className="flex items-center gap-6 flex-1 min-w-0 max-w-2xl">
+        <h2 className="font-display text-xl font-bold text-slate-900 shrink-0 hidden md:block">
           {getTabTitle()}
         </h2>
 
-        <div className="relative flex-1">
-          <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+        <div className="relative flex-1 min-w-0 group">
+          <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2 transition-colors group-focus-within:text-indigo-600" />
           <input
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             placeholder="Search idioms, grammar, stories, or movie quotes..."
-            className="w-full pl-9 pr-12 py-1.5 text-xs bg-slate-100/80 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 text-slate-800 placeholder-slate-400 transition-all"
+            className="w-full pl-10 pr-14 py-2 text-xs bg-[#fffdf8] rounded-full ring-1 ring-slate-900/10 focus:outline-none focus:ring-2 focus:ring-indigo-500/60 text-slate-800 placeholder-slate-400 transition-shadow shadow-[0_6px_16px_-12px_rgba(95,70,30,0.5)]"
           />
-          <div className="absolute right-2.5 top-1/2 -translate-y-1/2 hidden sm:flex items-center gap-0.5 text-[10px] text-slate-400 font-mono bg-white px-1.5 py-0.5 rounded border border-slate-200">
+          <div className="absolute right-3 top-1/2 -translate-y-1/2 hidden sm:flex items-center gap-0.5 text-[10px] text-slate-400 font-mono">
             <Command className="w-2.5 h-2.5" /> K
           </div>
         </div>
       </div>
 
       {/* Gamification & User Stats */}
-      <div className="flex items-center gap-3">
-        {/* Streak Button */}
+      <div className="flex items-center gap-2.5">
+        {/* Streak + XP là số liệu thật từ GET /api/streaks (bảng streaks), 0 khi chưa đăng nhập.
+            Ngọn lửa chỉ sáng khi hôm nay đã học, mờ đi nếu streak đang chờ được giữ. */}
         <button
           onClick={openFlashcards}
-          className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-amber-50 border border-amber-200/80 text-amber-800 hover:bg-amber-100 transition-all cursor-pointer group"
-          title="Daily Streak - Click to Review"
+          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full active:scale-95 transition-all cursor-pointer group ${
+            stats.todayActive
+              ? "bg-purple-50 text-purple-800 hover:bg-purple-100"
+              : "bg-paper-deep text-slate-600 hover:bg-slate-200/70"
+          }`}
+          title={stats.todayActive ? "Streak kept for today" : "Study today to keep your streak - click to review"}
         >
-          <Flame className="w-4 h-4 text-amber-500 fill-amber-500 group-hover:scale-110 transition-transform" />
-          <span className="text-xs font-bold">14 Days</span>
+          <Flame
+            className={`w-4 h-4 group-hover:animate-wiggle ${
+              stats.todayActive ? "text-purple-500 fill-purple-500" : "text-slate-400"
+            }`}
+          />
+          <span className="num text-xs font-bold">
+            {stats.currentStreak} {stats.currentStreak === 1 ? "day" : "days"}
+          </span>
         </button>
 
         {/* XP Level */}
-        <div className="hidden lg:flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-indigo-50 border border-indigo-200/80 text-indigo-900">
+        <div
+          className="hidden lg:flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-indigo-50 text-indigo-900"
+          title={`${stats.xpIntoLevel} / ${stats.xpForNextLevel} XP to level ${stats.level + 1}`}
+        >
           <Trophy className="w-4 h-4 text-indigo-600" />
-          <span className="text-xs font-bold">1,240 XP</span>
-          <span className="text-[10px] bg-indigo-200/60 text-indigo-800 font-bold px-1.5 py-0.2 rounded-md">
-            Level 12
-          </span>
-        </div>
-
-        {/* AI Model Status */}
-        <div className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-semibold">
-          <Sparkles className="w-3.5 h-3.5 text-emerald-600" />
-          <span className="hidden sm:inline">Gemini 3.6 Active</span>
+          <span className="num text-xs font-bold">{stats.totalXp.toLocaleString("en-US")} XP</span>
+          <span className="tag bg-indigo-600 text-white">Lv {stats.level}</span>
         </div>
 
         {/* Notifications */}
-        <button className="relative p-2 rounded-xl text-slate-500 hover:bg-slate-100 hover:text-slate-700 transition-colors">
+        <button
+          className="relative p-2 rounded-full text-slate-500 hover:bg-slate-900/5 hover:text-slate-700 transition-colors"
+          aria-label="Notifications"
+        >
           <Bell className="w-4 h-4" />
-          <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-indigo-600 rounded-full"></span>
+          <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-purple-500 rounded-full ring-2 ring-paper"></span>
         </button>
+
+        {/* Kết nối phiên đăng nhập của giao diện với FastAPI backend. */}
+        <AuthPanel onAuthChanged={onAuthChanged} />
       </div>
     </header>
   );

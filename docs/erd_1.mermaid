@@ -1,0 +1,408 @@
+%% ============================================================
+%% LUMINA - ERD tong hop
+%% Dung tu thiet_ke_database.md (muc 1-10) + doi chieu feature-reading.md /
+%% feature-listening.md / feature-writing.md / feature-speaking.md /
+%% api-spec.md / test-cases (1).md
+%%
+%% CAP NHAT: tu khi co docs/schema.sql (DDL that, da chay thu tren
+%% PostgreSQL 16 + pgvector), ERD nay da duoc dong bo lai theo schema.sql:
+%% them cot rubric_scores (WRITING_SUBMISSIONS). Toan bo 8 diem con mo cua
+%% ra soat lan 3 (thiet_ke_database.md muc 9.3 cu) da duoc xu ly - xem
+%% thiet_ke_database.md muc 10 va lumina_context.md muc 3.10.
+%%
+%% LUU Y: mot so cot/kieu du lieu van la SUY LUAN HOP LY (danh dau "de xuat"
+%% hoac "chua chot" trong comment) vi mot vai phan chua duoc nguoi dung xac
+%% nhan chinh thuc (vd. gia tri enum error_type, cach cham intent/politeness
+%% score). Doi chieu lai voi lumina_context.md muc 4 (cac diem 1-7 con mo)
+%% truoc khi chay migration Alembic that.
+%%
+%% Tier: MVP = Day du | EXP = Thu nghiem gioi han | FUT = Dinh huong mo rong
+%% ============================================================
+
+erDiagram
+
+%% ---------- CORE (MVP) ----------
+    USERS {
+        uuid id PK
+        string email UK
+        string password_hash
+        string target_level
+        timestamp created_at
+    }
+
+    NOTEBOOK_FOLDERS {
+        uuid id PK
+        uuid user_id FK
+        string name
+    }
+
+    DOCUMENTS {
+        uuid id PK
+        uuid user_id FK
+        uuid folder_id FK "nullable"
+        string source_type "audio hoac docx"
+        string status "processing, ready, failed"
+        jsonb tags
+        boolean starred
+        int file_size_kb
+        timestamp created_at
+    }
+
+    DOCUMENT_CHUNKS {
+        uuid id PK
+        uuid document_id FK
+        text content
+        vector embedding "768 dim, gemini-embedding-001, nullable"
+        vector embedding_local "1024 dim, bge-m3 qua Ollama (mac dinh)"
+        int chunk_index
+    }
+
+    GENERATED_PASSAGES {
+        uuid id PK
+        uuid user_id FK
+        string topic
+        string level
+        text content
+        timestamp created_at
+    }
+
+%% ---------- READING and VOCAB (MVP; Rearrange = EXP) ----------
+    READING_SESSIONS {
+        uuid id PK
+        uuid user_id FK
+        uuid document_id FK "nullable, XOR generated_passage_id"
+        uuid generated_passage_id FK "nullable, XOR document_id"
+        string mode "classic hoac skim_scan"
+        decimal score
+        timestamp completed_at
+        timestamp created_at
+    }
+
+    READING_ANSWERS {
+        uuid id PK
+        uuid session_id FK
+        jsonb options
+        int correct_option_index
+        int selected_option_index
+        uuid source_chunk_id FK "nullable, Classic Mode - da implement, xem thiet_ke_database.md 9.1"
+    }
+
+    VOCAB_ITEMS {
+        uuid id PK
+        uuid user_id FK
+        string term
+        text definition
+        jsonb synonyms
+        jsonb antonyms
+        uuid document_id FK "nullable, XOR source_url"
+        string source_url "nullable, XOR document_id, tu Extension"
+        timestamp created_at
+    }
+
+    VOCAB_REVIEWS {
+        uuid id PK
+        uuid vocab_item_id FK UK "quan he 1-1, SM-2"
+        decimal ease_factor "toi thieu 1.3"
+        int interval_days
+        int repetitions
+        timestamp next_review_at
+    }
+
+    CONTEXTUAL_GUESS_ATTEMPTS {
+        uuid id PK
+        uuid user_id FK
+        uuid vocab_item_id FK "nullable"
+        string term
+        text challenge_sentence
+        jsonb options
+        int correct_option_index
+        int selected_option_index
+    }
+
+    CUSTOM_STORIES {
+        uuid id PK
+        uuid user_id FK
+        jsonb vocab_item_ids
+        text content
+        string theme
+        string length "short hoac medium"
+    }
+
+%% ---------- LISTENING (MVP) ----------
+    PODCASTS {
+        uuid id PK
+        uuid document_id FK
+        uuid persona_id FK "nullable"
+        string audio_url
+        string status
+    }
+
+    TRANSCRIPT_SEGMENTS {
+        uuid id PK
+        uuid podcast_id FK
+        text text
+        int start_ms
+        int end_ms
+    }
+
+    DICTATION_ATTEMPTS {
+        uuid id PK
+        uuid podcast_id FK
+        uuid user_id FK
+        int start_ms
+        int end_ms
+        jsonb reference_word_tags "vd is_rare_or_proper"
+        text transcribed_text
+        decimal score
+    }
+
+%% ---------- WRITING (MVP; Rearrange = EXP) ----------
+    WRITING_SUBMISSIONS {
+        uuid id PK
+        uuid user_id FK
+        uuid document_id FK "nullable tuy source_type - thiet_ke_database.md 7"
+        string source_type "document_summary, extended_topic, free_topic"
+        text prompt_text
+        string certificate_style "nullable: toeic, ielts, cambridge"
+        text submitted_text
+        jsonb rubric_scores "nullable, moi - schema.sql: 4 tieu chi IELTS, chi extended_topic/free_topic, writing_service ghi user_errors writing_coherence khi coherence < 60"
+        string cefr_level
+        string ielts_band
+        decimal score
+        timestamp completed_at
+        timestamp created_at
+    }
+
+    WRITING_INSIGHTS {
+        uuid id PK
+        uuid submission_id FK
+        string insight_type "grammar, vocabulary, style"
+        int offset_start "nullable, chi grammar"
+        int offset_end "nullable, chi grammar"
+        text original_text
+        text suggested_text
+        text explanation
+    }
+
+    REPHRASE_REQUESTS {
+        uuid id PK
+        uuid submission_id FK
+        text original_sentence
+        jsonb suggested_sentences
+    }
+
+%% ---------- SPEAKING (EXP) ----------
+    SCENARIOS {
+        uuid id PK
+        text description
+        string goal "de xuat - feature-speaking.md 3.3"
+        string formality_level "de xuat"
+    }
+
+    PERSONAS {
+        uuid id PK
+        string name
+        string voice_id
+        boolean is_active
+    }
+
+    CONVERSATION_SESSIONS {
+        uuid id PK
+        uuid user_id FK
+        uuid scenario_id FK
+        uuid persona_id FK "nullable"
+        timestamp started_at
+        timestamp last_active_at
+    }
+
+    CONVERSATION_TURNS {
+        uuid id PK
+        uuid session_id FK
+        text transcription
+        text response_text
+        int pronunciation_score "nullable"
+        int intent_score "nullable, de xuat"
+        int politeness_score "nullable, de xuat"
+        boolean pronunciation_assessment_failed
+        string stt_provider_used "azure hoac whisper - thiet_ke_database.md 8"
+        jsonb suggested_phrases
+        timestamp created_at
+    }
+
+    SLANG_PHRASES {
+        uuid id PK
+        string phrase_text
+        text meaning
+        text example_sentence
+        string formality_level
+        string source_reference
+        jsonb topic_tags "de xuat, chua chot"
+    }
+
+    USER_PHRASEBOOK_ENTRIES {
+        uuid id PK
+        uuid user_id FK
+        uuid slang_phrase_id FK "nullable"
+        uuid conversation_turn_id FK "nullable"
+        string phrase_text "snapshot, nullable"
+        text meaning "snapshot, nullable"
+        text example_sentence "snapshot, nullable"
+    }
+
+%% ---------- ADAPTIVE LEARNING ENGINE (MVP) ----------
+    QUIZZES {
+        uuid id PK
+        uuid user_id FK
+        jsonb focus_error_types "nullable - thiet_ke_database.md 9.2"
+        jsonb questions
+        timestamp created_at
+    }
+
+    QUIZ_ATTEMPTS {
+        uuid id PK
+        uuid user_id FK
+        uuid quiz_id FK "nullable, chi Adaptive Engine - thiet_ke_database.md 9.2"
+        string quiz_type "rearrange_reading, rearrange_writing, adaptive..."
+        boolean is_open_form "nullable, chi Writing Rearrange"
+        decimal score
+        timestamp created_at
+    }
+
+    USER_ERRORS {
+        uuid id PK
+        uuid user_id FK
+        uuid quiz_attempt_id FK "nullable"
+        string error_type "enum de xuat 9 gia tri - api-spec.md muc 9; writing_coherence gio da co flow tu dong - xem WRITING_SUBMISSIONS.rubric_scores"
+        int spaced_repetition_level
+        timestamp created_at
+    }
+
+    REVIEW_PRIORITY_QUEUE {
+        uuid id PK
+        uuid user_id FK
+        string source_type "vocab_review hoac user_error"
+        uuid source_id
+        decimal priority_score
+        timestamp created_at
+    }
+
+    STREAKS {
+        uuid id PK
+        uuid user_id FK UK
+        int current_streak
+        int longest_streak
+        date last_active_date
+    }
+
+    SKILL_PROGRESS {
+        uuid id PK
+        uuid user_id FK
+        string skill "reading, listening, writing, speaking"
+        string cefr_level
+        decimal score
+        timestamp updated_at
+    }
+
+%% ---------- AUTH / EXTENSION (MVP + EXP) ----------
+    REFRESH_TOKENS {
+        uuid id PK
+        uuid user_id FK
+        string token_hash
+        string client_type "web hoac extension - scope da chot: extension chi goi /api/extension/*, /api/reading/lookup, /api/vocab (middleware enforcement con la TODO)"
+        timestamp expires_at
+        boolean revoked
+    }
+
+%% ---------- MOVIE DELIVERY CONTEXT (EXP + FUT) ----------
+    MOVIE_CONTEXT_TTS_FALLBACK {
+        uuid id PK
+        string phrase_text
+        string audio_url
+        uuid persona_id FK
+    }
+
+    MOVIE_CONTEXT_MATCHES {
+        uuid id PK
+        string phrase
+        string source_type "real_video hoac tts_fallback"
+        uuid tts_fallback_id FK "nullable"
+        uuid video_subtitle_index_id FK "nullable, FUT"
+        boolean is_saved
+    }
+
+    VIDEO_SOURCES {
+        uuid id PK
+        string title
+        string url
+    }
+
+    VIDEO_SUBTITLE_INDEX {
+        uuid id PK
+        uuid video_source_id FK
+        string phrase
+        int timestamp_ms
+    }
+
+    REALTIME_CONVERSATION_METRICS {
+        uuid id PK
+        uuid conversation_turn_id FK
+    }
+
+%% ============================================================
+%% RELATIONSHIPS
+%% ============================================================
+
+    USERS ||--o{ DOCUMENTS : uploads
+    USERS ||--o{ NOTEBOOK_FOLDERS : creates
+    NOTEBOOK_FOLDERS ||--o{ DOCUMENTS : chua
+    DOCUMENTS ||--o{ DOCUMENT_CHUNKS : chunk_thanh
+    USERS ||--o{ GENERATED_PASSAGES : sinh
+
+    USERS ||--o{ READING_SESSIONS : lam_bai
+    DOCUMENTS ||--o{ READING_SESSIONS : classic_mode
+    GENERATED_PASSAGES ||--o{ READING_SESSIONS : skim_scan
+    READING_SESSIONS ||--o{ READING_ANSWERS : chua
+    DOCUMENT_CHUNKS |o--o{ READING_ANSWERS : trich_dan_classic
+
+    USERS ||--o{ VOCAB_ITEMS : luu
+    DOCUMENTS |o--o{ VOCAB_ITEMS : nguon_tu_notebook
+    VOCAB_ITEMS ||--|| VOCAB_REVIEWS : sm2
+    VOCAB_ITEMS |o--o{ CONTEXTUAL_GUESS_ATTEMPTS : dung_cho
+    USERS ||--o{ CONTEXTUAL_GUESS_ATTEMPTS : lam_thu
+    USERS ||--o{ CUSTOM_STORIES : yeu_cau
+
+    DOCUMENTS ||--o{ PODCASTS : chuyen_thanh
+    PERSONAS |o--o{ PODCASTS : doc_bang_giong
+    PODCASTS ||--o{ TRANSCRIPT_SEGMENTS : co
+    PODCASTS ||--o{ DICTATION_ATTEMPTS : dung_cho
+    USERS ||--o{ DICTATION_ATTEMPTS : lam_bai
+
+    USERS ||--o{ WRITING_SUBMISSIONS : viet
+    DOCUMENTS |o--o{ WRITING_SUBMISSIONS : nguon_tuy_source_type
+    WRITING_SUBMISSIONS ||--o{ WRITING_INSIGHTS : co
+    WRITING_SUBMISSIONS ||--o{ REPHRASE_REQUESTS : co
+
+    USERS ||--o{ CONVERSATION_SESSIONS : bat_dau
+    SCENARIOS ||--o{ CONVERSATION_SESSIONS : dung_trong
+    PERSONAS |o--o{ CONVERSATION_SESSIONS : giong_ai
+    CONVERSATION_SESSIONS ||--o{ CONVERSATION_TURNS : chua
+    CONVERSATION_TURNS |o--o{ USER_PHRASEBOOK_ENTRIES : nguon_nullable
+    SLANG_PHRASES |o--o{ USER_PHRASEBOOK_ENTRIES : nguon_nullable
+    USERS ||--o{ USER_PHRASEBOOK_ENTRIES : luu
+    CONVERSATION_TURNS ||--o| REALTIME_CONVERSATION_METRICS : mo_rong_fut
+
+    USERS ||--o{ QUIZZES : duoc_sinh_cho
+    QUIZZES |o--o{ QUIZ_ATTEMPTS : lam_lai_nhieu_lan
+    USERS ||--o{ QUIZ_ATTEMPTS : lam_bai
+    QUIZ_ATTEMPTS |o--o{ USER_ERRORS : co_the_sinh_loi
+    USERS ||--o{ USER_ERRORS : co
+    USERS ||--o{ REVIEW_PRIORITY_QUEUE : co
+    USERS ||--|| STREAKS : co
+    USERS ||--o{ SKILL_PROGRESS : co
+
+    USERS ||--o{ REFRESH_TOKENS : co
+
+    PERSONAS ||--o{ MOVIE_CONTEXT_TTS_FALLBACK : doc_mau
+    MOVIE_CONTEXT_TTS_FALLBACK |o--o{ MOVIE_CONTEXT_MATCHES : nguon_nullable
+    VIDEO_SUBTITLE_INDEX |o--o{ MOVIE_CONTEXT_MATCHES : nguon_nullable_fut
+    VIDEO_SOURCES ||--o{ VIDEO_SUBTITLE_INDEX : duoc_index

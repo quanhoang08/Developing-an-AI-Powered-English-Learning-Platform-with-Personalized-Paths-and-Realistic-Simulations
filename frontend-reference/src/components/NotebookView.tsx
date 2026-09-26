@@ -1,4 +1,6 @@
-import React, { useState } from "react";
+// Trang Knowledge Space: danh sách folder/document thật (sau login) hoặc demo (trước login),
+// xem nội dung, và chat RAG (NotebookLM-style) trên tài liệu đã ingest xong.
+import React, { useEffect, useRef, useState } from "react";
 import {
   FolderKanban,
   FileText,
@@ -16,20 +18,66 @@ import {
   X,
   FileCheck2,
   UploadCloud,
-  Check
+  Check,
+  MessageSquare,
+  Send,
+  Quote,
+  Loader2
 } from "lucide-react";
+import {
+  ChatMessage,
+  ChatProvider,
+  createFolder,
+  deleteDocument,
+  getAccessToken,
+  getChatHistory,
+  listDocuments,
+  listFolders,
+  sendChatMessage,
+  updateDocument,
+  uploadDocument,
+} from "../api";
 
-export const NotebookView: React.FC = () => {
+interface NotebookViewProps {
+  // authVersion thay đổi sau login/logout để buộc view tải lại dữ liệu backend.
+  authVersion: number;
+}
+
+export const NotebookView: React.FC<NotebookViewProps> = ({ authVersion }) => {
   const [selectedFolder, setSelectedFolder] = useState("all");
   const [searchFilter, setSearchFilter] = useState("");
   const [activeMaterialId, setActiveMaterialId] = useState("1");
-  const [isAnalyzing, setIsAnalyzing] = useState(false);
-  const [aiAnalysisResult, setAiAnalysisResult] = useState<string | null>(null);
+  const [viewMode, setViewMode] = useState<"content" | "chat">("content");
   const [isUploadOpen, setIsUploadOpen] = useState(false);
   const [newNoteTitle, setNewNoteTitle] = useState("");
   const [newNoteContent, setNewNoteContent] = useState("");
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [isBackendConnected, setIsBackendConnected] = useState(false);
+  const [uploadError, setUploadError] = useState<string | null>(null);
+  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
+  const [chatInput, setChatInput] = useState("");
+  // Model dùng cho Chat RAG — người dùng chuyển được giữa Gemini (cloud) và Ollama (local).
+  const [chatProvider, setChatProvider] = useState<ChatProvider>(() => {
+    try {
+      return localStorage.getItem("chatProvider") === "ollama" ? "ollama" : "gemini";
+    } catch {
+      return "gemini";
+    }
+  });
+  const handleProviderChange = (provider: ChatProvider) => {
+    setChatProvider(provider);
+    try {
+      localStorage.setItem("chatProvider", provider);
+    } catch {
+      // localStorage không khả dụng: lựa chọn chỉ có hiệu lực trong phiên hiện tại.
+    }
+  };
+  const [isChatLoading, setIsChatLoading] = useState(false);
+  const [isChatSending, setIsChatSending] = useState(false);
+  const [chatError, setChatError] = useState<string | null>(null);
+  const chatEndRef = useRef<HTMLDivElement>(null);
 
-  const folders = [
+  const demoFolders = [
     { id: "all", name: "All Materials", count: 18 },
     { id: "ielts", name: "IELTS Vocabulary Lists", count: 6 },
     { id: "grammar", name: "Grammar Workbooks", count: 4 },
@@ -37,7 +85,7 @@ export const NotebookView: React.FC = () => {
     { id: "articles", name: "Saved Articles", count: 3 },
   ];
 
-  const materials = [
+  const demoMaterials = [
     {
       id: "1",
       title: "IELTS Academic Reading: Technological Automation in 2026",
@@ -47,6 +95,8 @@ export const NotebookView: React.FC = () => {
       size: "1.2 MB",
       tags: ["IELTS", "B2 Upper", "Tech"],
       starred: true,
+      isDemo: true,
+      status: "demo",
       content: `The rapid evolution of artificial intelligence and machine learning is reshaping the global workforce at an unprecedented pace. While traditional manufacturing jobs have long experienced automation, recent advances in natural language processing and generative models are now impacting cognitive and knowledge-based professions.
 
 Experts emphasize that the goal of modern AI implementation is not outright replacement, but rather human augmentation. By delegating repetitive analytical tasks and preliminary data structuring to algorithms, human workers can dedicate more energy to strategic synthesis, creative ideation, and empathetic decision-making.
@@ -62,6 +112,8 @@ However, the transition requires proactive educational reform. Educational insti
       size: "450 KB",
       tags: ["Business", "Phrasal Verbs"],
       starred: false,
+      isDemo: true,
+      status: "demo",
       content: `1. Bring up: To introduce a topic for discussion during a meeting.
 Example: "I'd like to bring up the timeline for Q3 deliverables."
 
@@ -83,6 +135,8 @@ Example: "Her presentation stood out because of her clear data visualizations."`
       size: "820 KB",
       tags: ["Idioms", "Movie Context"],
       starred: true,
+      isDemo: true,
+      status: "demo",
       content: `Movie Scene Clips Saved:
 
 Clip 1: The Startup Hustle (01:14:22)
@@ -95,6 +149,53 @@ Meaning: To make people feel more comfortable in a social setting.`
     }
   ];
 
+  const [folders, setFolders] = useState(demoFolders);
+  const [materials, setMaterials] = useState(demoMaterials);
+
+  useEffect(() => {
+    // Không gọi backend khi chưa login để prototype vẫn hoạt động offline.
+    if (!getAccessToken()) {
+      setIsBackendConnected(false);
+      setFolders(demoFolders);
+      setMaterials(demoMaterials);
+      return;
+    }
+
+    // Sau login, lấy folder/document thật và chuyển về shape mà UI hiện tại đang dùng.
+    Promise.all([listFolders(), listDocuments()])
+      .then(([backendFolders, backendDocuments]) => {
+        setIsBackendConnected(true);
+        setFolders([
+          { id: "all", name: "All Materials", count: backendDocuments.total },
+          ...backendFolders.map((folder) => ({ id: folder.id, name: folder.name, count: 0 })),
+        ]);
+        setMaterials(
+          backendDocuments.items.map((document) => ({
+            id: document.id,
+            title: document.title,
+            folder: document.folder_id || "all",
+            type: document.source_type.toUpperCase(),
+            date: new Date(document.created_at).toLocaleDateString(),
+            size: `${document.file_size_kb || 0} KB`,
+            tags: document.tags || [],
+            starred: document.starred,
+            isDemo: false,
+            status: document.status,
+            content:
+              document.status === "ready"
+                ? "Content ingested — ask questions about this document in the Chat tab."
+                : document.status === "failed"
+                ? "Ingestion failed for this file. Chat is unavailable until you upload a readable .docx."
+                : "Document status: processing. Content will appear after ingestion.",
+          })),
+        );
+      })
+      .catch(() => {
+        setIsBackendConnected(false);
+      });
+  }, [authVersion]);
+
+  // Lọc danh sách hiển thị theo folder đang chọn + ô tìm kiếm (title hoặc tag).
   const filteredMaterials = materials.filter((m) => {
     const matchesFolder = selectedFolder === "all" || m.folder === selectedFolder;
     const matchesSearch =
@@ -103,51 +204,152 @@ Meaning: To make people feel more comfortable in a social setting.`
     return matchesFolder && matchesSearch;
   });
 
-  const activeMaterial = materials.find((m) => m.id === activeMaterialId) || materials[0];
+  const activeMaterial = materials.find((m) => m.id === activeMaterialId) || materials[0] || demoMaterials[0];
+  // Chat RAG chỉ khả dụng cho document thật (không phải demo) đã ingest xong (status=ready).
+  const isChatAvailable = isBackendConnected && !activeMaterial.isDemo && activeMaterial.status === "ready";
 
-  const handleAnalyzeWithAI = async () => {
-    setIsAnalyzing(true);
-    setAiAnalysisResult(null);
+  useEffect(() => {
+    // Đổi tài liệu đang xem thì reset về tab Content và load lại lịch sử chat của tài liệu đó.
+    setViewMode("content");
+    setChatMessages([]);
+    setChatError(null);
+    if (!isBackendConnected || activeMaterial.isDemo || activeMaterial.status !== "ready") return;
+    setIsChatLoading(true);
+    getChatHistory(activeMaterial.id)
+      .then(setChatMessages)
+      .catch(() => setChatError("Could not load chat history."))
+      .finally(() => setIsChatLoading(false));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeMaterialId]);
 
+  useEffect(() => {
+    chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [chatMessages, viewMode]);
+
+  // Gửi 1 câu hỏi chat, chèn cả câu hỏi lẫn câu trả lời AI vào danh sách khi thành công.
+  const handleSendChat = async () => {
+    const message = chatInput.trim();
+    if (!message || isChatSending) return;
+    setChatInput("");
+    setChatError(null);
+    setIsChatSending(true);
     try {
-      const res = await fetch("/api/ai/word-lookup", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          word: "automation",
-          contextSentence: activeMaterial.content.slice(0, 300)
-        })
-      });
-      const data = await res.json();
-      setAiAnalysisResult(
-        `Key AI Takeaways for "${activeMaterial.title}":\n\n1. Target Level: CEFR B2/C1 Academic\n2. Key Vocabulary Extracted: "unprecedented", "augmentation", "delegating", "ideation"\n3. Main Theme: Human-AI collaboration rather than full job replacement.\n4. Recommended Exercise: Practice writing a 150-word response arguing whether educational reforms should prioritize digital literacy.`
-      );
-    } catch (e) {
-      setAiAnalysisResult("AI Analysis complete: Material contains 4 key academic C1 vocabulary items and a strong argument structure.");
+      const result = await sendChatMessage(activeMaterial.id, message, chatProvider);
+      setChatMessages((current) => [...current, result.user_message, result.assistant_message]);
+    } catch (error) {
+      const raw = error instanceof Error ? error.message : "Failed to send message";
+      setChatError(raw);
     } finally {
-      setIsAnalyzing(false);
+      setIsChatSending(false);
     }
   };
 
+  const handleSaveMaterial = async () => {
+    // Backend hiện chỉ nhận audio/.docx; text note thuần sẽ được hỗ trợ ở phase sau.
+    if (!selectedFile) {
+      setUploadError("Choose an audio or .docx file first.");
+      return;
+    }
+    try {
+      setUploadError(null);
+      const uploaded = await uploadDocument(
+        selectedFile,
+        selectedFolder === "all" ? undefined : selectedFolder,
+        newNoteTitle ? [newNoteTitle] : [],
+      );
+      // Chèn document mới vào đầu danh sách để người dùng thấy kết quả ngay.
+      setMaterials((current) => [
+        {
+          id: uploaded.id,
+          title: uploaded.title,
+          folder: uploaded.folder_id || "all",
+          type: uploaded.source_type.toUpperCase(),
+          date: new Date(uploaded.created_at).toLocaleDateString(),
+          size: `${uploaded.file_size_kb || 0} KB`,
+          tags: uploaded.tags || [],
+          starred: uploaded.starred,
+          isDemo: false,
+          status: uploaded.status,
+          content:
+            uploaded.status === "ready"
+              ? "Content ingested — ask questions about this document in the Chat tab."
+              : uploaded.status === "failed"
+              ? "Ingestion failed for this file. Chat is unavailable until you upload a readable .docx."
+              : "Document status: processing. Content will appear after ingestion.",
+        },
+        ...current,
+      ]);
+      setIsUploadOpen(false);
+      setSelectedFile(null);
+      setNewNoteTitle("");
+      setNewNoteContent("");
+    } catch (error) {
+      setUploadError(error instanceof Error ? error.message : "Upload failed");
+    }
+  };
+
+  // Tạo folder mới qua prompt() đơn giản, chỉ hoạt động khi đã đăng nhập.
+  const handleCreateFolder = async () => {
+    if (!isBackendConnected) return;
+    const name = window.prompt("Folder name");
+    if (!name?.trim()) return;
+    try {
+      const folder = await createFolder(name.trim());
+      setFolders((current) => [...current, { id: folder.id, name: folder.name, count: 0 }]);
+    } catch (error) {
+      setUploadError(error instanceof Error ? error.message : "Folder creation failed");
+    }
+  };
+
+  // Bật/tắt đánh dấu sao cho tài liệu đang xem (bỏ qua nếu đang xem material demo id="1").
+  const handleToggleStar = async () => {
+    if (!isBackendConnected || !activeMaterial || activeMaterial.id === "1") return;
+    const updated = await updateDocument(activeMaterial.id, { starred: !activeMaterial.starred });
+    setMaterials((current) => current.map((item) => item.id === updated.id ? { ...item, starred: updated.starred } : item));
+  };
+
+  // Xóa vĩnh viễn tài liệu đang xem rồi quay lại material demo đầu tiên.
+  const handleDeleteActive = async () => {
+    if (!isBackendConnected || !activeMaterial || activeMaterial.id === "1") return;
+    await deleteDocument(activeMaterial.id);
+    setMaterials((current) => current.filter((item) => item.id !== activeMaterial.id));
+    setActiveMaterialId("1");
+  };
+
   return (
-    <div className="p-6 md:p-8 max-w-7xl mx-auto space-y-6">
+    <div className="p-6 md:p-10 max-w-7xl mx-auto space-y-8">
       {/* Title & Action Bar */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-200/80">
+      <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900 tracking-tight flex items-center gap-2">
-            <FolderKanban className="w-6 h-6 text-indigo-600" /> Knowledge Space & Notebook
+          <p className="text-sm italic text-slate-500 mb-1">Everything you study, in one place</p>
+          <h1 className="font-display text-4xl font-bold text-slate-900 flex items-center gap-3">
+            <FolderKanban className="w-8 h-8 text-purple-500 -rotate-6" /> Knowledge Space & Notebook
           </h1>
-          <p className="text-xs text-slate-500 mt-1">
+          <p className="text-sm text-slate-500 mt-2 max-w-xl">
             Organize study materials, saved movie clips, vocabulary notebooks, and AI summaries.
+          </p>
+          <p className={`text-xs mt-3 font-semibold flex items-center gap-1.5 ${isBackendConnected ? "text-emerald-600" : "text-slate-400"}`}>
+            <span className={`w-2 h-2 rounded-full ${isBackendConnected ? "bg-emerald-500" : "bg-slate-300"}`} />
+            {isBackendConnected ? "Connected to FastAPI backend" : "Demo materials - connect an account to sync"}
           </p>
         </div>
 
-        <button
-          onClick={() => setIsUploadOpen(true)}
-          className="px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold text-xs rounded-xl shadow-md shadow-indigo-200 flex items-center justify-center gap-2 transition-all cursor-pointer active:scale-95"
-        >
-          <Plus className="w-4 h-4" /> Add Note or Document
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setIsUploadOpen(true)}
+            className="px-5 py-3 bg-indigo-700 hover:bg-indigo-800 text-white font-semibold text-sm rounded-2xl shadow-[0_16px_26px_-14px_rgba(31,87,73,0.9)] flex items-center justify-center gap-2 transition-all cursor-pointer hover:-translate-y-0.5 active:scale-95"
+          >
+            <Plus className="w-4 h-4" /> Add Note or Document
+          </button>
+          <button
+            onClick={handleCreateFolder}
+            disabled={!isBackendConnected}
+            title="Create folder in backend Notebook"
+            className="px-4 py-3 bg-paper-deep hover:bg-slate-200/70 text-slate-700 font-semibold text-sm rounded-2xl flex items-center justify-center gap-2 disabled:opacity-40 transition-colors active:scale-95"
+          >
+            <FolderKanban className="w-4 h-4" /> New Folder
+          </button>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
@@ -161,7 +363,7 @@ Meaning: To make people feel more comfortable in a social setting.`
               value={searchFilter}
               onChange={(e) => setSearchFilter(e.target.value)}
               placeholder="Filter by folder or tag..."
-              className="w-full pl-9 pr-4 py-2 text-xs bg-white border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500/20 text-slate-800"
+              className="w-full pl-9 pr-4 py-2.5 text-sm bg-[#fffdf8] ring-1 ring-slate-900/10 rounded-full focus:outline-none focus:ring-2 focus:ring-indigo-500/60 text-slate-800"
             />
           </div>
 
@@ -171,10 +373,10 @@ Meaning: To make people feel more comfortable in a social setting.`
               <button
                 key={f.id}
                 onClick={() => setSelectedFolder(f.id)}
-                className={`px-3 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap transition-colors cursor-pointer ${
+                className={`px-3.5 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap transition-colors cursor-pointer ${
                   selectedFolder === f.id
-                    ? "bg-indigo-600 text-white shadow-xs"
-                    : "bg-white text-slate-600 hover:bg-slate-100 border border-slate-200"
+                    ? "bg-indigo-700 text-white"
+                    : "bg-paper-deep text-slate-600 hover:bg-indigo-100 hover:text-indigo-700"
                 }`}
               >
                 {f.name} ({f.count})
@@ -190,31 +392,31 @@ Meaning: To make people feel more comfortable in a social setting.`
                 <div
                   key={item.id}
                   onClick={() => setActiveMaterialId(item.id)}
-                  className={`p-4 rounded-2xl border transition-all cursor-pointer ${
+                  className={`p-5 rounded-2xl transition-all cursor-pointer ${
                     isActive
-                      ? "bg-indigo-50/80 border-indigo-300 shadow-sm"
-                      : "bg-white border-slate-200/80 hover:border-slate-300"
+                      ? "bg-indigo-700 text-white shadow-[0_18px_28px_-16px_rgba(31,87,73,0.9)]"
+                      : "surface surface-lift"
                   }`}
                 >
                   <div className="flex items-start justify-between gap-2 mb-2">
                     <div className="flex items-center gap-2">
-                      <FileText className={`w-4 h-4 ${isActive ? "text-indigo-600" : "text-slate-400"}`} />
-                      <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wide">
+                      <FileText className={`w-4 h-4 ${isActive ? "text-indigo-200" : "text-slate-400"}`} />
+                      <span className={`tag ${isActive ? "bg-white/20 text-white" : "bg-paper-deep text-slate-500"}`}>
                         {item.type}
                       </span>
                     </div>
                     {item.starred && <Star className="w-3.5 h-3.5 fill-amber-400 text-amber-400" />}
                   </div>
 
-                  <h4 className="font-bold text-xs text-slate-900 mb-2 line-clamp-2 leading-snug">
+                  <h4 className={`font-display font-bold text-base mb-3 line-clamp-2 leading-snug ${isActive ? "text-white" : "text-slate-900"}`}>
                     {item.title}
                   </h4>
 
-                  <div className="flex items-center justify-between text-[11px] text-slate-400">
+                  <div className={`flex items-center justify-between text-[11px] ${isActive ? "text-indigo-200" : "text-slate-400"}`}>
                     <span>{item.date}</span>
                     <div className="flex items-center gap-1">
                       {item.tags.map((t, idx) => (
-                        <span key={idx} className="bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded font-medium">
+                        <span key={idx} className={`px-1.5 py-0.5 rounded font-medium ${isActive ? "bg-white/15 text-white" : "bg-paper-deep text-slate-600"}`}>
                           #{t}
                         </span>
                       ))}
@@ -227,52 +429,156 @@ Meaning: To make people feel more comfortable in a social setting.`
         </div>
 
         {/* Right Main Viewer */}
-        <div className="lg:col-span-7 bg-white rounded-3xl border border-slate-200/80 p-6 shadow-xs flex flex-col justify-between min-h-[500px]">
+        <div className="surface lg:col-span-7 p-7 md:p-8 flex flex-col justify-between min-h-[500px] lg:sticky lg:top-24 lg:self-start">
           <div>
             {/* Viewer Header */}
-            <div className="flex items-start justify-between pb-4 mb-4 border-b border-slate-100">
+            <div className="flex items-start justify-between pb-5 mb-5 border-b border-dashed border-slate-200">
               <div>
-                <div className="flex items-center gap-2 text-xs text-indigo-600 font-bold mb-1">
+                <div className="flex items-center gap-2 text-xs text-indigo-700 font-bold mb-1.5">
                   <Tag className="w-3.5 h-3.5" /> {activeMaterial.type}
                 </div>
-                <h2 className="text-lg font-bold text-slate-900 leading-snug">
+                <h2 className="font-display text-2xl font-bold text-slate-900 leading-snug">
                   {activeMaterial.title}
                 </h2>
               </div>
 
               <div className="flex items-center gap-2">
                 <button
-                  onClick={handleAnalyzeWithAI}
-                  disabled={isAnalyzing}
-                  className="px-3 py-1.5 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white text-xs font-bold rounded-xl shadow-xs flex items-center gap-1.5 transition-all cursor-pointer disabled:opacity-50"
+                  onClick={handleToggleStar}
+                  title="Toggle backend star"
+                  aria-label="Toggle star"
+                  className="p-2.5 rounded-full bg-paper-deep text-amber-500 hover:bg-amber-100 transition-colors active:scale-95"
                 >
-                  <Sparkles className="w-3.5 h-3.5 text-amber-300" />
-                  {isAnalyzing ? "Analyzing..." : "Analyze with AI"}
+                  <Star className={`w-4 h-4 ${activeMaterial.starred ? "fill-amber-400" : ""}`} />
                 </button>
-              </div>
-            </div>
-
-            {/* AI Analysis Drawer Output */}
-            {aiAnalysisResult && (
-              <div className="mb-6 p-4 rounded-2xl bg-gradient-to-br from-indigo-50 to-purple-50 border border-indigo-200/80 text-xs text-slate-700 leading-relaxed space-y-2 animate-in fade-in duration-200">
-                <div className="flex items-center justify-between font-bold text-indigo-900">
-                  <span className="flex items-center gap-1.5"><Sparkles className="w-4 h-4 text-purple-600" /> AI Material Summary</span>
-                  <button onClick={() => setAiAnalysisResult(null)} className="text-slate-400 hover:text-slate-600">
-                    <X className="w-4 h-4" />
+                <div className="flex items-center bg-paper-deep rounded-full p-1">
+                  <button
+                    onClick={() => setViewMode("content")}
+                    className={`px-3.5 py-1.5 text-xs font-bold rounded-full transition-colors cursor-pointer ${
+                      viewMode === "content" ? "bg-indigo-700 text-white" : "text-slate-500 hover:text-slate-800"
+                    }`}
+                  >
+                    Content
+                  </button>
+                  <button
+                    onClick={() => setViewMode("chat")}
+                    title={isChatAvailable ? undefined : "Connect and wait for ingestion (status: ready) to chat"}
+                    className={`px-3.5 py-1.5 text-xs font-bold rounded-full transition-colors flex items-center gap-1 cursor-pointer ${
+                      viewMode === "chat" ? "bg-indigo-700 text-white" : "text-slate-500 hover:text-slate-800"
+                    }`}
+                  >
+                    <MessageSquare className="w-3.5 h-3.5" /> Chat
                   </button>
                 </div>
-                <p className="whitespace-pre-line text-slate-800">{aiAnalysisResult}</p>
+              </div>
+            </div>
+
+            {viewMode === "content" ? (
+              /* Document Content Body */
+              <div className="max-w-none text-slate-700 text-[17px] leading-[1.85] font-serif bg-paper-deep/50 p-6 rounded-2xl whitespace-pre-line">
+                {activeMaterial.content}
+              </div>
+            ) : (
+              /* NotebookLM-style RAG chat: hỏi đáp trực tiếp trên nội dung tài liệu thật */
+              <div className="flex flex-col h-[420px]">
+                {!isChatAvailable ? (
+                  <div className="flex-1 flex flex-col items-center justify-center text-center text-slate-400 gap-2 px-6">
+                    <MessageSquare className="w-8 h-8" />
+                    <p className="text-xs font-medium">
+                      {activeMaterial.isDemo
+                        ? "Chat is only available for documents connected to your real account."
+                        : activeMaterial.status === "failed"
+                        ? "This file failed to ingest, so there's no content to chat about."
+                        : "This document is still processing. Chat unlocks once ingestion is done (status: ready)."}
+                    </p>
+                  </div>
+                ) : (
+                  <>
+                    <div className="flex-1 overflow-y-auto space-y-3 pr-1">
+                      {isChatLoading && (
+                        <p className="text-xs text-slate-400 text-center py-6">Loading conversation...</p>
+                      )}
+                      {!isChatLoading && chatMessages.length === 0 && (
+                        <div className="flex flex-col items-center justify-center text-center text-slate-400 gap-2 py-10">
+                          <Sparkles className="w-6 h-6" />
+                          <p className="text-xs font-medium max-w-xs">
+                            Ask anything about this document.
+                          </p>
+                        </div>
+                      )}
+                      {chatMessages.map((message) => (
+                        <div
+                          key={message.id}
+                          className={`flex ${message.role === "user" ? "justify-end" : "justify-start"}`}
+                        >
+                          <div
+                            className={`max-w-[85%] rounded-2xl px-4 py-3 text-sm leading-relaxed ${
+                              message.role === "user"
+                                ? "bg-indigo-700 text-white rounded-br-md"
+                                : "bg-paper-deep text-slate-800 rounded-bl-md"
+                            }`}
+                          >
+                            <p className="whitespace-pre-line">{message.content}</p>
+                            {message.sources && message.sources.length > 0 && (
+                              <div className="mt-2 pt-2 border-t border-slate-200/60 space-y-1">
+                                {message.sources.map((source) => (
+                                  <div key={source.chunk_id} className="flex items-start gap-1 text-[10px] text-slate-500">
+                                    <Quote className="w-2.5 h-2.5 mt-0.5 shrink-0" />
+                                    <span className="line-clamp-2">{source.excerpt}</span>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                      {isChatSending && (
+                        <div className="flex justify-start">
+                          <div className="bg-paper-deep text-slate-500 rounded-2xl rounded-bl-md px-4 py-3 text-sm flex items-center gap-1.5">
+                            <Loader2 className="w-3.5 h-3.5 animate-spin" /> Thinking...
+                          </div>
+                        </div>
+                      )}
+                      <div ref={chatEndRef} />
+                    </div>
+                    {chatError && <p className="text-[11px] text-red-600 mt-2">{chatError}</p>}
+                    <div className="mt-3 pt-3 border-t border-dashed border-slate-200 flex items-center gap-2">
+                      <select
+                        value={chatProvider}
+                        onChange={(event) => handleProviderChange(event.target.value as ChatProvider)}
+                        disabled={isChatSending}
+                        aria-label="Chat model"
+                        className="px-2 py-2.5 text-xs bg-white ring-1 ring-slate-900/10 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500/60"
+                      >
+                        <option value="gemini">Gemini</option>
+                        <option value="ollama">Ollama (local)</option>
+                      </select>
+                      <input
+                        type="text"
+                        value={chatInput}
+                        onChange={(event) => setChatInput(event.target.value)}
+                        onKeyDown={(event) => event.key === "Enter" && handleSendChat()}
+                        placeholder="Ask a question about this document..."
+                        disabled={isChatSending}
+                        className="flex-1 px-4 py-2.5 text-sm bg-white ring-1 ring-slate-900/10 rounded-full focus:outline-none focus:ring-2 focus:ring-indigo-500/60"
+                      />
+                      <button
+                        onClick={handleSendChat}
+                        disabled={isChatSending || !chatInput.trim()}
+                        aria-label="Send message"
+                        className="p-3 bg-indigo-700 hover:bg-indigo-800 text-white rounded-full disabled:opacity-40 transition-all active:scale-90"
+                      >
+                        <Send className="w-4 h-4" />
+                      </button>
+                    </div>
+                  </>
+                )}
               </div>
             )}
-
-            {/* Document Content Body */}
-            <div className="prose prose-slate prose-sm max-w-none text-slate-700 leading-relaxed font-sans bg-slate-50/50 p-5 rounded-2xl border border-slate-100 whitespace-pre-line">
-              {activeMaterial.content}
-            </div>
           </div>
 
           {/* Footer Actions */}
-          <div className="mt-6 pt-4 border-t border-slate-100 flex items-center justify-between text-xs text-slate-500">
+          <div className="mt-6 pt-4 border-t border-dashed border-slate-200 flex items-center justify-between text-xs text-slate-500">
             <span>Size: {activeMaterial.size} • Added on {activeMaterial.date}</span>
             <div className="flex items-center gap-3">
               <button className="flex items-center gap-1 hover:text-slate-900 transition-colors cursor-pointer">
@@ -281,6 +587,13 @@ Meaning: To make people feel more comfortable in a social setting.`
               <button className="flex items-center gap-1 hover:text-slate-900 transition-colors cursor-pointer">
                 <Share2 className="w-3.5 h-3.5" /> Share
               </button>
+              <button
+                onClick={handleDeleteActive}
+                disabled={!isBackendConnected || activeMaterial.id === "1"}
+                className="flex items-center gap-1 text-rose-600 hover:text-rose-800 disabled:opacity-30"
+              >
+                <Trash2 className="w-3.5 h-3.5" /> Delete
+              </button>
             </div>
           </div>
         </div>
@@ -288,10 +601,10 @@ Meaning: To make people feel more comfortable in a social setting.`
 
       {/* Upload/New Note Modal */}
       {isUploadOpen && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl max-w-lg w-full p-6 shadow-2xl border border-slate-200 animate-in fade-in zoom-in-95 duration-200 space-y-4">
-            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
-              <h3 className="font-bold text-base text-slate-900 flex items-center gap-2">
+        <div className="fixed inset-0 bg-slate-950/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-[#fffdf8] rounded-3xl max-w-lg w-full p-7 shadow-[0_40px_80px_-30px_rgba(32,29,24,0.6)] animate-rise space-y-4">
+            <div className="flex items-center justify-between pb-1">
+              <h3 className="font-display font-bold text-2xl text-slate-900 flex items-center gap-2">
                 <UploadCloud className="w-5 h-5 text-indigo-600" /> Create New Material or Note
               </h3>
               <button onClick={() => setIsUploadOpen(false)} className="text-slate-400 hover:text-slate-600">
@@ -306,7 +619,17 @@ Meaning: To make people feel more comfortable in a social setting.`
                 value={newNoteTitle}
                 onChange={(e) => setNewNoteTitle(e.target.value)}
                 placeholder="e.g., Tech Crunch Article - Machine Learning Notes"
-                className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
+                className="w-full px-3 py-2 text-xs bg-white ring-1 ring-slate-900/10 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500/60"
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold text-slate-700 mb-1">Audio or DOCX file</label>
+              <input
+                type="file"
+                accept=".docx,audio/*"
+                onChange={(event) => setSelectedFile(event.target.files?.[0] || null)}
+                className="w-full text-xs text-slate-600"
               />
             </div>
 
@@ -317,7 +640,7 @@ Meaning: To make people feel more comfortable in a social setting.`
                 value={newNoteContent}
                 onChange={(e) => setNewNoteContent(e.target.value)}
                 placeholder="Paste article, transcript, or vocabulary notes here..."
-                className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
+                className="w-full px-3 py-2 text-xs bg-white ring-1 ring-slate-900/10 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500/60"
               />
             </div>
 
@@ -329,12 +652,14 @@ Meaning: To make people feel more comfortable in a social setting.`
                 Cancel
               </button>
               <button
-                onClick={() => setIsUploadOpen(false)}
-                className="px-4 py-2 text-xs font-bold bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl shadow-xs"
+                onClick={handleSaveMaterial}
+                disabled={!isBackendConnected}
+                className="px-5 py-2.5 text-xs font-bold bg-indigo-700 hover:bg-indigo-800 text-white rounded-xl transition-all active:scale-95 disabled:opacity-40"
               >
-                Save Material
+                Upload to Notebook
               </button>
             </div>
+            {uploadError && <p className="text-xs text-red-600">{uploadError}</p>}
           </div>
         </div>
       )}

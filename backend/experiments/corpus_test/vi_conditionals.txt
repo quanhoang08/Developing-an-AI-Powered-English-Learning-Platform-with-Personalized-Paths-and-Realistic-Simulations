@@ -1,0 +1,9 @@
+Câu điều kiện loại 1 và loại 2
+Câu điều kiện gồm hai mệnh đề: mệnh đề if nêu điều kiện và mệnh đề chính nêu kết quả. Hai mệnh đề có thể đổi chỗ cho nhau; khi mệnh đề if đứng đầu câu thì ta đặt dấu phẩy sau nó.
+Câu điều kiện loại 1 diễn tả điều kiện có thể xảy ra ở hiện tại hoặc tương lai. Cấu trúc là If + thì hiện tại đơn, S + will + động từ nguyên mẫu. Ví dụ: If it rains tomorrow, we will stay at home.
+Câu điều kiện loại 2 diễn tả điều kiện không có thật ở hiện tại hoặc rất khó xảy ra. Cấu trúc là If + thì quá khứ đơn, S + would + động từ nguyên mẫu. Ví dụ: If I had a million dollars, I would travel around the world.
+Trong câu điều kiện loại 2, động từ to be ở mệnh đề if thường dùng dạng were cho mọi chủ ngữ, kể cả I, he và she. Vì vậy ta nói If I were you, I would apologise, chứ không nói If I was you trong văn phong trang trọng.
+Không dùng will hoặc would trong mệnh đề if. Câu If you will study hard, you pass là sai; câu đúng là If you study hard, you will pass.
+Ở mệnh đề chính, ngoài will và would ta có thể dùng các động từ khuyết thiếu khác như can, could, may hoặc might để diễn tả khả năng thấp hơn, ví dụ: If you practise every day, you might improve quickly.
+Từ unless có nghĩa là if not. Câu Unless you hurry, you will miss the bus có nghĩa giống như If you do not hurry, you will miss the bus.
+Người học nên phân biệt loại 1 và loại 2 bằng câu hỏi: điều kiện này có thể xảy ra thật không? Nếu có thể thì dùng loại 1, nếu không thì dùng loại 2.

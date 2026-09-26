@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="vi">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Lumina Word Lookup</title>
+    <link rel="stylesheet" href="popup.css" />
+  </head>
+  <body>
+    <main class="popup">
+      <h1>Lumina Word Lookup</h1>
+      <p class="subtitle">Rê chuột vào từ để xem nghĩa. Chuột phải để lưu từ vào danh sách học.</p>
+
+      <label class="toggle">
+        <input id="enabled" type="checkbox" checked />
+        <span>Bật tra nghĩa khi rê chuột</span>
+      </label>
+
+      <section id="loggedOut" hidden>
+        <p class="hint">Tra nghĩa không cần đăng nhập. Đăng nhập để lưu từ vào tài khoản của bạn.</p>
+        <label class="field-label" for="email">Email</label>
+        <input id="email" class="field-input" type="email" autocomplete="username" />
+        <label class="field-label" for="password">Mật khẩu</label>
+        <input id="password" class="field-input" type="password" autocomplete="current-password" />
+        <details>
+          <summary>Cấu hình backend</summary>
+          <label class="field-label" for="apiBaseUrl">API URL</label>
+          <input id="apiBaseUrl" class="field-input" placeholder="http://localhost:8000" />
+        </details>
+        <div class="actions">
+          <button id="loginBtn" class="btn">Đăng nhập</button>
+        </div>
+      </section>
+
+      <section id="loggedIn" hidden>
+        <p class="hint">Đã đăng nhập: <strong id="whoami"></strong></p>
+        <div class="actions">
+          <button id="logoutBtn" class="btn btn-secondary">Đăng xuất</button>
+        </div>
+      </section>
+
+      <p id="status" class="status" role="status"></p>
+
+      <section class="tips">
+        <p><strong>Lưu từ:</strong> bấm chuột phải vào từ → "Thêm từ vào danh sách từ vựng".</p>
+        <p>Trên web Lumina, tra nghĩa chỉ có ở Reading (tài liệu tải lên) và Writing (sau khi AI sửa).</p>
+      </section>
+    </main>
+
+    <script src="popup.js"></script>
+  </body>
+</html>

@@ -1,0 +1,34 @@
+{
+  "manifest_version": 3,
+  "name": "Lumina Word Lookup",
+  "description": "Rê chuột vào bất kỳ từ tiếng Anh nào để xem nghĩa; chuột phải để thêm vào danh sách từ vựng cần học.",
+  "version": "0.2.0",
+  "permissions": ["storage", "contextMenus"],
+  "host_permissions": [
+    "https://api.dictionaryapi.dev/*",
+    "https://api.mymemory.translated.net/*",
+    "http://localhost:8000/*",
+    "http://127.0.0.1:8000/*"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "action": {
+    "default_popup": "popup/popup.html",
+    "default_title": "Lumina Word Lookup"
+  },
+  "content_scripts": [
+    {
+      "matches": ["http://*/*", "https://*/*"],
+      "exclude_matches": [
+        "http://localhost:3000/*",
+        "http://127.0.0.1:3000/*",
+        "http://localhost:5173/*",
+        "http://127.0.0.1:5173/*"
+      ],
+      "js": ["content-script.js"],
+      "run_at": "document_idle",
+      "all_frames": true
+    }
+  ]
+}

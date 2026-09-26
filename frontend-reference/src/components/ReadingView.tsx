@@ -1,5 +1,19 @@
+// Trang Reading: Skim & Scan (passage thật hoặc AI-sinh) + Classic Mode (backend thật) +
+// tra từ tương tác. passage/wordData khởi tạo bằng nội dung demo, được thay bằng dữ liệu
+// thật ngay khi 1 trong 2 luồng trên chạy thành công.
 import React, { useState, useEffect } from "react";
 import { VocabWord } from "../types";
+import { WordHoverLookup } from "./WordHoverLookup";
+import { RearrangePanel } from "./RearrangePanel";
+import {
+  createClassicSession,
+  createSkimScanSession,
+  getAccessToken,
+  listDocuments,
+  lookupWord,
+  saveVocabulary,
+  submitClassicAnswers,
+} from "../api";
 import {
   Timer,
   BookOpen,
@@ -24,11 +38,15 @@ export const ReadingView: React.FC = () => {
   const [secondsLeft, setSecondsLeft] = useState(299); // 4:59
   const [isTimerRunning, setIsTimerRunning] = useState(true);
 
-  // AI Story Generator Modal
+  // Skim & Scan Generator Modal — nguồn passage thật (document đã upload) hoặc AI tự sinh theo topic.
   const [isGeneratorOpen, setIsGeneratorOpen] = useState(false);
+  const [storySource, setStorySource] = useState<"topic" | "document">("topic");
   const [storyTopic, setStoryTopic] = useState("Technology & Society");
   const [storyLevel, setStoryLevel] = useState("B2");
   const [isGenerating, setIsGenerating] = useState(false);
+  const [readyDocuments, setReadyDocuments] = useState<{ id: string; title: string }[]>([]);
+  const [selectedDocumentId, setSelectedDocumentId] = useState("");
+  const [generatorError, setGeneratorError] = useState<string | null>(null);
 
   // Active Reading Story State
   const [passage, setPassage] = useState({
@@ -73,7 +91,15 @@ Furthermore, the ethical implications surrounding data privacy remain deeply con
   const [userQuizChoice, setUserQuizChoice] = useState<number | null>(null);
   const [userChallengeChoice, setUserChallengeChoice] = useState<number | null>(null);
   const [isSavedWord, setIsSavedWord] = useState(false);
+  // Hover tra nghĩa chỉ bật khi passage là excerpt thật từ file người dùng upload.
+  const [passageFromDocument, setPassageFromDocument] = useState(false);
   const [isLoadingWord, setIsLoadingWord] = useState(false);
+  const [classicSessionId, setClassicSessionId] = useState<string | null>(null);
+  const [classicQuestion, setClassicQuestion] = useState<{ id: string; text: string; options: string[] } | null>(null);
+  const [classicQuestions, setClassicQuestions] = useState<Array<{ id: string; text: string; options: string[] }>>([]);
+  const [classicChoices, setClassicChoices] = useState<Record<string, number>>({});
+  const [classicScore, setClassicScore] = useState<number | null>(null);
+  const [isStartingClassic, setIsStartingClassic] = useState(false);
 
   // Skim & Scan Countdown Timer effect
   useEffect(() => {
@@ -94,6 +120,43 @@ Furthermore, the ethical implications surrounding data privacy remain deeply con
     return `${mins.toString().padStart(2, "0")}:${remainder.toString().padStart(2, "0")}`;
   };
 
+  // Lấy document ready đầu tiên rồi tạo Classic session bằng backend thật.
+  const startBackendClassic = async () => {
+    if (!getAccessToken()) return;
+    setIsStartingClassic(true);
+    try {
+      const documents = await listDocuments();
+      const readyDocument = documents.items.find((document) => document.status === "ready");
+      if (!readyDocument) throw new Error("No ready document available");
+      const session = await createClassicSession(readyDocument.id, 5);
+      setClassicSessionId(session.session_id);
+      const questions = session.questions.map((question) => ({ id: question.id, text: question.question_text, options: question.options }));
+      setClassicQuestions(questions);
+      setClassicQuestion(questions[0] || null);
+      setClassicChoices({});
+      setClassicScore(null);
+    } catch (error) {
+      console.error("Classic Reading session failed", error);
+    } finally {
+      setIsStartingClassic(false);
+    }
+  };
+
+  // Nộp toàn bộ câu trả lời Classic Mode 1 lần sau khi người học chọn xong mọi câu hỏi.
+  const submitAllBackendClassic = async () => {
+    if (!classicSessionId || classicScore !== null || classicQuestions.length === 0) return;
+    if (Object.keys(classicChoices).length !== classicQuestions.length) return;
+    try {
+      const result = await submitClassicAnswers(
+        classicSessionId,
+        classicQuestions.map((question) => ({ question_id: question.id, selected_option_index: classicChoices[question.id] })),
+      );
+      setClassicScore(result.score);
+    } catch (error) {
+      console.error("Classic Reading submit failed", error);
+    }
+  };
+
   // Fetch AI Word Lookup
   const handleWordClick = async (word: string) => {
     const cleanWord = word.toLowerCase().replace(/[^a-z]/g, "");
@@ -102,27 +165,21 @@ Furthermore, the ethical implications surrounding data privacy remain deeply con
     setUserChallengeChoice(null);
 
     try {
-      const res = await fetch("/api/ai/word-lookup", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          word: cleanWord,
-          contextSentence: passage.content
-        })
-      });
-      const data = await res.json();
+      const data = getAccessToken()
+        ? await lookupWord(cleanWord, passage.content)
+        : null;
       setWordData({
         id: Date.now().toString(),
-        word: data.word || cleanWord,
-        phonetics: data.phonetics || `/${cleanWord}/`,
-        partOfSpeech: data.partOfSpeech || "adjective",
-        meaning: data.meaning || "Spreading or existing widely throughout an area or group of people.",
-        contextQuote: data.contextQuote || passage.content.slice(0, 150),
-        synonyms: data.synonyms || ["widespread", "common", "broad"],
-        antonyms: data.antonyms || ["rare", "limited"],
-        challengeSentence: data.challengeSentence || `The influence was _____ throughout the room.`,
-        challengeOptions: data.challengeOptions || [cleanWord, "mitigate", "atrophy"],
-        challengeCorrectIndex: data.challengeCorrectIndex ?? 0
+        word: cleanWord,
+        phonetics: `/${cleanWord}/`,
+        partOfSpeech: "word",
+        meaning: data?.definition || "Spreading or existing widely throughout an area or group of people.",
+        contextQuote: data?.example_sentence || passage.content.slice(0, 150),
+        synonyms: data?.synonyms || ["widespread", "common", "broad"],
+        antonyms: data?.antonyms || ["rare", "limited"],
+        challengeSentence: `The influence was _____ throughout the room.`,
+        challengeOptions: [cleanWord, "mitigate", "atrophy"],
+        challengeCorrectIndex: 0
       });
     } catch (err) {
       console.error(err);
@@ -131,28 +188,77 @@ Furthermore, the ethical implications surrounding data privacy remain deeply con
     }
   };
 
-  // Generate New AI Reading Passage
-  const handleGenerateStory = async () => {
-    setIsGenerating(true);
+  // Mở modal Skim & Scan và tải sẵn danh sách document đã ready để chọn làm nguồn passage thật.
+  const openGenerator = async () => {
+    setIsGeneratorOpen(true);
+    setGeneratorError(null);
+    if (!getAccessToken()) return;
     try {
-      const res = await fetch("/api/ai/generate-story", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ topic: storyTopic, level: storyLevel })
-      });
-      const data = await res.json();
-      setPassage(data);
-      if (data.vocabWords && data.vocabWords.length > 0) {
-        handleWordClick(data.vocabWords[0]);
+      const documents = await listDocuments();
+      const ready = documents.items
+        .filter((document) => document.status === "ready")
+        .map((document) => ({ id: document.id, title: document.title }));
+      setReadyDocuments(ready);
+      if (ready.length > 0) {
+        setSelectedDocumentId(ready[0].id);
+        setStorySource("document");
+      } else {
+        setStorySource("topic");
       }
+    } catch (error) {
+      console.error("Failed to load documents for Skim & Scan", error);
+    }
+  };
+
+  // Skim & Scan thật: document_id → passage là excerpt THẬT từ tài liệu đã upload (không AI
+  // bịa nội dung); topic → Gemini tự sinh đoạn văn mới. Câu hỏi luôn do AI sinh ở cả 2 nhánh.
+  const handleGenerateStory = async () => {
+    if (!getAccessToken()) {
+      setGeneratorError("Connect your account first to use Skim & Scan.");
+      return;
+    }
+    setIsGenerating(true);
+    setGeneratorError(null);
+    try {
+      const session = await createSkimScanSession(
+        storySource === "document"
+          ? { level: storyLevel.toLowerCase(), documentId: selectedDocumentId }
+          : { level: storyLevel.toLowerCase(), topic: storyTopic },
+      );
+      setPassage({
+        title: session.title || "Skim & Scan Passage",
+        category: session.source_document_id ? "From your document" : storyTopic,
+        readTime: `${Math.max(1, Math.round(session.content.split(" ").length / 200))} min read`,
+        wordCount: `${session.content.split(" ").length} words`,
+        content: session.content,
+        vocabWords: [],
+        comprehensionQuestion: "",
+        comprehensionOptions: [],
+        correctOptionIndex: 0,
+      });
+      setPassageFromDocument(Boolean(session.source_document_id));
+      setClassicSessionId(session.session_id);
+      const questions = session.questions.map((question) => ({
+        id: question.id,
+        text: question.question_text,
+        options: question.options,
+      }));
+      setClassicQuestions(questions);
+      setClassicQuestion(questions[0] || null);
+      setClassicChoices({});
+      setClassicScore(null);
+      setSecondsLeft(session.time_limit_seconds);
+      setIsTimerRunning(true);
       setIsGeneratorOpen(false);
-    } catch (e) {
-      console.error(e);
+    } catch (error) {
+      const raw = error instanceof Error ? error.message : "Failed to generate passage";
+      setGeneratorError(raw);
     } finally {
       setIsGenerating(false);
     }
   };
 
+  // Đọc to 1 từ bằng Web Speech API của trình duyệt (không qua backend/Azure TTS).
   const playTTS = (text: string) => {
     if ("speechSynthesis" in window) {
       const utterance = new SpeechSynthesisUtterance(text);
@@ -168,7 +274,7 @@ Furthermore, the ethical implications surrounding data privacy remain deeply con
       // Split words and check if they match any target vocab
       const words = para.split(" ");
       return (
-        <p key={pIdx} className="mb-5 leading-relaxed text-slate-800 text-sm sm:text-base font-sans">
+        <p key={pIdx} className="mb-6 leading-[1.9] text-slate-800 text-[17px] font-serif max-w-[62ch] first:first-letter:font-display first:first-letter:text-6xl first:first-letter:font-bold first:first-letter:float-left first:first-letter:mr-2.5 first:first-letter:leading-[0.85] first:first-letter:text-indigo-700">
           {words.map((w, wIdx) => {
             const clean = w.toLowerCase().replace(/[^a-z]/g, "");
             const isTarget = passage.vocabWords.some((vw) => vw.toLowerCase() === clean);
@@ -179,10 +285,10 @@ Furthermore, the ethical implications surrounding data privacy remain deeply con
                 <span
                   key={wIdx}
                   onClick={() => handleWordClick(clean)}
-                  className={`px-1 py-0.5 rounded cursor-pointer transition-all duration-150 font-semibold border-b-2 ${
+                  className={`rounded-sm px-0.5 cursor-pointer transition-all duration-150 font-semibold ${
                     isSelected
-                      ? "bg-amber-300 text-amber-950 border-amber-600 shadow-xs scale-105 inline-block"
-                      : "bg-indigo-100/80 hover:bg-indigo-200 text-indigo-900 border-indigo-400"
+                      ? "bg-amber-300 text-amber-950 shadow-[0_2px_0_0_rgba(217,119,6,0.9)]"
+                      : "bg-[linear-gradient(transparent_55%,var(--color-purple-200)_55%)] hover:bg-purple-200/60 text-slate-900"
                   }`}
                   title="Click for AI Word Breakdown"
                 >
@@ -198,20 +304,20 @@ Furthermore, the ethical implications surrounding data privacy remain deeply con
   };
 
   return (
-    <div className="p-6 md:p-8 max-w-7xl mx-auto space-y-6">
-      {/* Top Header Controls Bar */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4 bg-white rounded-3xl border border-slate-200/80 shadow-xs">
-        <div className="flex items-center gap-3">
-          <div className="p-2.5 bg-indigo-50 text-indigo-600 rounded-2xl border border-indigo-200/60">
+    <div className="p-6 md:p-10 max-w-7xl mx-auto space-y-8">
+      {/* Top Header — tiêu đề kiểu tạp chí, không đóng khung thẻ */}
+      <div className="flex flex-col lg:flex-row lg:items-end justify-between gap-5">
+        <div className="flex items-start gap-4 min-w-0">
+          <div className="p-3 bg-indigo-100 text-indigo-700 rounded-[14px] -rotate-3 shrink-0">
             <BookOpen className="w-5 h-5" />
           </div>
-          <div>
-            <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">
+          <div className="min-w-0">
+            <span className="text-sm italic text-slate-500">
               Reading & Vocabulary Studio
             </span>
-            <h2 className="text-sm font-bold text-slate-900 flex items-center gap-2">
+            <h2 className="font-display text-2xl md:text-3xl font-bold text-slate-900 leading-tight flex items-center gap-3 flex-wrap">
               {passage.title}
-              <span className="text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-indigo-600 text-white">
+              <span className="tag bg-indigo-700 text-white">
                 {storyLevel} Level
               </span>
             </h2>
@@ -220,22 +326,32 @@ Furthermore, the ethical implications surrounding data privacy remain deeply con
 
         <div className="flex items-center gap-3">
           {/* Skim & Scan Timer */}
-          <div className="flex items-center gap-2 px-3 py-1.5 rounded-2xl bg-amber-50 border border-amber-200 text-amber-900 text-xs font-bold">
+          <div className="flex items-center gap-2 pl-3.5 pr-1.5 py-1.5 rounded-full bg-amber-100 text-amber-900 text-xs font-bold">
             <Timer className="w-4 h-4 text-amber-600" />
-            <span>Skim Timer: {formatTime(secondsLeft)}</span>
+            <span className="hidden sm:inline font-medium italic">Skim timer</span>
+            <span className="num text-sm">{formatTime(secondsLeft)}</span>
             <button
               onClick={() => setIsTimerRunning(!isTimerRunning)}
-              className="p-1 rounded hover:bg-amber-200/60 text-amber-800 transition-colors cursor-pointer"
+              aria-label={isTimerRunning ? "Pause timer" : "Resume timer"}
+              className="p-1.5 rounded-full bg-amber-200/70 hover:bg-amber-300/80 text-amber-800 transition-colors cursor-pointer"
             >
               {isTimerRunning ? <Pause className="w-3.5 h-3.5" /> : <Play className="w-3.5 h-3.5 fill-amber-800" />}
             </button>
           </div>
 
           <button
-            onClick={() => setIsGeneratorOpen(true)}
-            className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs rounded-xl shadow-md shadow-indigo-200 flex items-center gap-1.5 transition-all cursor-pointer active:scale-95"
+            onClick={() => void openGenerator()}
+            className="px-4 py-2.5 bg-indigo-700 hover:bg-indigo-800 text-white font-bold text-xs rounded-xl shadow-[0_12px_22px_-12px_rgba(31,87,73,0.9)] flex items-center gap-1.5 transition-all cursor-pointer hover:-translate-y-0.5 active:scale-95"
           >
-            <Sparkles className="w-3.5 h-3.5 text-amber-300" /> Generate AI Story
+            <Sparkles className="w-3.5 h-3.5 text-amber-300" /> Skim & Scan
+          </button>
+          <button
+            onClick={startBackendClassic}
+            disabled={!getAccessToken() || isStartingClassic}
+            className="px-4 py-2.5 bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs rounded-xl flex items-center gap-1.5 transition-all disabled:opacity-40 active:scale-95"
+          >
+            <BookOpen className="w-3.5 h-3.5" />
+            {isStartingClassic ? "Loading Classic..." : "Start Backend Classic"}
           </button>
         </div>
       </div>
@@ -243,71 +359,84 @@ Furthermore, the ethical implications surrounding data privacy remain deeply con
       {/* Main Grid: Reading Passage (60%) vs AI Word Lookup Panel (40%) */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
         {/* Left Pane: Reading Passage */}
-        <div className="lg:col-span-7 bg-white rounded-3xl border border-slate-200/80 p-6 md:p-8 shadow-xs flex flex-col justify-between">
+        <div className="surface lg:col-span-7 p-7 md:p-10 flex flex-col justify-between">
           <div>
-            <div className="flex items-center justify-between pb-4 mb-6 border-b border-slate-100 text-xs text-slate-500">
-              <span className="font-medium text-indigo-600 bg-indigo-50 px-2.5 py-1 rounded-full font-bold">
+            <div className="flex items-center justify-between pb-5 mb-7 border-b border-dashed border-slate-200 text-xs text-slate-500">
+              <span className="tag bg-indigo-100 text-indigo-700">
                 {passage.category}
               </span>
               <span>{passage.readTime} • {passage.wordCount}</span>
             </div>
 
             {/* Passage Body */}
-            <div className="select-text">
+            <WordHoverLookup enabled={passageFromDocument} className="select-text">
               {renderInteractivePassage(passage.content)}
-            </div>
+            </WordHoverLookup>
 
             {/* Comprehension Check */}
-            <div className="mt-8 p-6 rounded-2xl bg-slate-50 border border-slate-200/80 space-y-4">
-              <div className="flex items-center gap-2 text-xs font-bold text-slate-900 uppercase tracking-wide">
+            <div className="mt-10 p-6 rounded-3xl bg-paper-deep/70 space-y-4">
+              <div className="flex items-center gap-2 font-display text-lg font-bold text-slate-900">
                 <HelpCircle className="w-4 h-4 text-indigo-600" /> Comprehension Check
               </div>
-              <p className="text-sm font-semibold text-slate-800">
-                {passage.comprehensionQuestion}
-              </p>
-
-              <div className="space-y-2">
-                {passage.comprehensionOptions.map((opt, idx) => {
-                  const isSelected = userQuizChoice === idx;
-                  const isCorrect = idx === passage.correctOptionIndex;
-
-                  return (
+              {classicQuestions.length > 0 ? classicQuestions.map((question, questionIndex) => (
+                <div key={question.id} className="space-y-2">
+                  <p className="text-sm font-semibold text-slate-800">{questionIndex + 1}. {question.text}</p>
+                  {question.options.map((option, optionIndex) => (
                     <button
-                      key={idx}
-                      onClick={() => setUserQuizChoice(idx)}
-                      className={`w-full p-3 rounded-xl text-xs font-medium text-left flex items-center justify-between transition-all cursor-pointer ${
-                        isSelected
-                          ? isCorrect
-                            ? "bg-emerald-100 text-emerald-950 border-2 border-emerald-500 font-bold"
-                            : "bg-rose-100 text-rose-950 border-2 border-rose-500 font-bold"
-                          : "bg-white border border-slate-200 hover:border-indigo-300 text-slate-700"
+                      key={optionIndex}
+                      onClick={() => setClassicChoices((current) => ({ ...current, [question.id]: optionIndex }))}
+                      disabled={classicScore !== null}
+                      className={`w-full p-3 rounded-xl text-xs font-medium text-left transition-all cursor-pointer ${
+                        classicChoices[question.id] === optionIndex
+                          ? "bg-indigo-100 text-indigo-950 ring-2 ring-indigo-500 font-bold"
+                          : "bg-[#fffdf8] ring-1 ring-slate-900/10 hover:ring-indigo-400 text-slate-700"
                       }`}
                     >
-                      <span>{opt}</span>
-                      {isSelected && (
-                        isCorrect ? (
-                          <span className="text-xs font-bold text-emerald-700 flex items-center gap-1">
-                            <CheckCircle2 className="w-4 h-4 text-emerald-600" /> Correct!
-                          </span>
-                        ) : (
-                          <span className="text-xs font-bold text-rose-600">Incorrect</span>
-                        )
-                      )}
+                      {option}
                     </button>
-                  );
-                })}
-              </div>
+                  ))}
+                </div>
+              )) : (
+                <>
+                  <p className="text-sm font-semibold text-slate-800">{passage.comprehensionQuestion}</p>
+                  <div className="space-y-2">
+                    {passage.comprehensionOptions.map((option, index) => (
+                      <button
+                        key={index}
+                        onClick={() => setUserQuizChoice(index)}
+                        className={`w-full p-3 rounded-xl text-xs font-medium text-left ${userQuizChoice === index ? "bg-emerald-100 border-2 border-emerald-500" : "bg-white border border-slate-200"}`}
+                      >
+                        {option}
+                      </button>
+                    ))}
+                  </div>
+                </>
+              )}
+              {classicQuestions.length > 0 && classicScore === null && (
+                <button
+                  onClick={() => void submitAllBackendClassic()}
+                  disabled={Object.keys(classicChoices).length !== classicQuestions.length}
+                  className="w-full rounded-xl bg-indigo-700 hover:bg-indigo-800 py-3 text-xs font-bold text-white disabled:opacity-40 transition-all active:scale-[0.98]"
+                >
+                  Submit Classic answers
+                </button>
+              )}
+              {classicScore !== null && (
+                <p className="text-xs font-bold text-indigo-700">
+                  Backend score: {Math.round(classicScore * 100)}%
+                </p>
+              )}
             </div>
           </div>
 
-          <div className="mt-6 pt-4 border-t border-slate-100 flex items-center justify-between text-xs text-slate-400">
+          <div className="mt-8 pt-4 border-t border-dashed border-slate-200 flex items-center justify-between text-xs text-slate-400">
             <span>Tip: Click any highlighted word to inspect its AI breakdown.</span>
             <span className="font-semibold text-indigo-600">6 Target Words</span>
           </div>
         </div>
 
         {/* Right Pane: AI Word Lookup Panel */}
-        <div className="lg:col-span-5 bg-white rounded-3xl border border-slate-200/80 p-6 shadow-xs flex flex-col justify-between">
+        <div className="surface lg:col-span-5 p-7 flex flex-col justify-between lg:sticky lg:top-24 lg:self-start">
           {isLoadingWord ? (
             <div className="flex flex-col items-center justify-center py-20 space-y-3">
               <Sparkles className="w-8 h-8 text-indigo-600 animate-spin" />
@@ -316,15 +445,15 @@ Furthermore, the ethical implications surrounding data privacy remain deeply con
           ) : (
             <div className="space-y-6">
               {/* Header Word Title */}
-              <div className="flex items-start justify-between pb-4 border-b border-slate-100">
+              <div className="flex items-start justify-between pb-5 border-b border-dashed border-slate-200">
                 <div>
                   <div className="flex items-center gap-2 mb-1">
-                    <span className="text-xs font-bold text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded uppercase">
+                    <span className="tag bg-indigo-100 text-indigo-700">
                       {wordData.partOfSpeech}
                     </span>
                     <span className="text-xs font-mono text-slate-500">{wordData.phonetics}</span>
                   </div>
-                  <h2 className="text-2xl font-extrabold text-slate-900 tracking-tight capitalize">
+                  <h2 className="font-display text-4xl font-bold text-slate-900 capitalize">
                     {wordData.word}
                   </h2>
                 </div>
@@ -338,7 +467,25 @@ Furthermore, the ethical implications surrounding data privacy remain deeply con
                     <Volume2 className="w-4 h-4" />
                   </button>
                   <button
-                    onClick={() => setIsSavedWord(!isSavedWord)}
+                    onClick={async () => {
+                      if (!getAccessToken()) {
+                        setIsSavedWord(!isSavedWord);
+                        return;
+                      }
+                      try {
+                        await saveVocabulary({
+                          term: wordData.word,
+                          definition: wordData.meaning,
+                          sourceUrl: "frontend-reference://reading",
+                          exampleSentence: wordData.contextQuote,
+                          synonyms: wordData.synonyms,
+                          antonyms: wordData.antonyms,
+                        });
+                        setIsSavedWord(true);
+                      } catch (error) {
+                        console.error("Vocabulary save failed", error);
+                      }
+                    }}
                     className={`p-2.5 rounded-2xl transition-colors cursor-pointer ${
                       isSavedWord ? "bg-amber-100 text-amber-700" : "bg-slate-100 text-slate-500 hover:bg-slate-200"
                     }`}
@@ -351,20 +498,20 @@ Furthermore, the ethical implications surrounding data privacy remain deeply con
 
               {/* Meaning & Definition */}
               <div>
-                <h4 className="text-xs font-bold uppercase tracking-wider text-slate-400 mb-1">
-                  Definition & Meaning
+                <h4 className="text-sm italic text-slate-400 mb-1">
+                  Definition & meaning
                 </h4>
-                <p className="text-sm font-medium text-slate-800 leading-relaxed">
+                <p className="text-base font-medium text-slate-800 leading-relaxed">
                   {wordData.meaning}
                 </p>
               </div>
 
               {/* Context Quote */}
-              <div className="p-3.5 rounded-2xl bg-indigo-50/70 border border-indigo-100 text-xs text-indigo-950 space-y-1">
-                <span className="font-bold text-indigo-800 block text-[11px] uppercase tracking-wide">
-                  Used In Article Context:
+              <div className="p-4 rounded-2xl bg-indigo-50 border-l-4 border-indigo-400 text-sm text-indigo-950 space-y-1">
+                <span className="font-semibold italic text-indigo-800 block text-xs">
+                  Used in the article
                 </span>
-                <p className="italic leading-relaxed">"{wordData.contextQuote}"</p>
+                <p className="italic leading-relaxed font-serif">"{wordData.contextQuote}"</p>
               </div>
 
               {/* Synonyms & Antonyms */}
@@ -392,7 +539,7 @@ Furthermore, the ethical implications surrounding data privacy remain deeply con
               </div>
 
               {/* Mini Challenge Quiz */}
-              <div className="p-4 rounded-2xl bg-amber-50/60 border border-amber-200/80 space-y-3">
+              <div className="p-5 rounded-3xl bg-amber-100/70 space-y-3 -rotate-[0.6deg]">
                 <div className="flex items-center gap-1.5 text-xs font-bold text-amber-900">
                   <Zap className="w-4 h-4 text-amber-600 fill-amber-500" />
                   <span>Guess the Context Challenge</span>
@@ -415,7 +562,7 @@ Furthermore, the ethical implications surrounding data privacy remain deeply con
                             ? isCorrect
                               ? "bg-emerald-600 text-white shadow-xs"
                               : "bg-rose-600 text-white"
-                            : "bg-white text-slate-800 border border-amber-200 hover:border-amber-400"
+                            : "bg-[#fffdf8] text-slate-800 ring-1 ring-amber-300 hover:ring-amber-500"
                         }`}
                       >
                         {opt}
@@ -451,13 +598,15 @@ Furthermore, the ethical implications surrounding data privacy remain deeply con
         </div>
       </div>
 
-      {/* AI Story Generator Modal */}
+      <RearrangePanel skill="reading" />
+
+      {/* Skim & Scan Generator Modal */}
       {isGeneratorOpen && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-slate-200 animate-in fade-in zoom-in-95 duration-200 space-y-4">
-            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
-              <h3 className="font-bold text-base text-slate-900 flex items-center gap-2">
-                <Sparkles className="w-5 h-5 text-indigo-600" /> Generate AI Reading Story
+        <div className="fixed inset-0 bg-slate-950/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-[#fffdf8] rounded-3xl max-w-md w-full p-7 shadow-[0_40px_80px_-30px_rgba(32,29,24,0.6)] animate-rise space-y-4">
+            <div className="flex items-center justify-between pb-1">
+              <h3 className="font-display font-bold text-2xl text-slate-900 flex items-center gap-2">
+                <Sparkles className="w-5 h-5 text-indigo-600" /> New Skim & Scan Passage
               </h3>
               <button onClick={() => setIsGeneratorOpen(false)} className="text-slate-400 hover:text-slate-600">
                 ×
@@ -465,19 +614,71 @@ Furthermore, the ethical implications surrounding data privacy remain deeply con
             </div>
 
             <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1">Topic or Subject</label>
-              <select
-                value={storyTopic}
-                onChange={(e) => setStoryTopic(e.target.value)}
-                className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500/20 font-medium"
-              >
-                <option value="Technology & Society">Technology & Society</option>
-                <option value="Environmental Science">Environmental Science</option>
-                <option value="Business & Modern Economics">Business & Modern Economics</option>
-                <option value="Psychology & Human Behavior">Psychology & Human Behavior</option>
-                <option value="Art, Film & Culture">Art, Film & Culture</option>
-              </select>
+              <label className="block text-xs font-bold text-slate-700 mb-1">Passage source</label>
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  onClick={() => setStorySource("document")}
+                  disabled={readyDocuments.length === 0}
+                  className={`py-2 text-xs font-bold rounded-xl transition-colors cursor-pointer disabled:opacity-40 ${
+                    storySource === "document"
+                      ? "bg-indigo-700 text-white"
+                      : "bg-slate-100 text-slate-700 hover:bg-slate-200"
+                  }`}
+                >
+                  My document
+                </button>
+                <button
+                  onClick={() => setStorySource("topic")}
+                  className={`py-2 text-xs font-bold rounded-xl transition-colors cursor-pointer ${
+                    storySource === "topic"
+                      ? "bg-indigo-700 text-white"
+                      : "bg-slate-100 text-slate-700 hover:bg-slate-200"
+                  }`}
+                >
+                  AI topic
+                </button>
+              </div>
+              {storySource === "document" && readyDocuments.length === 0 && (
+                <p className="text-[11px] text-amber-600 mt-1">
+                  No ready document yet — upload a .docx in Knowledge Space first, or use an AI topic instead.
+                </p>
+              )}
             </div>
+
+            {storySource === "document" ? (
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">Document</label>
+                <select
+                  value={selectedDocumentId}
+                  onChange={(e) => setSelectedDocumentId(e.target.value)}
+                  className="w-full px-3 py-2 text-xs bg-white ring-1 ring-slate-900/10 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500/60 font-medium"
+                >
+                  {readyDocuments.map((document) => (
+                    <option key={document.id} value={document.id}>
+                      {document.title}
+                    </option>
+                  ))}
+                </select>
+                <p className="text-[11px] text-slate-400 mt-1">
+                  The passage will be a real excerpt from this document, not AI-generated text.
+                </p>
+              </div>
+            ) : (
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">Topic or Subject</label>
+                <select
+                  value={storyTopic}
+                  onChange={(e) => setStoryTopic(e.target.value)}
+                  className="w-full px-3 py-2 text-xs bg-white ring-1 ring-slate-900/10 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500/60 font-medium"
+                >
+                  <option value="Technology & Society">Technology & Society</option>
+                  <option value="Environmental Science">Environmental Science</option>
+                  <option value="Business & Modern Economics">Business & Modern Economics</option>
+                  <option value="Psychology & Human Behavior">Psychology & Human Behavior</option>
+                  <option value="Art, Film & Culture">Art, Film & Culture</option>
+                </select>
+              </div>
+            )}
 
             <div>
               <label className="block text-xs font-bold text-slate-700 mb-1">CEFR Target Level</label>
@@ -488,7 +689,7 @@ Furthermore, the ethical implications surrounding data privacy remain deeply con
                     onClick={() => setStoryLevel(lvl)}
                     className={`py-2 text-xs font-bold rounded-xl transition-colors cursor-pointer ${
                       storyLevel === lvl
-                        ? "bg-indigo-600 text-white shadow-xs"
+                        ? "bg-indigo-700 text-white"
                         : "bg-slate-100 text-slate-700 hover:bg-slate-200"
                     }`}
                   >
@@ -497,6 +698,8 @@ Furthermore, the ethical implications surrounding data privacy remain deeply con
                 ))}
               </div>
             </div>
+
+            {generatorError && <p className="text-xs text-red-600">{generatorError}</p>}
 
             <div className="pt-2 flex items-center justify-end gap-2">
               <button
@@ -507,8 +710,8 @@ Furthermore, the ethical implications surrounding data privacy remain deeply con
               </button>
               <button
                 onClick={handleGenerateStory}
-                disabled={isGenerating}
-                className="px-4 py-2 text-xs font-bold bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl shadow-xs flex items-center gap-1.5"
+                disabled={isGenerating || (storySource === "document" && !selectedDocumentId)}
+                className="px-4 py-2 text-xs font-bold bg-indigo-700 hover:bg-indigo-800 text-white rounded-xl flex items-center gap-1.5 disabled:opacity-40 active:scale-95 transition-all"
               >
                 {isGenerating ? <Sparkles className="w-3.5 h-3.5 animate-spin" /> : "Generate Passage"}
               </button>

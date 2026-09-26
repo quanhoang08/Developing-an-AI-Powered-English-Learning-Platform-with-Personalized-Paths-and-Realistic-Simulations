@@ -1,3 +1,7 @@
+// Shape dữ liệu dùng bởi các view còn ở dạng demo (Reading word lookup, Listening/Movie,
+// Writing insights, Analytics error journal, flashcards) — không phải response API thật.
+
+// Tab đang active ở Sidebar/Header, điều khiển view nào App.tsx render.
 export type ActiveTab =
   | "dashboard"
   | "notebook"

@@ -1,12 +1,14 @@
 // Trang chủ, xem được cả khi chưa đăng nhập. Dữ liệu thật: greeting/tên user (App.tsx truyền
-// userEmail xuống) và streak/XP (useLearningStats -> GET /api/streaks). Số liệu mastery,
-// weekly breakdown, recent materials và "24 cards" vẫn là demo cứng vì Adaptive Progress
-// backend chưa implement.
-import React from "react";
+// userEmail xuống), streak/XP, số thẻ đến hạn, mastery/CEFR, "phút học trong tuần" (chỉ khi user
+// tự bật "chế độ bấm giờ" — GET/PATCH /api/users/me, GET /api/activity/weekly-summary) và "Pick up
+// where you left off" (GET /api/activity/recent — luôn thật, không phụ thuộc bấm giờ) qua
+// useLearningStats.
+import React, { useState } from "react";
 import { motion } from "motion/react";
 import { ActiveTab } from "../types";
 import { CatMascot } from "./CatMascot";
 import { useLearningStats } from "../stats";
+import { setTimerMode } from "../api";
 import {
   Flame,
   Zap,
@@ -15,9 +17,8 @@ import {
   Mic,
   PenTool,
   ArrowUpRight,
-  TrendingUp,
   ChevronRight,
-  PlayCircle
+  Clock,
 } from "lucide-react";
 
 interface DashboardViewProps {
@@ -37,15 +38,14 @@ function getTimeBasedGreeting(): string {
 // Các khối xuất hiện lần lượt (stagger) thay vì bật ra cùng lúc.
 const container = {
   hidden: {},
-  show: { transition: { staggerChildren: 0.08, delayChildren: 0.05 } },
+  show: { transition: { staggerChildren: 0.03 } },
 };
 const item = {
   hidden: { opacity: 0, y: 18 },
-  show: { opacity: 1, y: 0, transition: { duration: 0.55, ease: [0.22, 1, 0.36, 1] as const } },
+  show: { opacity: 1, y: 0, transition: { duration: 0.3, ease: [0.22, 1, 0.36, 1] as const } },
 };
 
 const STREAK_TARGET = 30;
-const MASTERY_PERCENT = 82;
 
 // Ngày local dạng YYYY-MM-DD, khớp định dạng recent_active_dates của backend.
 function toIsoDate(date: Date): string {
@@ -63,6 +63,14 @@ function lastDays(count: number): string[] {
     return toIsoDate(day);
   });
 }
+// "0m" / "45m" / "1h 30m" — cùng đơn vị hiển thị cho tổng và từng kỹ năng.
+function formatMinutes(totalMinutes: number): string {
+  const hours = Math.floor(totalMinutes / 60);
+  const minutes = totalMinutes % 60;
+  if (hours === 0) return `${minutes}m`;
+  return minutes === 0 ? `${hours}h` : `${hours}h ${minutes}m`;
+}
+
 const RING_RADIUS = 34;
 const RING_CIRCUMFERENCE = 2 * Math.PI * RING_RADIUS;
 
@@ -76,48 +84,55 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   const streakDays = lastDays(STREAK_TARGET);
   const activeDaySet = new Set(stats.recentActiveDates);
   const displayName = userEmail ? userEmail.split("@")[0] : null;
-  // Danh sách demo cứng — chưa gọi listDocuments()/reading history thật từ backend.
-  const recentMaterials = [
-    {
-      id: "1",
-      title: "Business English: Negotiation Tactics",
-      category: "Reading & Vocab",
-      level: "B2 Upper",
-      timeAgo: "2 hours ago",
-      tab: "reading" as ActiveTab,
-      image: "https://images.unsplash.com/photo-1551836022-d5d88e9218df?w=900&auto=format&fit=crop&q=80",
-      progress: 75
-    },
-    {
-      id: "2",
-      title: "TED Talk: The Secrets of Creative Thinking",
-      category: "Listening & Dictation",
-      level: "C1 Advanced",
-      timeAgo: "Yesterday",
-      tab: "listening" as ActiveTab,
-      image: "https://images.unsplash.com/photo-1475721027785-f74eccf877e2?w=600&auto=format&fit=crop&q=80",
-      progress: 40
-    },
-    {
-      id: "3",
-      title: "AI Job Interview Practice Routine",
-      category: "Speaking Studio",
-      level: "B2 Upper",
-      timeAgo: "3 days ago",
-      tab: "speaking" as ActiveTab,
-      image: "https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=600&auto=format&fit=crop&q=80",
-      progress: 90
-    }
-  ];
-  const [featured, ...others] = recentMaterials;
+  const [isTogglingTimer, setIsTogglingTimer] = useState(false);
 
-  // Tỷ lệ thanh tổng: 3h00 / 2h15 / 1h30 / 0h45 trên tổng 7h30 (450 phút).
-  const weekly = [
-    { label: "Reading", time: "3h 00m", share: 40, icon: BookOpen, bar: "bg-indigo-600", text: "text-indigo-700" },
-    { label: "Listening", time: "2h 15m", share: 30, icon: Headphones, bar: "bg-purple-500", text: "text-purple-700" },
-    { label: "Writing", time: "1h 30m", share: 20, icon: PenTool, bar: "bg-amber-400", text: "text-amber-700" },
-    { label: "Speaking", time: "0h 45m", share: 10, icon: Mic, bar: "bg-blue-400", text: "text-blue-700" },
-  ];
+  async function handleToggleTimerMode() {
+    setIsTogglingTimer(true);
+    try {
+      await setTimerMode(!stats.timerModeEnabled);
+    } catch {
+      // Lỗi mạng tạm thời — bấm lại được, không cần thông báo riêng cho 1 toggle nhỏ.
+    } finally {
+      setIsTogglingTimer(false);
+    }
+  }
+
+  const WEEKLY_META: Record<
+    "reading" | "listening" | "writing" | "speaking",
+    { label: string; icon: typeof BookOpen; bar: string; text: string }
+  > = {
+    reading: { label: "Reading", icon: BookOpen, bar: "bg-indigo-600", text: "text-indigo-700" },
+    listening: { label: "Listening", icon: Headphones, bar: "bg-purple-500", text: "text-purple-700" },
+    writing: { label: "Writing", icon: PenTool, bar: "bg-amber-400", text: "text-amber-700" },
+    speaking: { label: "Speaking", icon: Mic, bar: "bg-blue-400", text: "text-blue-700" },
+  };
+  const weekly = (Object.keys(WEEKLY_META) as Array<keyof typeof WEEKLY_META>).map((skill) => {
+    const minutes = stats.minutesBySkill[skill];
+    return {
+      skill,
+      ...WEEKLY_META[skill],
+      minutes,
+      share: stats.totalMinutes > 0 ? Math.round((minutes / stats.totalMinutes) * 100) : 0,
+    };
+  });
+
+  const RECENT_META: Record<"reading" | "listening" | "writing" | "speaking", { category: string; icon: typeof BookOpen }> = {
+    reading: { category: "Reading & Vocab", icon: BookOpen },
+    listening: { category: "Listening & Dictation", icon: Headphones },
+    writing: { category: "Writing Studio", icon: PenTool },
+    speaking: { category: "Speaking Studio", icon: Mic },
+  };
+
+  // "vài phút/giờ/ngày trước" từ created_at thật — không có ảnh minh hoạ thật cho từng hoạt động
+  // (không lưu ảnh bìa tài liệu) nên bỏ hẳn ảnh nền thay vì dùng ảnh stock không liên quan.
+  function timeAgo(iso: string): string {
+    const diffMs = Date.now() - new Date(iso).getTime();
+    const minutes = Math.max(1, Math.round(diffMs / 60000));
+    if (minutes < 60) return `${minutes}m ago`;
+    const hours = Math.round(minutes / 60);
+    if (hours < 24) return `${hours}h ago`;
+    return `${Math.round(hours / 24)}d ago`;
+  }
 
   return (
     <motion.div
@@ -169,7 +184,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                 onClick={openFlashcards}
                 className="px-5 py-3 bg-amber-300 hover:bg-amber-200 text-slate-900 font-bold text-sm rounded-2xl shadow-[0_12px_24px_-10px_rgba(252,211,77,0.6)] flex items-center gap-2 transition-all cursor-pointer hover:-translate-y-0.5 active:translate-y-0 active:scale-[0.97]"
               >
-                <Zap className="w-4 h-4 fill-slate-900" /> Start review · 24 cards
+                <Zap className="w-4 h-4 fill-slate-900" /> Start review · {stats.dueCards} {stats.dueCards === 1 ? "card" : "cards"}
               </button>
               <button
                 onClick={() => setActiveTab("speaking")}
@@ -246,10 +261,10 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           <div className="relative">
             <p className="text-sm text-indigo-800/80 italic mb-1">Memory review queue</p>
             <div className="flex items-baseline gap-2">
-              <span className="num text-5xl font-extrabold text-indigo-950">24</span>
-              <span className="text-sm text-indigo-900/70">items ready now</span>
+              <span className="num text-5xl font-extrabold text-indigo-950">{stats.dueCards}</span>
+              <span className="text-sm text-indigo-900/70">{stats.dueCards === 1 ? "word" : "words"} ready now</span>
             </div>
-            <p className="text-xs text-indigo-900/70 mt-2">18 vocab · 6 grammar</p>
+            <p className="text-xs text-indigo-900/70 mt-2">Vocabulary due by your spaced-repetition schedule</p>
           </div>
           <button
             onClick={openFlashcards}
@@ -276,19 +291,18 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                   className="stroke-purple-500"
                   strokeDasharray={RING_CIRCUMFERENCE}
                   initial={{ strokeDashoffset: RING_CIRCUMFERENCE }}
-                  animate={{ strokeDashoffset: RING_CIRCUMFERENCE * (1 - MASTERY_PERCENT / 100) }}
-                  transition={{ duration: 1.2, ease: [0.22, 1, 0.36, 1], delay: 0.4 }}
+                  animate={{ strokeDashoffset: RING_CIRCUMFERENCE * (1 - (stats.masteryPercent ?? 0) / 100) }}
+                  transition={{ duration: 0.8, ease: [0.22, 1, 0.36, 1], delay: 0.1 }}
                 />
               </svg>
               <span className="num absolute inset-0 flex items-center justify-center text-xl font-extrabold text-slate-900">
-                {MASTERY_PERCENT}%
+                {stats.masteryPercent === null ? "—" : `${stats.masteryPercent}%`}
               </span>
             </div>
             <div>
               <p className="text-sm text-slate-500 italic">Overall mastery</p>
-              <p className="tag bg-purple-100 text-purple-700 mt-1">CEFR B2</p>
-              <p className="text-xs text-emerald-600 font-semibold flex items-center mt-1.5">
-                <TrendingUp className="w-3.5 h-3.5 mr-1" /> +4.2% this week
+              <p className="tag bg-purple-100 text-purple-700 mt-1">
+                {stats.cefrLevel ? `CEFR ${stats.cefrLevel}` : "No level yet"}
               </p>
             </div>
           </div>
@@ -307,19 +321,34 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         <div className="flex flex-wrap items-end justify-between gap-2 mb-6">
           <div>
             <h3 className="font-display text-2xl font-bold text-slate-900">This week, in minutes</h3>
-            <p className="text-sm text-slate-500">7 hours 30 minutes of practice across four skills</p>
+            <p className="text-sm text-slate-500">
+              {!stats.timerModeEnabled
+                ? "Turn on timer mode to track real minutes per skill."
+                : stats.totalMinutes > 0
+                ? `${formatMinutes(stats.totalMinutes)} of practice across four skills`
+                : "No study time logged this week yet."}
+            </p>
           </div>
-          <span className="tag bg-slate-100 text-slate-600">This week</span>
+          <button
+            onClick={handleToggleTimerMode}
+            disabled={isTogglingTimer}
+            className={`tag flex items-center gap-1.5 cursor-pointer transition-colors disabled:opacity-60 ${
+              stats.timerModeEnabled ? "bg-purple-100 text-purple-700" : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+            }`}
+          >
+            <Clock className="w-3.5 h-3.5" />
+            {stats.timerModeEnabled ? "Timer mode on" : "Turn on timer mode"}
+          </button>
         </div>
 
-        <div className="flex h-4 rounded-full overflow-hidden gap-1 mb-6" role="img" aria-label="Weekly practice time split by skill">
+        <div className="flex h-4 rounded-full overflow-hidden gap-1 mb-6 bg-slate-100" role="img" aria-label="Weekly practice time split by skill">
           {weekly.map((row, index) => (
             <motion.div
-              key={row.label}
+              key={row.skill}
               className={`${row.bar} first:rounded-l-full last:rounded-r-full`}
               initial={{ width: 0 }}
               animate={{ width: `${row.share}%` }}
-              transition={{ duration: 0.9, ease: [0.22, 1, 0.36, 1], delay: 0.3 + index * 0.1 }}
+              transition={{ duration: 0.6, ease: [0.22, 1, 0.36, 1], delay: 0.1 + index * 0.05 }}
             />
           ))}
         </div>
@@ -328,13 +357,13 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           {weekly.map((row) => {
             const Icon = row.icon;
             return (
-              <div key={row.label} className="flex items-center gap-3">
+              <div key={row.skill} className="flex items-center gap-3">
                 <span className={`w-9 h-9 rounded-[12px] flex items-center justify-center bg-slate-100 ${row.text}`}>
                   <Icon className="w-4 h-4" />
                 </span>
                 <div>
                   <p className="text-xs text-slate-500">{row.label}</p>
-                  <p className="num text-base font-bold text-slate-900">{row.time}</p>
+                  <p className="num text-base font-bold text-slate-900">{formatMinutes(row.minutes)}</p>
                 </div>
               </div>
             );
@@ -342,7 +371,8 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         </div>
       </motion.section>
 
-      {/* Recent materials: một thẻ lớn nổi bật + danh sách ngang */}
+      {/* Recent activity: danh sách thật từ GET /api/activity/recent, không có ảnh minh hoạ vì
+          backend không lưu ảnh bìa cho từng lượt học (khác bản demo cứng trước đây dùng ảnh stock). */}
       <motion.section variants={item}>
         <div className="flex items-end justify-between mb-5">
           <h3 className="font-display text-2xl font-bold text-slate-900">Pick up where you left off</h3>
@@ -355,64 +385,46 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           </button>
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-5 gap-5">
-          <button
-            onClick={() => setActiveTab(featured.tab)}
-            className="lg:col-span-3 lg:row-span-2 relative rounded-[1.75rem] overflow-hidden text-left group cursor-pointer min-h-[22rem] shadow-[0_24px_40px_-24px_rgba(32,29,24,0.7)]"
-          >
-            <img
-              src={featured.image}
-              alt={featured.title}
-              className="absolute inset-0 w-full h-full object-cover transition-transform duration-700 group-hover:scale-105"
-            />
-            <div className="absolute inset-0 bg-gradient-to-t from-slate-950/85 via-slate-950/20 to-transparent" />
-            <span className="absolute top-4 left-4 tag bg-paper text-slate-800">{featured.category}</span>
-            <div className="absolute bottom-0 left-0 right-0 p-6 text-white">
-              <p className="text-xs text-white/70 mb-2">{featured.level} · {featured.timeAgo}</p>
-              <h4 className="font-display text-3xl font-bold leading-tight mb-4 max-w-md">{featured.title}</h4>
-              <div className="flex items-center gap-3">
-                <div className="flex-1 h-1.5 rounded-full bg-white/25 overflow-hidden">
-                  <div className="h-full rounded-full bg-amber-300" style={{ width: `${featured.progress}%` }} />
-                </div>
-                <span className="num text-xs font-bold">{featured.progress}%</span>
-                <span className="flex items-center gap-1 text-sm font-semibold">
-                  Continue <PlayCircle className="w-5 h-5 transition-transform group-hover:translate-x-1" />
-                </span>
-              </div>
-            </div>
-          </button>
-
-          {others.map((mat) => (
-            <button
-              key={mat.id}
-              onClick={() => setActiveTab(mat.tab)}
-              className="surface surface-lift lg:col-span-2 flex items-stretch gap-4 p-3 text-left cursor-pointer group"
-            >
-              <img
-                src={mat.image}
-                alt={mat.title}
-                className="w-28 sm:w-32 rounded-2xl object-cover shrink-0 transition-transform duration-500 group-hover:scale-[1.03]"
-              />
-              <div className="flex-1 min-w-0 py-1 pr-2 flex flex-col justify-between">
-                <div>
-                  <span className="tag bg-indigo-100 text-indigo-700 mb-2">{mat.category}</span>
-                  <h4 className="font-display font-bold text-base leading-snug text-slate-900 line-clamp-2 group-hover:text-indigo-700 transition-colors">
-                    {mat.title}
-                  </h4>
-                </div>
-                <div>
-                  <div className="flex items-center justify-between text-[11px] text-slate-500 mb-1.5">
-                    <span>{mat.level} · {mat.timeAgo}</span>
-                    <span className="num font-bold text-slate-700">{mat.progress}%</span>
+        {stats.recentActivity.length === 0 ? (
+          <div className="surface p-8 text-center text-sm text-slate-500">
+            No activity yet — finish a lesson in any skill to see it here.
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            {stats.recentActivity.map((mat, index) => {
+              const meta = RECENT_META[mat.skill];
+              const Icon = meta.icon;
+              return (
+                <button
+                  key={`${mat.skill}-${mat.created_at}-${index}`}
+                  onClick={() => setActiveTab(mat.skill)}
+                  className="surface surface-lift flex items-start gap-3 p-4 text-left cursor-pointer group"
+                >
+                  <span className="w-10 h-10 rounded-xl flex items-center justify-center bg-indigo-100 text-indigo-700 shrink-0">
+                    <Icon className="w-4.5 h-4.5" />
+                  </span>
+                  <div className="flex-1 min-w-0">
+                    <span className="tag bg-indigo-100 text-indigo-700 mb-1.5">{meta.category}</span>
+                    <h4 className="font-display font-bold text-sm leading-snug text-slate-900 line-clamp-2 group-hover:text-indigo-700 transition-colors">
+                      {mat.title}
+                    </h4>
+                    <div className="flex items-center justify-between text-[11px] text-slate-500 mt-2">
+                      <span>{timeAgo(mat.created_at)}</span>
+                      {mat.score !== null && (
+                        <span className="num font-bold text-slate-700">{Math.round(mat.score)}%</span>
+                      )}
+                    </div>
+                    {mat.score !== null && (
+                      <div className="w-full bg-slate-200/70 h-1.5 rounded-full overflow-hidden mt-1.5">
+                        <div className="bg-indigo-600 h-full rounded-full" style={{ width: `${Math.round(mat.score)}%` }} />
+                      </div>
+                    )}
                   </div>
-                  <div className="w-full bg-slate-200/70 h-1.5 rounded-full overflow-hidden">
-                    <div className="bg-indigo-600 h-full rounded-full" style={{ width: `${mat.progress}%` }} />
-                  </div>
-                </div>
-              </div>
-            </button>
-          ))}
-        </div>
+                </button>
+              );
+            })}
+          </div>
+        )}
       </motion.section>
     </motion.div>
   );

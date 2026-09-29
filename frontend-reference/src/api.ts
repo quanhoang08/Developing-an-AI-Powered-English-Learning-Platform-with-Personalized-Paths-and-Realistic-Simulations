@@ -1,11 +1,15 @@
 // Base URL của FastAPI; có thể ghi đè bằng VITE_BACKEND_URL khi deploy.
-const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || "http://localhost:8000";
+// Mặc định dùng 127.0.0.1, KHÔNG dùng "localhost": trên Windows + Docker Desktop, localhost phân giải ra ::1
+// (IPv6) trước, nơi wslrelay.exe giữ cổng nhưng không chuyển tiếp được vào container → request treo/reset
+// lúc được lúc không ("Can't reach the Lumina server"). Có test chặn việc đổi lại (api.test.ts).
+const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || "http://127.0.0.1:8000";
 const ACCESS_TOKEN_KEY = "lumina_access_token";
 
 export interface AuthUser {
   id: string;
   email: string;
   target_level: string | null;
+  timer_mode_enabled: boolean;
   created_at: string;
 }
 
@@ -221,6 +225,38 @@ export function getCurrentUser() {
   return request<AuthUser>("/api/users/me");
 }
 
+// Bật/tắt "chế độ bấm giờ" — chỉ khi bật thì các view kỹ năng mới gửi duration_seconds
+// lúc nộp bài, để study_time_log ghi lại (xem useStudyTimer.ts).
+export function setTimerMode(enabled: boolean) {
+  return request<AuthUser>("/api/users/me", {
+    method: "PATCH",
+    body: JSON.stringify({ timer_mode_enabled: enabled }),
+  });
+}
+
+// Phút học 7 ngày gần nhất theo kỹ năng — luôn 0 nếu chưa từng bật chế độ bấm giờ.
+export interface WeeklyActivity {
+  timer_mode_enabled: boolean;
+  minutes_by_skill: Record<"reading" | "listening" | "writing" | "speaking", number>;
+  total_minutes: number;
+}
+
+export function getWeeklyActivity() {
+  return request<WeeklyActivity>("/api/activity/weekly-summary");
+}
+
+// "Pick up where you left off": hoạt động gần nhất trên cả 4 kỹ năng, không phụ thuộc bấm giờ.
+export interface RecentActivityItem {
+  skill: "reading" | "listening" | "writing" | "speaking";
+  title: string;
+  score: number | null;
+  created_at: string;
+}
+
+export function getRecentActivity(limit = 5) {
+  return request<RecentActivityItem[]>(`/api/activity/recent?limit=${limit}`);
+}
+
 // Streak + XP thật của user (bảng streaks). Ngoài 3 field trong api-spec mục 7, backend trả
 // thêm số liệu XP/level và các ngày có học gần đây để vẽ lưới streak.
 export interface StreakSummary {
@@ -237,6 +273,18 @@ export interface StreakSummary {
 
 export function getStreaks() {
   return request<StreakSummary>("/api/streaks");
+}
+
+// Điểm trung bình động (0-100) theo kỹ năng — chỉ kỹ năng đã có điểm; cefr_level chỉ có với writing.
+export interface SkillProgress {
+  skill_name: "reading" | "listening" | "writing" | "speaking";
+  score: number | null;
+  cefr_level: string | null;
+  updated_at: string | null;
+}
+
+export function getSkills() {
+  return request<SkillProgress[]>("/api/skills");
 }
 
 // ---------- Adaptive Learning Engine (api-spec mục 7) ----------
@@ -385,6 +433,7 @@ export function submitClassicSession(
   sessionId: string,
   questionId: string,
   selectedOptionIndex: number,
+  durationSeconds?: number,
 ) {
   return request<{
     score: number;
@@ -397,6 +446,7 @@ export function submitClassicSession(
     method: "POST",
     body: JSON.stringify({
       answers: [{ question_id: questionId, selected_option_index: selectedOptionIndex }],
+      duration_seconds: durationSeconds,
     }),
   });
 }
@@ -405,13 +455,14 @@ export function submitClassicSession(
 export function submitClassicAnswers(
   sessionId: string,
   answers: Array<{ question_id: string; selected_option_index: number }>,
+  durationSeconds?: number,
 ) {
   return request<{
     score: number;
     results: Array<{ question_id: string; correct_option_index: number; source_chunk_id: string | null }>;
   }>(`/api/reading/sessions/${sessionId}/submit`, {
     method: "POST",
-    body: JSON.stringify({ answers }),
+    body: JSON.stringify({ answers, duration_seconds: durationSeconds }),
   });
 }
 
@@ -465,10 +516,10 @@ export function createWritingSubmission(promptText: string) {
 }
 
 // Nộp bài luận để Gemini chấm điểm (rubric 4 tiêu chí + insights grammar/vocabulary/style).
-export function submitWritingEssay(submissionId: string, submittedText: string) {
+export function submitWritingEssay(submissionId: string, submittedText: string, durationSeconds?: number) {
   return request<WritingResult>(`/api/writing/submissions/${submissionId}/submit`, {
     method: "POST",
-    body: JSON.stringify({ submitted_text: submittedText }),
+    body: JSON.stringify({ submitted_text: submittedText, duration_seconds: durationSeconds }),
   });
 }
 
@@ -514,10 +565,10 @@ export function createDictation(podcastId: string) {
   });
 }
 
-export function submitDictation(attemptId: string, transcribedText: string) {
+export function submitDictation(attemptId: string, transcribedText: string, durationSeconds?: number) {
   return request<DictationResult>(`/api/listening/dictation/${attemptId}/submit`, {
     method: "POST",
-    body: JSON.stringify({ transcribed_text: transcribedText }),
+    body: JSON.stringify({ transcribed_text: transcribedText, duration_seconds: durationSeconds }),
   });
 }
 
@@ -537,13 +588,32 @@ export async function fetchAudioObjectUrl(path: string): Promise<string> {
 
 export interface MovieContextMatch {
   match_id: string;
-  source_type: string;
+  source_type: "real_video" | "tts_fallback";
   phrase_text: string;
-  audio_url: string;
   is_saved: boolean;
+  // tts_fallback: chỉ có audio_url. real_video: video_url + title + mốc thời gian dòng phụ đề khớp.
+  audio_url: string | null;
+  video_url: string | null;
+  title: string | null;
+  platform: string | null; // "demo" = cảnh mô phỏng; khác = phim thật
+  start_ms: number | null;
+  end_ms: number | null;
 }
 
-// Backend sinh 3 câu thoại ví dụ + audio đọc mẫu (LLM + TTS nên có thể mất vài giây).
+// Có cảnh video khớp phụ đề thì trả luôn (nhanh); không có thì backend sinh 3 câu thoại + audio đọc
+// mẫu (LLM + TTS nên có thể mất vài giây).
+// Dòng phụ đề của video chứa cảnh khớp; is_match = dòng chứa cụm từ người học tìm.
+export interface SubtitleCue {
+  text: string;
+  start_ms: number;
+  end_ms: number;
+  is_match: boolean;
+}
+
+export function getMovieSubtitles(matchId: string) {
+  return request<SubtitleCue[]>(`/api/movie-context/matches/${matchId}/subtitles`);
+}
+
 export function searchMovieContext(phrase: string) {
   return request<{ matches: MovieContextMatch[] }>(
     `/api/movie-context/search?phrase=${encodeURIComponent(phrase)}`,
@@ -619,10 +689,11 @@ export function createSpeakingSession(scenarioId: string) {
   });
 }
 
-export function sendSpeakingTurn(sessionId: string, audio: Blob, provider: ChatProvider) {
+export function sendSpeakingTurn(sessionId: string, audio: Blob, provider: ChatProvider, durationSeconds?: number) {
   const body = new FormData();
   body.append("audio", audio, "turn.wav");
-  return request<SpeakingTurn>(`/api/speaking/sessions/${sessionId}/turns?provider=${provider}`, {
+  const query = durationSeconds ? `&duration_seconds=${durationSeconds}` : "";
+  return request<SpeakingTurn>(`/api/speaking/sessions/${sessionId}/turns?provider=${provider}${query}`, {
     method: "POST",
     body,
   });

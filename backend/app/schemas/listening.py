@@ -25,6 +25,8 @@ class DictationCreateResponse(BaseModel):
 class DictationSubmitRequest(BaseModel):
 	# Cho phép rỗng — "bỏ trống hoàn toàn" là 1 edge case hợp lệ, không phải lỗi validate (mục 3.5).
 	transcribed_text: str = Field(max_length=5000)
+	# Chỉ gửi khi client đang bật "chế độ bấm giờ" (mục 3.16 lumina_context.md).
+	duration_seconds: int | None = Field(default=None, gt=0)
 
 
 class DictationErrorItem(BaseModel):

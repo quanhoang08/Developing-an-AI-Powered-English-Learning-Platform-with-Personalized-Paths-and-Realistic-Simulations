@@ -150,6 +150,7 @@ async def submit_turn(
 	session_id: uuid.UUID,
 	audio: UploadFile,
 	provider: str | None = None,
+	duration_seconds: int | None = None,
 ) -> ConversationTurn:
 	started = time.perf_counter()
 	session = await get_owned_session(db, user_id, session_id)
@@ -211,7 +212,9 @@ async def submit_turn(
 	db.add(turn)
 	# Chỉ lượt hợp lệ (đã qua STT + phản hồi AI) mới tới đây, lượt lỗi đã raise ở trên.
 	await award_activity(
-		db, user_id, "speaking_turn", score=float(pronunciation.score) if pronunciation else None
+		db, user_id, "speaking_turn",
+		score=float(pronunciation.score) if pronunciation else None,
+		duration_seconds=duration_seconds,
 	)
 	await db.commit()
 	await db.refresh(turn)

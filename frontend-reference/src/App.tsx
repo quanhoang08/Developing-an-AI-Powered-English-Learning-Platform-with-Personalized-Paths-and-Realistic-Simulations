@@ -1,20 +1,24 @@
 // Root component: layout Sidebar + Header + nội dung theo tab, quản lý trạng thái đăng
 // nhập tập trung (isLoggedIn/userEmail) để chia sẻ cho Sidebar/Dashboard/gate tính năng.
-import React, { useEffect, useState } from "react";
-import { motion } from "motion/react";
+import React, { Suspense, lazy, useEffect, useState } from "react";
+import { MotionConfig, motion } from "motion/react";
 import { ActiveTab } from "./types";
 import { clearAccessToken, getAccessToken, getCurrentUser } from "./api";
 import { Sidebar } from "./components/Sidebar";
 import { Header } from "./components/Header";
 import { DashboardView } from "./components/DashboardView";
-import { NotebookView } from "./components/NotebookView";
-import { ReadingView } from "./components/ReadingView";
-import { ListeningView } from "./components/ListeningView";
-import { SpeakingView } from "./components/SpeakingView";
-import { WritingView } from "./components/WritingView";
-import { AnalyticsView } from "./components/AnalyticsView";
 import { LockedFeature } from "./components/LockedFeature";
 import { SpacedRepetitionModal } from "./components/SpacedRepetitionModal";
+import { isTimerLocked } from "./timerLock";
+
+// Mỗi tab ngoài Dashboard tách thành chunk riêng — trang đầu chỉ tải Dashboard,
+// các tab khác chỉ tải khi người dùng thực sự bấm vào.
+const NotebookView = lazy(() => import("./components/NotebookView").then((m) => ({ default: m.NotebookView })));
+const ReadingView = lazy(() => import("./components/ReadingView").then((m) => ({ default: m.ReadingView })));
+const ListeningView = lazy(() => import("./components/ListeningView").then((m) => ({ default: m.ListeningView })));
+const SpeakingView = lazy(() => import("./components/SpeakingView").then((m) => ({ default: m.SpeakingView })));
+const WritingView = lazy(() => import("./components/WritingView").then((m) => ({ default: m.WritingView })));
+const AnalyticsView = lazy(() => import("./components/AnalyticsView").then((m) => ({ default: m.AnalyticsView })));
 
 const FEATURE_NAMES: Record<Exclude<ActiveTab, "dashboard">, string> = {
   notebook: "Knowledge Space",
@@ -26,9 +30,14 @@ const FEATURE_NAMES: Record<Exclude<ActiveTab, "dashboard">, string> = {
 };
 
 export function App() {
-  const [activeTab, setActiveTab] = useState<ActiveTab>("dashboard");
+  const [activeTab, setActiveTabUnlocked] = useState<ActiveTab>("dashboard");
+  // Mọi đường đổi tab (Sidebar, Dashboard, sự kiện lumina-navigate) đi qua đây: đồng hồ đang dở thì giữ nguyên tab.
+  const setActiveTab = (tab: ActiveTab) => {
+    if (!isTimerLocked()) setActiveTabUnlocked(tab);
+  };
   const [searchQuery, setSearchQuery] = useState("");
   const [isFlashcardModalOpen, setIsFlashcardModalOpen] = useState(false);
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [authVersion, setAuthVersion] = useState(0);
   const [userEmail, setUserEmail] = useState<string | null>(null);
   // Đọc trực tiếp mỗi render; authVersion đổi sau login/logout ép App re-render nên giá trị
@@ -104,6 +113,8 @@ export function App() {
   };
 
   return (
+    // reducedMotion="user": người dùng bật "giảm chuyển động" ở hệ điều hành thì bỏ hiệu ứng trượt/scale.
+    <MotionConfig reducedMotion="user">
     <div className="flex min-h-screen text-slate-900 font-sans antialiased">
       {/* Persistent Left Navigation Sidebar */}
       <Sidebar
@@ -113,6 +124,8 @@ export function App() {
         isLoggedIn={isLoggedIn}
         userEmail={userEmail}
         onLogout={handleLogout}
+        isOpen={isSidebarOpen}
+        onClose={() => setIsSidebarOpen(false)}
       />
 
       {/* Main Content Area */}
@@ -123,17 +136,21 @@ export function App() {
           setSearchQuery={setSearchQuery}
           openFlashcards={() => setIsFlashcardModalOpen(true)}
           onAuthChanged={() => setAuthVersion((version) => version + 1)}
+          onOpenMenu={() => setIsSidebarOpen(true)}
         />
 
         <main className="flex-1 pb-12">
-          {/* key theo tab: mỗi lần đổi view chạy lại hiệu ứng vào, chỉ dùng opacity/translate. */}
+          {/* key theo tab: mỗi lần đổi view chạy lại hiệu ứng vào. Chỉ fade ngắn — Dashboard/Analytics đã có
+              hiệu ứng xếp tầng riêng, thêm trượt ở đây làm tab hiện ra chậm gấp đôi (đo bản production: ~1s). */}
           <motion.div
             key={activeTab}
-            initial={{ opacity: 0, y: 12 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.35, ease: [0.22, 1, 0.36, 1] }}
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ duration: 0.15, ease: [0.22, 1, 0.36, 1] }}
           >
-            {renderActiveView()}
+            <Suspense fallback={<div className="p-8 text-slate-400">Đang tải...</div>}>
+              {renderActiveView()}
+            </Suspense>
           </motion.div>
         </main>
       </div>
@@ -144,6 +161,7 @@ export function App() {
         onClose={() => setIsFlashcardModalOpen(false)}
       />
     </div>
+    </MotionConfig>
   );
 }
 

@@ -2,6 +2,7 @@
 // tra nghĩa) và Dictation (feature-listening.md mục 1-3). Gọi backend FastAPI thật.
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { CheckCircle2, Headphones, Loader2, PenLine, Plus, XCircle } from "lucide-react";
+import { useStudyTimer } from "../useStudyTimer";
 import {
   createDictation,
   createPodcast,
@@ -21,6 +22,7 @@ import {
 const SPEEDS = [0.75, 1, 1.25, 1.5];
 
 export const PodcastPanel: React.FC = () => {
+  const studyTimer = useStudyTimer();
   const [podcasts, setPodcasts] = useState<PodcastItem[]>([]);
   const [documents, setDocuments] = useState<NotebookDocument[]>([]);
   const [documentToUse, setDocumentToUse] = useState("");
@@ -125,6 +127,7 @@ export const PodcastPanel: React.FC = () => {
     setError(null);
     try {
       const attempt = await createDictation(activeId);
+      studyTimer.start();
       setDictationId(attempt.attempt_id);
       setDictationAudio(await fetchAudioObjectUrl(`/api/listening/dictation/${attempt.attempt_id}/audio`));
     } catch (dictationError) {
@@ -138,7 +141,7 @@ export const PodcastPanel: React.FC = () => {
     if (!dictationId) return;
     setIsDictationBusy(true);
     try {
-      setDictationResult(await submitDictation(dictationId, dictationText));
+      setDictationResult(await submitDictation(dictationId, dictationText, studyTimer.lap()));
     } catch (checkError) {
       setError(checkError instanceof Error ? checkError.message : "Could not check dictation.");
     } finally {

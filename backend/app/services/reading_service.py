@@ -200,9 +200,10 @@ async def create_skim_scan_session(
 	num_questions: int = 3,
 ) -> tuple[ReadingSession, GeneratedPassage]:
 	"""Tạo Skim & Scan session. `document_id` set → passage là excerpt THẬT từ tài liệu
-	user đã upload (không AI-sinh); `topic` set → passage do Gemini sinh tự do.
+	user đã upload (không AI-sinh); `topic` set → passage do LLM sinh tự do.
 
-	Câu hỏi trắc nghiệm luôn do Gemini sinh (bám passage) ở cả 2 nhánh — chỉ nguồn của
+	LLM ở đây theo settings.llm_provider (backend/.env: ollama, chạy local — không dùng Gemini).
+	Câu hỏi trắc nghiệm luôn do LLM đó sinh (bám passage) ở cả 2 nhánh — chỉ nguồn của
 	passage khác nhau, đúng yêu cầu "không chỉ AI generate mà còn dùng file user upload".
 	"""
 	if document_id is not None:
@@ -304,6 +305,7 @@ async def submit_classic_session(
 	user_id: uuid.UUID,
 	session_id: uuid.UUID,
 	answers: list[tuple[uuid.UUID, int]],
+	duration_seconds: int | None = None,
 ) -> tuple[float, list[ReadingAnswer]]:
 	# Chấm điểm 1 session (dùng chung cho cả Classic Mode và Skim & Scan).
 	session = await get_owned_session(db, user_id, session_id)
@@ -329,6 +331,6 @@ async def submit_classic_session(
 	session.score = score
 	session.completed_at = datetime.now(timezone.utc)
 	# Chỉ tới được đây ở lần chấm đầu (nộp lại đã return sớm ở trên) nên không cộng XP trùng.
-	await award_activity(db, user_id, "reading_completed", score=float(score) * 100)
+	await award_activity(db, user_id, "reading_completed", score=float(score) * 100, duration_seconds=duration_seconds)
 	await db.commit()
 	return score, reading_answers

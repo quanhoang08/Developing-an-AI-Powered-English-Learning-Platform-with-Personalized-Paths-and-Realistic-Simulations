@@ -1,9 +1,12 @@
 // Trang Writing Lab — nối với API Writing thật ở backend (/api/writing/submissions, /submit).
-// State khởi tạo (essayTitle/essayText/insights mẫu) vẫn là placeholder demo cho tới khi người
-// học bấm "Analyze & Correct with AI" lần đầu.
-import React, { useState } from "react";
+// Điểm và gợi ý chỉ hiện sau khi người học bấm "Analyze & Correct with AI" và backend chấm xong
+// (mất ~25 s với Ollama local), trước đó panel phản hồi ở trạng thái trống.
+import React, { useEffect, useState } from "react";
 import { WritingInsight } from "../types";
 import { createWritingSubmission, submitWritingEssay } from "../api";
+import { useStudyTimer } from "../useStudyTimer";
+import { CountdownTimer } from "./CountdownTimer";
+import { AiWait } from "./AiWait";
 import { WordHoverLookup } from "./WordHoverLookup";
 import { RearrangePanel } from "./RearrangePanel";
 import {
@@ -26,45 +29,28 @@ import {
 const MIN_SUBMISSION_WORDS = 30;
 
 export const WritingView: React.FC = () => {
-  const [essayTitle, setEssayTitle] = useState("Impact of Generative AI on Modern Education");
-  const [essayText, setEssayText] = useState(
-    `Generative artificial intelligence is rapidly changing how students learn and teachers instruct. Some educators fear that AI tools will affect student critical thinking skills negatively. However, if integrated properly, AI can serve as a good tutor that provides personalized feedback and accelerates language acquisition.
+  // Không có bước "tạo phiên" riêng trước khi soạn (khác Reading/Listening) — bắt đầu tính giờ
+  // ngay lúc mở tab, coi đây là mốc gần đúng cho "bắt đầu viết".
+  const studyTimer = useStudyTimer();
+  useEffect(() => {
+    studyTimer.start();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
-In addition, AI tools can automate administrative tasks for teachers, allowing them to focus more on direct human interaction and mentorship.`
-  );
+  const [essayTitle, setEssayTitle] = useState("");
+  const [essayText, setEssayText] = useState("");
 
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [analyzeError, setAnalyzeError] = useState<string | null>(null);
   // Bài luận sau khi áp dụng các sửa lỗi của AI; null cho tới khi chấm xong lần đầu.
   // Hover tra nghĩa chỉ bật ở vùng này (không bật ở ô soạn thảo).
   const [reviewedText, setReviewedText] = useState<string | null>(null);
-  const [overallScore, setOverallScore] = useState(82);
-  const [cefrLevel, setCefrLevel] = useState("B2 Upper");
-  const [ieltsScore, setIeltsScore] = useState("6.5 IELTS");
+  // null cho tới khi backend chấm xong: không hiển thị điểm/gợi ý mẫu như thể là kết quả thật.
+  const [overallScore, setOverallScore] = useState<number | null>(null);
+  const [cefrLevel, setCefrLevel] = useState("");
+  const [ieltsScore, setIeltsScore] = useState("");
 
-  const [insights, setInsights] = useState<WritingInsight[]>([
-    {
-      type: "grammar",
-      title: "Grammar & Word Choice",
-      originalText: "affect",
-      suggestedText: "effect",
-      description: 'Consider whether "affect" or "effect" is the intended noun in this sentence.',
-      rule: '"Affect" is typically a verb, while "effect" is a noun. In "will have an affect", use "effect".'
-    },
-    {
-      type: "vocabulary",
-      title: "Academic Vocabulary Enhancement",
-      originalText: "good",
-      description: 'Replace generic adjective "good" with a more formal academic alternative.',
-      synonyms: ["beneficial", "advantageous", "valuable"]
-    },
-    {
-      type: "style",
-      title: "Flow & Structural Style",
-      description: "Sentence flow is clear, but consider adding a concluding sentence summarizing long-term impact.",
-      suggestion: "Ultimately, human guidance paired with AI capabilities creates an optimal learning ecosystem."
-    }
-  ]);
+  const [insights, setInsights] = useState<WritingInsight[]>([]);
 
   // Gọi FastAPI Writing thật: tạo 1 submission free_topic (đề = essayTitle) rồi nộp bài ngay
   // để chấm điểm — mỗi lần bấm "Analyze" là 1 submission mới (không sửa lại bài cũ).
@@ -78,7 +64,7 @@ In addition, AI tools can automate administrative tasks for teachers, allowing t
     setIsAnalyzing(true);
     try {
       const submission = await createWritingSubmission(essayTitle || "Untitled Essay");
-      const result = await submitWritingEssay(submission.submission_id, essayText);
+      const result = await submitWritingEssay(submission.submission_id, essayText, studyTimer.lap());
       setOverallScore(Math.round(result.score));
       setCefrLevel(result.cefr_level);
       setIeltsScore(`${result.ielts_band} IELTS`);
@@ -128,15 +114,20 @@ In addition, AI tools can automate administrative tasks for teachers, allowing t
           </p>
         </div>
 
-        <button
-          onClick={handleAnalyzeWriting}
-          disabled={isAnalyzing}
-          className="px-6 py-3 bg-indigo-700 hover:bg-indigo-800 text-white font-bold text-sm rounded-2xl shadow-[0_16px_26px_-14px_rgba(31,87,73,0.9)] flex items-center justify-center gap-2 transition-all cursor-pointer hover:-translate-y-0.5 active:scale-95 disabled:opacity-50"
-        >
-          {isAnalyzing ? <Sparkles className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4 text-amber-300" />}
-          {isAnalyzing ? "Analyzing Essay..." : "Analyze & Correct with AI"}
-        </button>
+        <div className="flex flex-wrap items-center gap-3">
+          <CountdownTimer skill="writing" />
+          <button
+            onClick={handleAnalyzeWriting}
+            disabled={isAnalyzing}
+            className="px-6 py-3 bg-indigo-700 hover:bg-indigo-800 text-white font-bold text-sm rounded-2xl shadow-[0_16px_26px_-14px_rgba(31,87,73,0.9)] flex items-center justify-center gap-2 transition-all cursor-pointer hover:-translate-y-0.5 active:scale-95 disabled:opacity-50"
+          >
+            {isAnalyzing ? <Sparkles className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4 text-amber-300" />}
+            {isAnalyzing ? "Analyzing Essay..." : "Analyze & Correct with AI"}
+          </button>
+        </div>
       </div>
+
+      <AiWait active={isAnalyzing} label="AI đang chấm bài và tìm lỗi..." expectedSeconds={25} />
 
       {analyzeError && (
         <p role="alert" className="text-sm text-red-700 bg-red-50 rounded-xl px-4 py-3 border-l-4 border-red-400">
@@ -214,11 +205,15 @@ In addition, AI tools can automate administrative tasks for teachers, allowing t
                 Writing score
               </span>
               <div className="flex items-baseline gap-2 mt-1">
-                <span className="num text-6xl font-bold">{overallScore}</span>
+                <span className="num text-6xl font-bold">{overallScore ?? "—"}</span>
                 <span className="text-xs text-indigo-200">/ 100</span>
               </div>
               <p className="text-xs text-indigo-100 font-semibold mt-1">
-                {cefrLevel} Level • {ieltsScore}
+                {overallScore === null
+                  ? isAnalyzing
+                    ? "Đang chấm bài..."
+                    : "Chưa chấm — hãy viết bài rồi bấm Analyze"
+                  : `${cefrLevel} Level • ${ieltsScore}`}
               </p>
             </div>
 
@@ -232,6 +227,15 @@ In addition, AI tools can automate administrative tasks for teachers, allowing t
             <h4 className="font-display text-xl font-bold text-slate-900">
               Corrections & vocabulary upgrades
             </h4>
+
+            {overallScore === null && (
+              <p className="text-sm text-slate-500 leading-relaxed">
+                Nộp bài ({MIN_SUBMISSION_WORDS} từ trở lên) để nhận điểm, sửa lỗi ngữ pháp và gợi ý từ vựng học thuật từ AI.
+              </p>
+            )}
+            {overallScore !== null && insights.length === 0 && (
+              <p className="text-sm text-slate-500 leading-relaxed">AI không tìm thấy lỗi nào cần sửa trong bài này.</p>
+            )}
 
             {insights.map((ins, idx) => (
               <div

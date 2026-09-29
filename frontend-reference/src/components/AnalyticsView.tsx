@@ -1,11 +1,17 @@
-// Trang Adaptive Progress. Dữ liệu thật: Streak/XP (GET /api/streaks), nhật ký lỗi + phân bố lỗi
-// (GET /api/adaptive/errors), thói quen học (GET /api/adaptive/habits) và đề luyện tập động.
-// LƯU Ý: CEFR level, Accuracy và "Four-skill mastery" vẫn là số demo cứng — backend chưa có
-// bảng/endpoint nào chấm điểm theo kỹ năng.
+// Trang Adaptive Progress. Toàn bộ dữ liệu thật: Streak/XP (GET /api/streaks), điểm 4 kỹ năng
+// (GET /api/skills), nhật ký lỗi + phân bố lỗi (GET /api/adaptive/errors), thói quen học
+// (GET /api/adaptive/habits) và đề luyện tập động.
 import React, { useCallback, useEffect, useState } from "react";
 import { motion } from "motion/react";
 import { useLearningStats } from "../stats";
-import { AdaptiveError, AdaptiveHabits, getAdaptiveHabits, listAdaptiveErrors } from "../api";
+import {
+  AdaptiveError,
+  AdaptiveHabits,
+  SkillProgress,
+  getAdaptiveHabits,
+  getSkills,
+  listAdaptiveErrors,
+} from "../api";
 import { AdaptiveQuizPanel } from "./AdaptiveQuizPanel";
 import {
   BarChart3,
@@ -14,20 +20,36 @@ import {
   AlertCircle,
   ChevronDown,
   ChevronUp,
-  Sparkles,
   TrendingUp,
 } from "lucide-react";
 
 const container = {
   hidden: {},
-  show: { transition: { staggerChildren: 0.07 } },
+  show: { transition: { staggerChildren: 0.03 } },
 };
 const item = {
   hidden: { opacity: 0, y: 16 },
-  show: { opacity: 1, y: 0, transition: { duration: 0.5, ease: [0.22, 1, 0.36, 1] as const } },
+  show: { opacity: 1, y: 0, transition: { duration: 0.3, ease: [0.22, 1, 0.36, 1] as const } },
 };
 
-const ERROR_COLORS = ["bg-purple-500", "bg-indigo-600", "bg-amber-400", "bg-blue-400"];
+const CEFR_NAMES: Record<string, string> = {
+  A1: "Beginner",
+  A2: "Elementary",
+  B1: "Intermediate",
+  B2: "Upper Intermediate",
+  C1: "Advanced",
+  C2: "Proficient",
+};
+
+// Thứ tự + nhãn + màu cố định của 4 kỹ năng; kỹ năng chưa có điểm hiện "Not started".
+const SKILLS = [
+  { key: "listening", label: "Listening Comprehension", color: "bg-purple-500" },
+  { key: "reading", label: "Reading & Vocabulary", color: "bg-indigo-600" },
+  { key: "writing", label: "Writing", color: "bg-amber-400" },
+  { key: "speaking", label: "Speaking & Pronunciation", color: "bg-blue-400" },
+] as const;
+
+const ERROR_COLORS =["bg-purple-500", "bg-indigo-600", "bg-amber-400", "bg-blue-400"];
 // Backend trả tối đa 100 lỗi/lần, đã xếp theo ưu tiên — phân bố tính trên nhóm lỗi đáng ôn nhất đó.
 const ERRORS_FETCHED = 100;
 const JOURNAL_SIZE = 5;
@@ -47,14 +69,20 @@ export const AnalyticsView: React.FC = () => {
   const [expandedErrorId, setExpandedErrorId] = useState<string | null>(null);
   const [errors, setErrors] = useState<AdaptiveError[]>([]);
   const [habits, setHabits] = useState<AdaptiveHabits | null>(null);
+  const [skills, setSkills] = useState<SkillProgress[]>([]);
   const [loadError, setLoadError] = useState<string | null>(null);
   const { stats } = useLearningStats();
 
   const loadAdaptive = useCallback(async () => {
     try {
-      const [loadedErrors, loadedHabits] = await Promise.all([listAdaptiveErrors(ERRORS_FETCHED), getAdaptiveHabits()]);
+      const [loadedErrors, loadedHabits, loadedSkills] = await Promise.all([
+        listAdaptiveErrors(ERRORS_FETCHED),
+        getAdaptiveHabits(),
+        getSkills(),
+      ]);
       setErrors(loadedErrors);
       setHabits(loadedHabits);
+      setSkills(loadedSkills);
       setLoadError(null);
     } catch (caught) {
       setLoadError(caught instanceof Error ? caught.message : "Could not load progress data.");
@@ -87,12 +115,14 @@ export const AnalyticsView: React.FC = () => {
     explanation: entry.detail?.explanation ?? "",
   }));
 
-  const skillBreakdown = [
-    { skill: "Listening Comprehension", level: "C1 Advanced", score: 88, color: "bg-purple-500" },
-    { skill: "Reading & Vocabulary", level: "B2 Upper", score: 84, color: "bg-indigo-600" },
-    { skill: "Writing Mechanics", level: "B2 Upper", score: 78, color: "bg-amber-400" },
-    { skill: "Speaking & Pronunciation", level: "B1 Intermediate", score: 72, color: "bg-blue-400" },
-  ];
+  const skillBreakdown = SKILLS.map(({ key, label, color }) => {
+    const found = skills.find((entry) => entry.skill_name === key);
+    return { skill: label, color, score: found?.score == null ? null : Math.round(found.score), cefr: found?.cefr_level ?? null };
+  });
+  const scored = skillBreakdown.filter((entry) => entry.score !== null);
+  const averageScore = scored.length ? Math.round(scored.reduce((sum, entry) => sum + (entry.score ?? 0), 0) / scored.length) : null;
+  // Backend chỉ chấm ra CEFR từ bài Viết (bảng skill_progress), nên mức CEFR chung lấy từ đó.
+  const cefrLevel = skills.find((entry) => entry.skill_name === "writing")?.cefr_level ?? null;
 
   return (
     <motion.div
@@ -112,10 +142,6 @@ export const AnalyticsView: React.FC = () => {
             Track CEFR level progression, skill radar, error distributions, and spaced repetition mastery.
           </p>
         </div>
-
-        <button className="px-6 py-3 bg-indigo-700 hover:bg-indigo-800 text-white font-bold text-sm rounded-2xl shadow-[0_16px_26px_-14px_rgba(31,87,73,0.9)] flex items-center justify-center gap-2 transition-all cursor-pointer hover:-translate-y-0.5 active:scale-95">
-          <Sparkles className="w-4 h-4 text-amber-300" /> Start Placement Test
-        </button>
       </motion.div>
 
       {/* Top Metric Cards — thẻ CEFR lớn nổi bật, ba thẻ còn lại nhỏ hơn */}
@@ -127,17 +153,17 @@ export const AnalyticsView: React.FC = () => {
           <div className="absolute -right-10 -bottom-12 w-44 h-44 rounded-full bg-purple-500/30 blur-2xl pointer-events-none" aria-hidden="true" />
           <span className="relative text-sm italic text-indigo-300 block mb-1">CEFR level</span>
           <div className="relative flex items-baseline gap-3">
-            <span className="num text-7xl font-bold leading-none">B2</span>
-            <span className="tag bg-white/15 text-indigo-100">Upper Intermediate</span>
+            <span className="num text-7xl font-bold leading-none">{cefrLevel ?? "—"}</span>
+            <span className="tag bg-white/15 text-indigo-100">
+              {cefrLevel ? CEFR_NAMES[cefrLevel.slice(0, 2).toUpperCase()] ?? "Estimated from Writing" : "Submit an essay to get a level"}
+            </span>
           </div>
         </motion.div>
 
         <motion.div variants={item} className="surface md:col-span-1 p-6">
-          <span className="text-sm italic text-slate-500 block mb-1">Accuracy</span>
-          <span className="num text-4xl font-bold text-slate-900">87%</span>
-          <span className="text-xs text-emerald-600 font-bold flex items-center mt-1">
-            <TrendingUp className="w-3.5 h-3.5 mr-0.5" /> +3.5%
-          </span>
+          <span className="text-sm italic text-slate-500 block mb-1">Avg. score</span>
+          <span className="num text-4xl font-bold text-slate-900">{averageScore === null ? "—" : `${averageScore}%`}</span>
+          <span className="text-xs text-slate-500 block mt-1">{scored.length}/4 skills</span>
         </motion.div>
 
         {/* Streak thật từ backend (current_streak trong bảng streaks) */}
@@ -168,9 +194,11 @@ export const AnalyticsView: React.FC = () => {
             <h3 className="font-display text-2xl font-bold text-slate-900 flex items-center gap-2">
               <Award className="w-6 h-6 text-indigo-600" /> Four-skill mastery
             </h3>
-            <span className="tag bg-indigo-100 text-indigo-700">
-              Overall B2 · 82%
-            </span>
+            {averageScore !== null && (
+              <span className="tag bg-indigo-100 text-indigo-700">
+                Overall {cefrLevel ? `${cefrLevel} · ` : ""}{averageScore}%
+              </span>
+            )}
           </div>
 
           <div className="space-y-6">
@@ -179,16 +207,16 @@ export const AnalyticsView: React.FC = () => {
                 <div className="flex items-baseline justify-between">
                   <span className="text-sm font-semibold text-slate-800">{s.skill}</span>
                   <div className="flex items-baseline gap-3">
-                    <span className="text-xs text-slate-500 italic">{s.level}</span>
-                    <span className="num text-xl font-bold text-slate-900">{s.score}%</span>
+                    {s.cefr && <span className="text-xs text-slate-500 italic">{s.cefr}</span>}
+                    <span className="num text-xl font-bold text-slate-900">{s.score === null ? "Not started" : `${s.score}%`}</span>
                   </div>
                 </div>
                 <div className="w-full bg-slate-200/60 h-3 rounded-full overflow-hidden">
                   <motion.div
                     className={`${s.color} h-full rounded-full`}
                     initial={{ width: 0 }}
-                    animate={{ width: `${s.score}%` }}
-                    transition={{ duration: 0.9, ease: [0.22, 1, 0.36, 1], delay: 0.3 + idx * 0.1 }}
+                    animate={{ width: `${s.score ?? 0}%` }}
+                    transition={{ duration: 0.6, ease: [0.22, 1, 0.36, 1], delay: 0.1 + idx * 0.05 }}
                   />
                 </div>
               </div>

@@ -16,6 +16,7 @@ def _user_response(user: User) -> UserResponse:
 		id=str(user.id),
 		email=user.email,
 		target_level=user.target_level,
+		timer_mode_enabled=user.timer_mode_enabled,
 		created_at=user.created_at.isoformat(),
 	)
 
@@ -33,8 +34,14 @@ async def update_me(
 	db: AsyncSession = Depends(get_db),
 ) -> UserResponse:
 	# Chỉ ghi field client thực sự gửi; target_level=null tường minh nghĩa là xóa mục tiêu.
+	changed = False
 	if "target_level" in request.model_fields_set:
 		current_user.target_level = request.target_level
+		changed = True
+	if "timer_mode_enabled" in request.model_fields_set and request.timer_mode_enabled is not None:
+		current_user.timer_mode_enabled = request.timer_mode_enabled
+		changed = True
+	if changed:
 		await db.commit()
 		await db.refresh(current_user)
 	return _user_response(current_user)

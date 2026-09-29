@@ -1,5 +1,5 @@
 import React from "react";
-import { Search, Flame, Trophy, Bell, Command } from "lucide-react";
+import { Search, Flame, Trophy, Bell, Command, Menu } from "lucide-react";
 import { ActiveTab } from "../types";
 import { useLearningStats } from "../stats";
 import { AuthPanel } from "./AuthPanel";
@@ -10,6 +10,7 @@ interface HeaderProps {
   setSearchQuery: (q: string) => void;
   openFlashcards: () => void;
   onAuthChanged: () => void;
+  onOpenMenu: () => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -18,6 +19,7 @@ export const Header: React.FC<HeaderProps> = ({
   setSearchQuery,
   openFlashcards,
   onAuthChanged,
+  onOpenMenu,
 }) => {
   const { stats } = useLearningStats();
   // Đổi tiêu đề header theo tab đang xem.
@@ -43,9 +45,16 @@ export const Header: React.FC<HeaderProps> = ({
   };
 
   return (
-    <header className="h-16 bg-paper/80 backdrop-blur-xl border-b border-slate-200/60 px-6 flex items-center justify-between sticky top-0 z-10">
+    <header className="h-16 bg-paper/80 backdrop-blur-xl border-b border-slate-200/60 px-4 md:px-6 flex items-center justify-between gap-2 sticky top-0 z-10">
       {/* Title / Search */}
-      <div className="flex items-center gap-6 flex-1 min-w-0 max-w-2xl">
+      <div className="flex items-center gap-3 md:gap-6 flex-1 min-w-0 max-w-2xl">
+        <button
+          onClick={onOpenMenu}
+          className="md:hidden shrink-0 p-2 -ml-2 rounded-full text-slate-600 hover:bg-slate-900/5"
+          aria-label="Open navigation menu"
+        >
+          <Menu className="w-5 h-5" />
+        </button>
         <h2 className="font-display text-xl font-bold text-slate-900 shrink-0 hidden md:block">
           {getTabTitle()}
         </h2>

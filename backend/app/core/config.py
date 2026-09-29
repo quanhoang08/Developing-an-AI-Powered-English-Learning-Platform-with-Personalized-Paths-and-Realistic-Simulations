@@ -21,6 +21,7 @@ class Settings(BaseSettings):
 		default=7, validation_alias=AliasChoices("STUDY_UTC_OFFSET_HOURS")
 	)
 	storage_documents_dir: str = "storage/documents"
+	storage_video_dir: str = "storage/videos"
 	storage_audio_dir: str = Field(
 		default="storage/audio", validation_alias=AliasChoices("STORAGE_AUDIO_DIR")
 	)

@@ -1,7 +1,15 @@
 // Store dùng chung cho streak/XP thật: một lần fetch, nhiều component đọc (Header, Sidebar,
 // Dashboard, Analytics) nên không mỗi nơi tự gọi API rồi lệch số với nhau.
 import { useSyncExternalStore } from "react";
-import { getAccessToken, getStreaks } from "./api";
+import {
+  getAccessToken,
+  getRecentActivity,
+  getSkills,
+  getStreaks,
+  getWeeklyActivity,
+  listDueVocabulary,
+  RecentActivityItem,
+} from "./api";
 
 export interface LearningStats {
   currentStreak: number;
@@ -12,6 +20,16 @@ export interface LearningStats {
   xpIntoLevel: number;
   xpForNextLevel: number;
   recentActiveDates: string[];
+  dueCards: number;
+  // Điểm trung bình các kỹ năng đã có điểm (0-100) và mức CEFR của Writing; null khi chưa có dữ liệu.
+  masteryPercent: number | null;
+  cefrLevel: string | null;
+  // "This week, in minutes" — chỉ có số thật khi timerModeEnabled=true (user đã tự bật bấm giờ).
+  timerModeEnabled: boolean;
+  minutesBySkill: Record<"reading" | "listening" | "writing" | "speaking", number>;
+  totalMinutes: number;
+  // "Pick up where you left off" — không phụ thuộc timer mode, luôn là dữ liệu thật.
+  recentActivity: RecentActivityItem[];
 }
 
 // Chưa đăng nhập hoặc chưa tải xong: 0 thật, không phải số demo.
@@ -24,6 +42,13 @@ const EMPTY_STATS: LearningStats = {
   xpIntoLevel: 0,
   xpForNextLevel: 100,
   recentActiveDates: [],
+  dueCards: 0,
+  masteryPercent: null,
+  cefrLevel: null,
+  timerModeEnabled: false,
+  minutesBySkill: { reading: 0, listening: 0, writing: 0, speaking: 0 },
+  totalMinutes: 0,
+  recentActivity: [],
 };
 
 const REFRESH_DELAY_MS = 300;
@@ -43,8 +68,18 @@ async function loadStats() {
     return;
   }
   try {
-    const data = await getStreaks();
+    const [data, due, skills, weekly, recent] = await Promise.all([
+      getStreaks(),
+      listDueVocabulary(),
+      getSkills(),
+      getWeeklyActivity(),
+      getRecentActivity(),
+    ]);
+    const scores = skills.flatMap((skill) => (skill.score === null ? [] : [skill.score]));
     publish({
+      dueCards: due.length,
+      masteryPercent: scores.length ? Math.round(scores.reduce((sum, score) => sum + score, 0) / scores.length) : null,
+      cefrLevel: skills.find((skill) => skill.skill_name === "writing")?.cefr_level ?? null,
       currentStreak: data.current_streak,
       longestStreak: data.longest_streak,
       todayActive: data.today_active,
@@ -53,6 +88,10 @@ async function loadStats() {
       xpIntoLevel: data.xp_into_level,
       xpForNextLevel: data.xp_for_next_level,
       recentActiveDates: data.recent_active_dates,
+      timerModeEnabled: weekly.timer_mode_enabled,
+      minutesBySkill: weekly.minutes_by_skill,
+      totalMinutes: weekly.total_minutes,
+      recentActivity: recent,
     });
   } catch (error) {
     // Giữ số liệu cũ khi backend lỗi tạm thời; 401 đã được api.ts xử lý (xóa token + phát auth event).

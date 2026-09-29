@@ -1,6 +1,7 @@
 // Trang Listening & Movie Context. Cả 2 tab dùng backend FastAPI thật: Podcast/Dictation (PodcastPanel)
 // và Movie Context nhánh TTS fallback (MovieContextPanel).
 import React, { useState } from "react";
+import { CountdownTimer } from "./CountdownTimer";
 import { MovieContextPanel } from "./MovieContextPanel";
 import { PodcastPanel } from "./PodcastPanel";
 import {
@@ -80,6 +81,8 @@ export const ListeningView: React.FC = () => {
             Train native listening comprehension, dictation accuracy, and explore idiom usages in movie clips.
           </p>
         </div>
+
+        <CountdownTimer skill="listening" />
 
         {/* Tab Toggle */}
         <div className="inline-flex p-1 bg-paper-deep rounded-full">

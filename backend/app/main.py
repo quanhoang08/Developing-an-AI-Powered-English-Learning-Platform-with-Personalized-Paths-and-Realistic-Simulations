@@ -9,6 +9,7 @@ from app.core.config import get_settings
 from app.core.extension_scope import extension_scope_middleware
 from app.core.errors import ai_http_error
 from app.database import get_session_factory
+from app.routers.activity import router as activity_router
 from app.routers.adaptive import router as adaptive_router
 from app.routers.auth import router as auth_router
 from app.routers.extension import router as extension_router
@@ -41,6 +42,7 @@ app.add_middleware(
 	allow_headers=["*"],
 )
 # Các router nghiệp vụ đều dùng chung base path /api theo API spec.
+app.include_router(activity_router, prefix="/api")
 app.include_router(adaptive_router, prefix="/api")
 app.include_router(auth_router, prefix="/api")
 app.include_router(extension_router, prefix="/api")

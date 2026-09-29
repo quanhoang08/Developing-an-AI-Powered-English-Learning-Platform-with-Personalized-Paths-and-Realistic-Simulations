@@ -23,6 +23,7 @@ def user_response(user: User) -> UserResponse:
 		id=str(user.id),
 		email=user.email,
 		target_level=user.target_level,
+		timer_mode_enabled=user.timer_mode_enabled,
 		created_at=user.created_at.isoformat(),
 	)
 

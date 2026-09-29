@@ -7,7 +7,7 @@ import dotenv from "dotenv";
 dotenv.config();
 
 const app = express();
-const PORT = 3000;
+const PORT = Number(process.env.PORT) || 3000;
 
 app.use(express.json());
 
@@ -468,8 +468,22 @@ async function startServer() {
   }
 
   app.listen(PORT, "0.0.0.0", () => {
-    console.log(`Lumina AI Learning Studio running on port ${PORT}`);
+    console.log(`Lumina AI Learning Studio running on port ${PORT} — open http://localhost:${PORT}`);
+    void warnIfBackendDown();
   });
+}
+
+// Báo lỗi ngay lúc khởi động (không phải lúc đang demo) nếu backend FastAPI chưa chạy. Dùng 127.0.0.1 như
+// frontend (src/api.ts) vì localhost → ::1 bị treo trên Docker Desktop/WSL.
+async function warnIfBackendDown() {
+  const url = process.env.VITE_BACKEND_URL || "http://127.0.0.1:8000";
+  try {
+    const response = await fetch(`${url}/docs`, { signal: AbortSignal.timeout(3000) });
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    console.log(`Backend OK: ${url}`);
+  } catch (error) {
+    console.warn(`\nWARNING: backend not reachable at ${url} (${error}).\nStart Docker Desktop, then run: docker compose up -d\n`);
+  }
 }
 
 startServer();

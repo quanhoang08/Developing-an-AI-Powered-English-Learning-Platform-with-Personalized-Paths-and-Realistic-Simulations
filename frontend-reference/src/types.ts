@@ -25,17 +25,6 @@ export interface VocabWord {
   challengeCorrectIndex: number;
 }
 
-export interface MovieMatch {
-  id: number;
-  movieTitle: string;
-  timestamp: string;
-  image: string;
-  speakerA: string;
-  speakerB: string;
-  speakerA2: string;
-  saved: boolean;
-}
-
 export interface WritingInsight {
   type: "grammar" | "vocabulary" | "style";
   title: string;

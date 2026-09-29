@@ -1,10 +1,13 @@
 // Trang Reading: Skim & Scan (passage thật hoặc AI-sinh) + Classic Mode (backend thật) +
 // tra từ tương tác. passage/wordData khởi tạo bằng nội dung demo, được thay bằng dữ liệu
 // thật ngay khi 1 trong 2 luồng trên chạy thành công.
-import React, { useState, useEffect } from "react";
+import React, { useState } from "react";
 import { VocabWord } from "../types";
+import { CountdownTimer } from "./CountdownTimer";
+import { AiWait } from "./AiWait";
 import { WordHoverLookup } from "./WordHoverLookup";
 import { RearrangePanel } from "./RearrangePanel";
+import { useStudyTimer } from "../useStudyTimer";
 import {
   createClassicSession,
   createSkimScanSession,
@@ -15,14 +18,11 @@ import {
   submitClassicAnswers,
 } from "../api";
 import {
-  Timer,
   BookOpen,
   Sparkles,
   Volume2,
   CheckCircle2,
   HelpCircle,
-  Play,
-  Pause,
   RotateCcw,
   Tag,
   ArrowRight,
@@ -34,9 +34,11 @@ import {
 } from "lucide-react";
 
 export const ReadingView: React.FC = () => {
-  // Timer state
-  const [secondsLeft, setSecondsLeft] = useState(299); // 4:59
-  const [isTimerRunning, setIsTimerRunning] = useState(true);
+  // Đo thời gian thật cho Dashboard "This week, in minutes" (chỉ gửi khi user bật chế độ bấm giờ).
+  const studyTimer = useStudyTimer();
+
+  // Mốc giờ backend trả về cho phiên Skim & Scan mới; `key` đổi để CountdownTimer nạp lại và tự chạy.
+  const [timerSeed, setTimerSeed] = useState<{ seconds: number; key: number } | null>(null);
 
   // Skim & Scan Generator Modal — nguồn passage thật (document đã upload) hoặc AI tự sinh theo topic.
   const [isGeneratorOpen, setIsGeneratorOpen] = useState(false);
@@ -101,25 +103,6 @@ Furthermore, the ethical implications surrounding data privacy remain deeply con
   const [classicScore, setClassicScore] = useState<number | null>(null);
   const [isStartingClassic, setIsStartingClassic] = useState(false);
 
-  // Skim & Scan Countdown Timer effect
-  useEffect(() => {
-    let interval: any = null;
-    if (isTimerRunning && secondsLeft > 0) {
-      interval = setInterval(() => {
-        setSecondsLeft((s) => s - 1);
-      }, 1000);
-    } else if (secondsLeft === 0) {
-      setIsTimerRunning(false);
-    }
-    return () => clearInterval(interval);
-  }, [isTimerRunning, secondsLeft]);
-
-  const formatTime = (secs: number) => {
-    const mins = Math.floor(secs / 60);
-    const remainder = secs % 60;
-    return `${mins.toString().padStart(2, "0")}:${remainder.toString().padStart(2, "0")}`;
-  };
-
   // Lấy document ready đầu tiên rồi tạo Classic session bằng backend thật.
   const startBackendClassic = async () => {
     if (!getAccessToken()) return;
@@ -129,6 +112,7 @@ Furthermore, the ethical implications surrounding data privacy remain deeply con
       const readyDocument = documents.items.find((document) => document.status === "ready");
       if (!readyDocument) throw new Error("No ready document available");
       const session = await createClassicSession(readyDocument.id, 5);
+      studyTimer.start();
       setClassicSessionId(session.session_id);
       const questions = session.questions.map((question) => ({ id: question.id, text: question.question_text, options: question.options }));
       setClassicQuestions(questions);
@@ -150,6 +134,7 @@ Furthermore, the ethical implications surrounding data privacy remain deeply con
       const result = await submitClassicAnswers(
         classicSessionId,
         classicQuestions.map((question) => ({ question_id: question.id, selected_option_index: classicChoices[question.id] })),
+        studyTimer.lap(),
       );
       setClassicScore(result.score);
     } catch (error) {
@@ -211,7 +196,7 @@ Furthermore, the ethical implications surrounding data privacy remain deeply con
   };
 
   // Skim & Scan thật: document_id → passage là excerpt THẬT từ tài liệu đã upload (không AI
-  // bịa nội dung); topic → Gemini tự sinh đoạn văn mới. Câu hỏi luôn do AI sinh ở cả 2 nhánh.
+  // bịa nội dung); topic → LLM backend (Ollama) tự sinh đoạn văn mới. Câu hỏi luôn do AI sinh ở cả 2 nhánh.
   const handleGenerateStory = async () => {
     if (!getAccessToken()) {
       setGeneratorError("Connect your account first to use Skim & Scan.");
@@ -247,8 +232,7 @@ Furthermore, the ethical implications surrounding data privacy remain deeply con
       setClassicQuestion(questions[0] || null);
       setClassicChoices({});
       setClassicScore(null);
-      setSecondsLeft(session.time_limit_seconds);
-      setIsTimerRunning(true);
+      setTimerSeed({ seconds: session.time_limit_seconds, key: Date.now() });
       setIsGeneratorOpen(false);
     } catch (error) {
       const raw = error instanceof Error ? error.message : "Failed to generate passage";
@@ -324,20 +308,14 @@ Furthermore, the ethical implications surrounding data privacy remain deeply con
           </div>
         </div>
 
-        <div className="flex items-center gap-3">
-          {/* Skim & Scan Timer */}
-          <div className="flex items-center gap-2 pl-3.5 pr-1.5 py-1.5 rounded-full bg-amber-100 text-amber-900 text-xs font-bold">
-            <Timer className="w-4 h-4 text-amber-600" />
-            <span className="hidden sm:inline font-medium italic">Skim timer</span>
-            <span className="num text-sm">{formatTime(secondsLeft)}</span>
-            <button
-              onClick={() => setIsTimerRunning(!isTimerRunning)}
-              aria-label={isTimerRunning ? "Pause timer" : "Resume timer"}
-              className="p-1.5 rounded-full bg-amber-200/70 hover:bg-amber-300/80 text-amber-800 transition-colors cursor-pointer"
-            >
-              {isTimerRunning ? <Pause className="w-3.5 h-3.5" /> : <Play className="w-3.5 h-3.5 fill-amber-800" />}
-            </button>
-          </div>
+        <div className="flex flex-wrap items-center gap-3">
+          <CountdownTimer
+            key={timerSeed?.key ?? 0}
+            skill="reading"
+            level={storyLevel}
+            initialSeconds={timerSeed?.seconds}
+            autoStart={timerSeed !== null}
+          />
 
           <button
             onClick={() => void openGenerator()}
@@ -438,9 +416,8 @@ Furthermore, the ethical implications surrounding data privacy remain deeply con
         {/* Right Pane: AI Word Lookup Panel */}
         <div className="surface lg:col-span-5 p-7 flex flex-col justify-between lg:sticky lg:top-24 lg:self-start">
           {isLoadingWord ? (
-            <div className="flex flex-col items-center justify-center py-20 space-y-3">
-              <Sparkles className="w-8 h-8 text-indigo-600 animate-spin" />
-              <p className="text-xs font-bold text-slate-500">Generating AI Word Lookup for "{selectedWord}"...</p>
+            <div className="py-12">
+              <AiWait active label={`AI đang tra từ "${selectedWord}"...`} expectedSeconds={12} />
             </div>
           ) : (
             <div className="space-y-6">
@@ -701,6 +678,8 @@ Furthermore, the ethical implications surrounding data privacy remain deeply con
 
             {generatorError && <p className="text-xs text-red-600">{generatorError}</p>}
 
+            <AiWait active={isGenerating} label="AI đang viết đoạn văn và câu hỏi..." expectedSeconds={20} />
+
             <div className="pt-2 flex items-center justify-end gap-2">
               <button
                 onClick={() => setIsGeneratorOpen(false)}
@@ -713,7 +692,7 @@ Furthermore, the ethical implications surrounding data privacy remain deeply con
                 disabled={isGenerating || (storySource === "document" && !selectedDocumentId)}
                 className="px-4 py-2 text-xs font-bold bg-indigo-700 hover:bg-indigo-800 text-white rounded-xl flex items-center gap-1.5 disabled:opacity-40 active:scale-95 transition-all"
               >
-                {isGenerating ? <Sparkles className="w-3.5 h-3.5 animate-spin" /> : "Generate Passage"}
+                {isGenerating ? "Generating..." : "Generate Passage"}
               </button>
             </div>
           </div>

@@ -104,7 +104,7 @@ async def create_skim_scan_reading_session(
 	current_user: User = Depends(get_current_user),
 	db: AsyncSession = Depends(get_db),
 ) -> SkimScanSessionResponse:
-	# document_id → passage thật trích từ tài liệu user; topic → Gemini tự sinh đoạn văn mới.
+	# document_id → passage thật trích từ tài liệu user; topic → LLM (settings.llm_provider = ollama) tự sinh đoạn văn mới.
 	try:
 		session, passage = await create_skim_scan_session(
 			db,
@@ -150,6 +150,7 @@ async def submit_reading_session(
 			current_user.id,
 			session_id,
 			[(UUID(answer.question_id), answer.selected_option_index) for answer in request.answers],
+			request.duration_seconds,
 		)
 	except ValueError as error:
 		code = str(error)

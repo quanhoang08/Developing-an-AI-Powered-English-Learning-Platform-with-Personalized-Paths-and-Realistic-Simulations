@@ -14,7 +14,7 @@ Extension tra nghĩa khi rê chuột trên mọi trang web và lưu từ vào da
 Tooltip hiện 2 tầng, nghĩa tiếng Việt luôn ở trên:
 
 1. **Kết quả nhanh (mọi người dùng, không cần đăng nhập):** nghĩa Việt từ [MyMemory](https://mymemory.translated.net) + định nghĩa/IPA từ [Free Dictionary API](https://dictionaryapi.dev). Từ điển timeout sau 3 giây nên không chặn nghĩa Việt.
-2. **Nâng cấp bằng Ollama (chỉ khi đã đăng nhập):** gọi `POST /api/reading/lookup`, backend dùng **Ollama** (không tốn quota Gemini) để chia từng nghĩa kiểu Cambridge: level CEFR (A1–C2) + loại từ + nghĩa tiếng Việt + ví dụ, nghĩa hợp ngữ cảnh câu đứng đầu. Mất ~10–30 giây khi chưa cache; lỗi/Ollama tắt thì giữ kết quả nhanh.
+2. **Nâng cấp bằng Ollama (chỉ khi đã đăng nhập):** gọi `POST /api/extension/lookup` (dùng lại handler tra từ của Reading; hoạt động trên trang web bất kỳ), backend dùng **Ollama** (không tốn quota Gemini) để chia từng nghĩa kiểu Cambridge: level CEFR (A1–C2) + loại từ + nghĩa tiếng Việt + ví dụ, nghĩa hợp ngữ cảnh câu đứng đầu. Mất ~10–30 giây khi chưa cache; lỗi/Ollama tắt thì giữ kết quả nhanh.
 - Lưu từ: `POST /api/vocab` của backend với `source_url` là URL trang đang đọc (backend yêu cầu đúng 1 trong `document_id`/`source_url`).
 
 ## Cấu trúc
@@ -26,10 +26,10 @@ Tooltip hiện 2 tầng, nghĩa tiếng Việt luôn ở trên:
 
 ## Chạy thử
 
-1. Chạy backend (`http://localhost:8000`) và tạo tài khoản trên web.
+1. Chạy backend (`http://127.0.0.1:8000` — dùng 127.0.0.1, không dùng `localhost`, vì `localhost` ra `::1` bị Docker Desktop/WSL làm treo request) và tạo tài khoản trên web.
 2. Vào `chrome://extensions` (hoặc `edge://extensions`), bật Developer mode.
 3. Chọn Load unpacked → trỏ tới thư mục `extension`.
-4. Mở popup, đăng nhập bằng tài khoản Lumina.
+4. Mở popup, đăng nhập bằng tài khoản Lumina. Extension đăng nhập với `client_type: "extension"` nên token chỉ gọi được `/api/extension/*`, `/api/reading/lookup` và `/api/vocab` (route khác trả 403 `extension_token_scope_denied`).
 5. Mở một trang tiếng Anh bất kỳ và rê chuột vào một từ.
 
 ## Khi deploy web lên domain thật

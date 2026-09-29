@@ -2,120 +2,63 @@
 -- LUMINA — schema.sql
 -- Nền tảng học tiếng Anh ứng dụng AI (khóa luận tốt nghiệp)
 --
--- Nguồn: thiet_ke_database.md (mục 1-9), đối chiếu de_cuong_khoa_luan.md,
--- feature-reading.md, feature-listening.md, feature-writing.md,
--- feature-speaking.md, api-spec.md, test-cases (1).md, erd_1.mermaid.
---
 -- LƯU Ý QUAN TRỌNG:
---   - Đây là bản DDL đầu tiên được sinh cho project — trước đó chỉ có mô tả
---     văn xuôi (thiet_ke_database.md), CHƯA có schema.sql/ERD gốc dạng file.
---   - File này là "target schema" (trạng thái thiết kế cuối cùng đã biết tại
---     thời điểm viết), KHÔNG phải một chuỗi migration Alembic theo từng bước.
---     Khi implement thật, nên chuyển từng phần thành các revision Alembic
---     riêng theo đúng thứ tự Giai đoạn 1-8 (de_cuong_khoa_luan.md mục 8),
---     không chạy nguyên file này làm 1 migration duy nhất.
---   - Một số cột/kiểu dữ liệu là SUY LUẬN HỢP LÝ (không có trong mô tả gốc,
---     đánh dấu bằng comment "-- đề xuất"), cần xác nhận lại trước khi dùng
---     làm migration thật cho sản phẩm.
---   - 2 quyết định mới nhất (rà soát lần 3): reading_answers.passage_citation_ref
---     (thiet_ke_database.md mục 9.1), quizzes/quiz_attempts.quiz_id
---     (thiet_ke_database.md mục 9.2).
---   - 1 quyết định mới trong lần viết schema.sql này: writing_submissions.rubric_scores
---     + trigger tự động ghi user_errors(error_type='writing_coherence') khi điểm
---     Coherence & Cohesion dưới ngưỡng — xem phần "TRIGGERS" cuối file.
---   - CẬP NHẬT 2026-09-24 (migration 20260924_0015, thiet_ke_database.md mục 12):
---     nguồn DDL thực thi được DUY NHẤT là ../schema.sql (pg_dump DB thật). File
---     này giữ vai trò giải thích thiết kế; tên cột có thể khác bản thật
---     (session_id → reading_session_id, submission_id → writing_submission_id,
---     transcript text/start_ms → word_text/start_time_ms). Các điểm đã sửa cho
---     khớp DB thật: embedding/embedding_local + HNSW, bỏ passage_citation_ref,
---     nới CHECK vocab/writing, bỏ trigger writing_coherence (ghi ở service).
---   - Điểm còn mở KHÔNG xử lý trong file này (cần quyết định thêm, xem
+--   - ĐỐI CHIẾU TOÀN DIỆN VỚI DB THẬT HOÀN TẤT (2026-09-27, lumina_context.md
+--     mục 4 điểm 12). File này trước đây là "target schema" viết trước khi
+--     code, đã lệch khá nhiều so với DB thật sau nhiều migration Alembic nối
+--     tiếp nhau không đồng bộ ngược lại đây. Bản này được sinh lại bằng cách
+--     `pg_dump --schema-only` trên `lumina_db` thật rồi diễn giải lại theo
+--     đúng cấu trúc cột/constraint thật — không còn là "thiết kế mục tiêu"
+--     nữa mà là **ảnh chụp DB thật, có annotate rationale**. Nguồn thực thi
+--     được vẫn luôn là `../schema.sql` (root, sinh trực tiếp bằng pg_dump).
+--   - 3 khác biệt lớn nhất so với bản thiết kế gốc (đáng nhớ khi bảo vệ khóa luận):
+--     1. KHÔNG có bảng/cột nào dùng Postgres native ENUM (`CREATE TYPE ... AS ENUM`)
+--        — quyết định thiết kế ban đầu (áp dụng enum cho mọi cột dạng enum)
+--        chưa từng được thực thi. Toàn bộ dùng `VARCHAR(n) + CHECK (col IN (...))`,
+--        nhất quán trong suốt quá trình implement thật (không phải thiếu sót
+--        rải rác) — xem mục 4 điểm 8 lumina_context.md, cùng loại quyết định
+--        "gọi thẳng google-generativeai, không qua LangChain".
+--     2. Bảng `notebook_chat_messages` (RAG Chat, mục 3.12 lumina_context.md)
+--        tồn tại thật trong DB nhưng CHƯA từng được thêm vào file này — đã bổ
+--        sung ở phần MODULE NOTEBOOK / RAG CHAT dưới.
+--     3. Nhiều bảng có thêm cột "tiện dụng cho UI" phát sinh trực tiếp lúc code
+--        (không nằm trong thiết kế gốc) — vd `documents.title/source_url/file_path`,
+--        `generated_passages.title/read_time_label/word_count_label`,
+--        `podcasts.script_text`, `writing_insights.title/description`. Đây là
+--        bổ sung hợp lý trong lúc implement, không phải lỗi — được giữ nguyên
+--        và đánh dấu rõ trong từng bảng.
+--   - Điểm mở KHÔNG xử lý trong lần đối chiếu này (không đổi so với trước, xem
 --     lumina_context.md mục 4): tên đề tài chính thức, seed data slang_phrases,
---     việc Speaking đóng góp user_errors loại nào.
+--     ý nghĩa "cambridge" style, rubric điểm ý định/lịch sự.
 --
--- Quy ước chung áp dụng cho toàn bộ file:
---   - Khóa chính: uuid, DEFAULT gen_random_uuid().
---   - Timestamp: TIMESTAMPTZ (không dùng TIMESTAMP không timezone).
---   - Enum cố định: dùng Postgres native ENUM (không dùng VARCHAR + CHECK) —
---     đúng đề xuất migration đã ghi trong api-spec.md mục 9, áp dụng nhất
---     quán cho MỌI cột enum trong schema, không riêng error_type.
---   - Chính sách ON DELETE (giải quyết điểm mở #10, xem chi tiết từng bảng):
---       (a) FK -> users.id: luôn CASCADE (hỗ trợ xoá tài khoản kiểu GDPR,
---           đơn giản hoá cho phạm vi khóa luận).
---       (b) FK mà cột đó tham gia một ràng buộc CHECK dạng "XOR bắt buộc 1
---           trong 2" (vd reading_sessions, reading_answers, vocab_items,
---           movie_context_matches): CASCADE, để tránh vi phạm CHECK khi chỉ
---           SET NULL một vế (nếu app cần "xoá mềm" tài liệu mà vẫn giữ lịch
---           sử làm bài, đây là việc cần xử lý ở tầng ứng dụng/soft-delete,
---           không phải ở FK cứng này).
---           NGOẠI LỆ (2026-09-24, thiet_ke_database.md mục 12): vocab_items và
---           writing_submissions dùng SET NULL + CHECK đã nới ("không được có cả
---           2 nguồn" / "free_topic không có document"), vì từ vựng và bài viết
---           là dữ liệu học của user, không nên mất khi xoá tài liệu gốc.
---       (c) FK tới bảng "thư viện/tham chiếu dùng chung" (scenarios,
---           personas khi cột NOT NULL): RESTRICT, để không vô tình xoá mất
---           lịch sử người dùng chỉ vì xoá 1 dòng trong thư viện nội dung.
---       (d) FK optional thuần tuý, bản ghi con vẫn có ý nghĩa độc lập khi
---           NULL (persona_id nullable, quiz_id nullable, slang_phrase_id...):
---           SET NULL.
+-- Quy ước chung của DB thật (khác quy ước thiết kế gốc ở mục ENUM):
+--   - Khóa chính: uuid, DEFAULT public.uuid_generate_v4() (extension uuid-ossp,
+--     KHÔNG dùng gen_random_uuid()/pgcrypto như bản thiết kế gốc từng viết).
+--   - Timestamp: timestamp with time zone (TIMESTAMPTZ) — đúng quy ước gốc.
+--   - "Enum": VARCHAR(n) + CHECK constraint tên `chk_<table>_<col>_valid`,
+--     KHÔNG dùng CREATE TYPE (xem điểm 1 trên).
+--   - Chính sách ON DELETE thực tế — về cơ bản khớp với 4 nguyên tắc thiết kế
+--     gốc (a: users→CASCADE; b: cặp CHECK "XOR 1-trong-2"→CASCADE hoặc SET
+--     NULL+CHECK nới; d: FK optional thuần túy→SET NULL), NHƯNG có vài ngoại
+--     lệ thật không theo đúng nguyên tắc, ghi rõ tại từng bảng:
+--       * `quiz_attempts.quiz_id` → thiết kế gốc nói SET NULL (nguyên tắc d),
+--         DB thật là **CASCADE** (xoá quiz kéo theo xoá luôn các lượt làm bài
+--         thuộc quiz đó — hợp lý hơn SET NULL vì quiz_id NULL đang được dùng
+--         để đánh dấu "không thuộc bộ đề nào" cho Rearrange, xoá mà giữ lại
+--         attempt "mồ côi" theo kiểu Adaptive Engine dễ gây nhầm lẫn ngữ nghĩa).
+--       * `conversation_sessions.scenario_id/persona_id`,
+--         `movie_context_tts_fallback.persona_id`,
+--         `movie_context_matches.tts_fallback_id/video_subtitle_index_id`
+--         → cột nullable nhưng FK KHÔNG khai báo ON DELETE (mặc định NO ACTION,
+--         chặn xoá bản ghi cha nếu còn tham chiếu) — lẽ ra theo nguyên tắc (d)
+--         phải là SET NULL. Chưa gây sự cố vì thư viện `scenarios`/`personas`/
+--         `movie_context_tts_fallback`/`video_subtitle_index` hiếm khi bị xoá
+--         trong vòng đời demo, nhưng là hạn chế thật cần biết trước khi viết
+--         logic xoá dữ liệu ở các bảng thư viện này.
 -- ============================================================================
 
-CREATE EXTENSION IF NOT EXISTS pgcrypto;   -- gen_random_uuid()
-CREATE EXTENSION IF NOT EXISTS vector;     -- pgvector, dùng cho document_chunks.embedding
-
--- ============================================================================
--- ENUM TYPES
--- ============================================================================
-
-CREATE TYPE cefr_level_enum AS ENUM ('a1', 'a2', 'b1', 'b2', 'c1', 'c2');
-
-CREATE TYPE formality_level_enum AS ENUM ('casual', 'neutral', 'formal');
-
-CREATE TYPE document_source_type_enum AS ENUM ('audio', 'docx');
-
-CREATE TYPE document_status_enum AS ENUM ('processing', 'ready', 'failed');
-
-CREATE TYPE reading_mode_enum AS ENUM ('classic', 'skim_scan');
-
-CREATE TYPE story_length_enum AS ENUM ('short', 'medium');
-
-CREATE TYPE writing_source_type_enum AS ENUM ('document_summary', 'extended_topic', 'free_topic');
-
-CREATE TYPE certificate_style_enum AS ENUM ('toeic', 'ielts', 'cambridge');
-
-CREATE TYPE writing_insight_type_enum AS ENUM ('grammar', 'vocabulary', 'style');
-
-CREATE TYPE stt_provider_enum AS ENUM ('azure', 'whisper');
-
-CREATE TYPE client_type_enum AS ENUM ('web', 'extension');
-
--- quiz_type_enum: danh sách có thể mở rộng khi Adaptive Engine thêm loại đề
--- mới (vd 'adaptive_dynamic') — hiện tại chỉ 3 giá trị đã có mô tả rõ trong
--- feature-reading.md/feature-writing.md/api-spec.md.
-CREATE TYPE quiz_type_enum AS ENUM ('rearrange_reading', 'rearrange_writing', 'adaptive_dynamic');
-
--- error_type_enum: đề xuất trong api-spec.md mục 9 (9 giá trị) — vẫn ở trạng
--- thái "chưa chốt chính thức" theo lumina_context.md mục 4 điểm 1, dùng tạm
--- trong schema.sql này vì cần 1 kiểu cụ thể để viết DDL. writing_coherence
--- nay đã có flow ghi dữ liệu cụ thể (xem TRIGGERS cuối file).
-CREATE TYPE error_type_enum AS ENUM (
-    'grammar',
-    'vocabulary',
-    'spelling',
-    'pronunciation',
-    'listening_comprehension',
-    'reading_comprehension',
-    'writing_coherence',
-    'communicative_intent',
-    'politeness'
-);
-
-CREATE TYPE review_source_type_enum AS ENUM ('vocab_review', 'user_error');
-
-CREATE TYPE skill_enum AS ENUM ('reading', 'listening', 'writing', 'speaking');
-
-CREATE TYPE movie_context_source_type_enum AS ENUM ('real_video', 'tts_fallback');
+CREATE EXTENSION IF NOT EXISTS "uuid-ossp";   -- uuid_generate_v4()
+CREATE EXTENSION IF NOT EXISTS vector;        -- pgvector, dùng cho document_chunks.embedding[_local]
 
 
 -- ============================================================================
@@ -123,49 +66,68 @@ CREATE TYPE movie_context_source_type_enum AS ENUM ('real_video', 'tts_fallback'
 -- ============================================================================
 
 CREATE TABLE users (
-    id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    email           TEXT NOT NULL UNIQUE,
-    password_hash   TEXT NOT NULL,                     -- bcrypt qua passlib
-    target_level    cefr_level_enum NOT NULL DEFAULT 'b1',
-    created_at      TIMESTAMPTZ NOT NULL DEFAULT now()
+    id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    email           VARCHAR(255) NOT NULL UNIQUE,
+    password_hash   VARCHAR(255) NOT NULL,                 -- bcrypt qua passlib
+    display_name    VARCHAR(100),                          -- thêm ngoài thiết kế gốc
+    native_language VARCHAR(10) DEFAULT 'vi',               -- thêm ngoài thiết kế gốc
+    target_level    VARCHAR(10),                            -- nullable trong DB thật; thiết kế gốc: NOT NULL DEFAULT 'b1'
+    created_at      TIMESTAMPTZ DEFAULT now(),
+    updated_at      TIMESTAMPTZ DEFAULT now()                -- có trigger trg_users_updated_at (xem TRIGGERS)
 );
 
 CREATE TABLE notebook_folders (
-    id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id          UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     user_id     UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    name        TEXT NOT NULL,
-    created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+    name        VARCHAR(100) NOT NULL,
+    created_at  TIMESTAMPTZ DEFAULT now()
 );
 
 CREATE TABLE documents (
-    id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     user_id         UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     folder_id       UUID REFERENCES notebook_folders(id) ON DELETE SET NULL,
-    source_type     document_source_type_enum NOT NULL,
-    status          document_status_enum NOT NULL DEFAULT 'processing',
-    tags            JSONB NOT NULL DEFAULT '[]'::jsonb,
-    starred         BOOLEAN NOT NULL DEFAULT false,
+    title           VARCHAR(255) NOT NULL,     -- thêm ngoài thiết kế gốc (hiển thị UI)
+    source_type     VARCHAR(20) NOT NULL,
+    source_url      TEXT,                       -- thêm ngoài thiết kế gốc
+    file_path       TEXT,                       -- thêm ngoài thiết kế gốc (đường dẫn file gốc trên storage/)
     file_size_kb    INTEGER,
-    created_at      TIMESTAMPTZ NOT NULL DEFAULT now()
+    tags            TEXT[],                     -- thiết kế gốc dùng JSONB '[]'
+    starred         BOOLEAN DEFAULT false,
+    language        VARCHAR(10) DEFAULT 'en',   -- thêm ngoài thiết kế gốc
+    status          VARCHAR(20) DEFAULT 'processing',
+    created_at      TIMESTAMPTZ DEFAULT now(),
+    CONSTRAINT chk_documents_source_type_valid CHECK (source_type IN ('audio', 'docx')),
+    CONSTRAINT chk_documents_status_valid CHECK (status IN ('processing', 'ready', 'failed'))
 );
 
 CREATE TABLE document_chunks (
-    id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     document_id     UUID NOT NULL REFERENCES documents(id) ON DELETE CASCADE,
-    content         TEXT NOT NULL,
-    embedding       vector(768),                       -- gemini-embedding-001 (EMBEDDING_PROVIDER=gemini)
-    embedding_local vector(1024),                      -- bge-m3 qua Ollama (EMBEDDING_PROVIDER=ollama, mặc định)
     chunk_index     INTEGER NOT NULL,
-    created_at      TIMESTAMPTZ NOT NULL DEFAULT now()
+    content         TEXT NOT NULL,
+    embedding       vector(768),               -- gemini-embedding-001 (EMBEDDING_PROVIDER=gemini)
+    embedding_local vector(1024),              -- bge-m3 qua Ollama (EMBEDDING_PROVIDER=ollama, mặc định)
+    page_or_line_ref VARCHAR(50),              -- thêm ngoài thiết kế gốc, hiện chưa thấy service nào set giá trị
+    token_count     INTEGER,                    -- thêm ngoài thiết kế gốc
+    created_at      TIMESTAMPTZ DEFAULT now()
 );
 
+-- generated_passages.source_document_id: bổ sung cho Skim & Scan gắn tài liệu
+-- thật (lumina_context.md mục 3.12) — thiết kế gốc của bảng này CHƯA từng có
+-- cột này, đây là khác biệt thật quan trọng nhất của bảng, không phải cột phụ.
 CREATE TABLE generated_passages (
-    id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    user_id     UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    topic       TEXT NOT NULL,
-    level       cefr_level_enum NOT NULL,
-    content     TEXT NOT NULL,
-    created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+    id                  UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    user_id             UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    topic               VARCHAR(100),                       -- nullable trong DB thật; thiết kế gốc NOT NULL
+    level               VARCHAR(10),                         -- nullable; thiết kế gốc NOT NULL cefr_level_enum
+    title               VARCHAR(255),                        -- thêm ngoài thiết kế gốc
+    content             TEXT NOT NULL,
+    read_time_label     VARCHAR(20),                         -- thêm ngoài thiết kế gốc (UI)
+    word_count_label    VARCHAR(20),                          -- thêm ngoài thiết kế gốc (UI)
+    target_vocab_words  TEXT[],                               -- thêm ngoài thiết kế gốc
+    source_document_id  UUID REFERENCES documents(id) ON DELETE SET NULL,   -- MỚI, xem ghi chú trên
+    created_at          TIMESTAMPTZ DEFAULT now()
 );
 
 
@@ -174,82 +136,94 @@ CREATE TABLE generated_passages (
 -- ============================================================================
 
 CREATE TABLE reading_sessions (
-    id                      UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id                      UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     user_id                 UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     document_id             UUID REFERENCES documents(id) ON DELETE CASCADE,
     generated_passage_id    UUID REFERENCES generated_passages(id) ON DELETE CASCADE,
-    mode                    reading_mode_enum NOT NULL,
-    score                   NUMERIC(4,2),
+    mode                    VARCHAR(20) NOT NULL,
+    score                   NUMERIC(5,2),
+    time_taken_seconds      INTEGER,           -- thêm ngoài thiết kế gốc
+    created_at              TIMESTAMPTZ DEFAULT now(),
     completed_at            TIMESTAMPTZ,
-    created_at              TIMESTAMPTZ NOT NULL DEFAULT now(),
-    CONSTRAINT chk_reading_sessions_source_xor CHECK (
+    CONSTRAINT chk_reading_source CHECK (
         (mode = 'classic'    AND document_id IS NOT NULL AND generated_passage_id IS NULL)
         OR
         (mode = 'skim_scan'  AND generated_passage_id IS NOT NULL AND document_id IS NULL)
     )
 );
 
+-- reading_answers.question/is_correct: có thật trong DB (câu hỏi lưu trực tiếp
+-- ở đây, không chỉ ở nơi sinh đề) — thiết kế gốc thiếu 2 cột này.
+-- source_chunk_id: chỉ set cho Classic Mode. Skim & Scan KHÔNG lưu trích dẫn
+-- (passage_citation_ref đề xuất ở rà soát lần 3 chưa từng implement).
 CREATE TABLE reading_answers (
-    id                          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    session_id                  UUID NOT NULL REFERENCES reading_sessions(id) ON DELETE CASCADE,
-    options                     JSONB NOT NULL,
-    correct_option_index        INTEGER NOT NULL,
-    selected_option_index       INTEGER,
-    -- source_chunk_id chỉ set cho Classic Mode. Skim & Scan hiện KHÔNG lưu trích
-    -- dẫn (câu hỏi do LLM sinh không kèm vị trí) — passage_citation_ref + CHECK XOR
-    -- ở mục 9.1 chưa implement, xem thiet_ke_database.md mục 12.
-    source_chunk_id             UUID REFERENCES document_chunks(id) ON DELETE SET NULL,
-    created_at                  TIMESTAMPTZ NOT NULL DEFAULT now()
+    id                          UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    reading_session_id          UUID NOT NULL REFERENCES reading_sessions(id) ON DELETE CASCADE,
+    question                    TEXT NOT NULL,                   -- thêm ngoài thiết kế gốc
+    options                      JSONB NOT NULL,
+    correct_option_index        SMALLINT NOT NULL,
+    selected_option_index        SMALLINT,
+    is_correct                   BOOLEAN,                         -- thêm ngoài thiết kế gốc
+    source_chunk_id              UUID REFERENCES document_chunks(id) ON DELETE SET NULL,
+    created_at                   TIMESTAMPTZ DEFAULT now()
 );
 
 CREATE TABLE vocab_items (
-    id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     user_id         UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    term            TEXT NOT NULL,
-    definition      TEXT NOT NULL,
-    synonyms        JSONB NOT NULL DEFAULT '[]'::jsonb,
-    antonyms        JSONB NOT NULL DEFAULT '[]'::jsonb,
-    document_id     UUID REFERENCES documents(id) ON DELETE CASCADE,
-    source_url      TEXT,                               -- tier Thử nghiệm giới hạn (Browser Extension)
-    created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
-    -- Chỉ cấm có cả 2 nguồn: document_id về NULL khi xoá tài liệu (SET NULL), từ vựng
-    -- vẫn giữ lại. "Đúng 1 nguồn khi tạo" được validate ở API (schemas/vocab.py).
-    CONSTRAINT chk_vocab_items_source_xor CHECK (
+    document_id     UUID REFERENCES documents(id) ON DELETE SET NULL,
+    term            VARCHAR(100) NOT NULL,
+    ipa             VARCHAR(100),               -- thêm ngoài thiết kế gốc
+    part_of_speech  VARCHAR(30),                -- thêm ngoài thiết kế gốc
+    definition      TEXT,                        -- nullable trong DB thật; thiết kế gốc NOT NULL
+    example_sentence TEXT,                        -- thêm ngoài thiết kế gốc
+    synonyms        TEXT[],                        -- thiết kế gốc dùng JSONB
+    antonyms        TEXT[],                         -- thiết kế gốc dùng JSONB
+    source_url      TEXT,                            -- tier Thử nghiệm giới hạn (Browser Extension)
+    created_at      TIMESTAMPTZ DEFAULT now(),
+    -- "Đúng 1 nguồn khi tạo" validate ở API (schemas/vocab.py); CHECK ở DB chỉ
+    -- cấm có CẢ HAI cùng lúc — document_id về NULL khi xoá tài liệu (SET NULL).
+    CONSTRAINT chk_vocab_source_exactly_one CHECK (
         NOT (document_id IS NOT NULL AND source_url IS NOT NULL)
     )
 );
 
+-- vocab_reviews: KHÔNG có cột updated_at/trigger như thiết kế gốc giả định —
+-- DB thật dùng last_grade + last_reviewed_at (ghi trực tiếp trong service SM-2
+-- lúc review, không qua trigger).
 CREATE TABLE vocab_reviews (
-    id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    vocab_item_id   UUID NOT NULL UNIQUE REFERENCES vocab_items(id) ON DELETE CASCADE,  -- quan hệ 1-1
-    ease_factor     NUMERIC(4,2) NOT NULL DEFAULT 2.50 CHECK (ease_factor >= 1.3),
-    interval_days   INTEGER NOT NULL DEFAULT 0,
-    repetitions     INTEGER NOT NULL DEFAULT 0,
-    next_review_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
-    updated_at      TIMESTAMPTZ NOT NULL DEFAULT now()
+    id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    vocab_item_id   UUID NOT NULL UNIQUE REFERENCES vocab_items(id) ON DELETE CASCADE,
+    ease_factor     NUMERIC(4,2) DEFAULT 2.5,
+    interval_days   INTEGER DEFAULT 1,           -- thiết kế gốc DEFAULT 0
+    repetitions     INTEGER DEFAULT 0,
+    last_grade      SMALLINT,                    -- thêm ngoài thiết kế gốc (điểm SM-2 lượt gần nhất, 0-5)
+    last_reviewed_at TIMESTAMPTZ,                 -- thêm ngoài thiết kế gốc
+    next_review_at  TIMESTAMPTZ DEFAULT now()
 );
 
 CREATE TABLE contextual_guess_attempts (
-    id                      UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id                      UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     user_id                 UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     vocab_item_id           UUID REFERENCES vocab_items(id) ON DELETE SET NULL,
-    term                    TEXT NOT NULL,                -- luôn có giá trị, độc lập vocab_item_id
+    term                    VARCHAR(100) NOT NULL,        -- thiết kế gốc dùng TEXT
     challenge_sentence      TEXT NOT NULL,
     options                 JSONB NOT NULL,
-    correct_option_index    INTEGER NOT NULL,
-    selected_option_index   INTEGER,
-    created_at              TIMESTAMPTZ NOT NULL DEFAULT now()
+    correct_option_index    SMALLINT NOT NULL,
+    selected_option_index   SMALLINT,
+    is_correct              BOOLEAN,                        -- thêm ngoài thiết kế gốc
+    created_at              TIMESTAMPTZ DEFAULT now()
 );
 
+-- custom_stories: đơn giản hơn thiết kế gốc khá nhiều — KHÔNG có theme/length/
+-- missing_terms (feature "chọn độ dài truyện" chưa implement, chỉ sinh 1 dạng
+-- truyện duy nhất). vocab_item_ids là UUID[] thật (không phải JSONB).
 CREATE TABLE custom_stories (
-    id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     user_id         UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    vocab_item_ids  JSONB NOT NULL,                       -- mảng uuid, không enforce FK (xem ghi chú cuối file)
-    content         TEXT NOT NULL,
-    theme           TEXT,
-    length          story_length_enum NOT NULL DEFAULT 'short',
-    missing_terms   JSONB NOT NULL DEFAULT '[]'::jsonb,
-    created_at      TIMESTAMPTZ NOT NULL DEFAULT now()
+    vocab_item_ids  UUID[] NOT NULL,               -- không enforce FK theo phần tử (xem GHI CHÚ CUỐI FILE)
+    generated_text  TEXT NOT NULL,                  -- thiết kế gốc gọi là "content"
+    created_at      TIMESTAMPTZ DEFAULT now()
 );
 
 
@@ -258,11 +232,14 @@ CREATE TABLE custom_stories (
 -- ============================================================================
 
 CREATE TABLE personas (
-    id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    name        TEXT NOT NULL,
-    voice_id    TEXT NOT NULL,               -- id giọng bên ElevenLabs
+    id          UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    name        VARCHAR(100) NOT NULL,
+    provider    VARCHAR(30) NOT NULL,          -- thêm ngoài thiết kế gốc (vd 'elevenlabs')
+    voice_id    VARCHAR(100) NOT NULL,          -- id giọng bên ElevenLabs
+    accent_tag  VARCHAR(30),                    -- thêm ngoài thiết kế gốc
+    description TEXT,                            -- thêm ngoài thiết kế gốc
     is_active   BOOLEAN NOT NULL DEFAULT true,
-    created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+    created_at  TIMESTAMPTZ DEFAULT now()
 );
 
 
@@ -270,34 +247,68 @@ CREATE TABLE personas (
 -- MODULE 2 — LISTENING (tier: Đầy đủ)
 -- ============================================================================
 
+-- podcasts.script_text: kịch bản podcast do Gemini sinh trước khi TTS — thiết
+-- kế gốc hoàn toàn không có cột này (chỉ có audio_url), đây là dữ liệu trung
+-- gian bắt buộc phải lưu (không tái sinh lại được script khi cần transcript).
 CREATE TABLE podcasts (
-    id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    document_id     UUID NOT NULL REFERENCES documents(id) ON DELETE CASCADE,
-    persona_id      UUID REFERENCES personas(id) ON DELETE SET NULL,   -- fallback persona mặc định nếu NULL
-    audio_url       TEXT NOT NULL,
-    status          document_status_enum NOT NULL DEFAULT 'processing',
-    created_at      TIMESTAMPTZ NOT NULL DEFAULT now()
+    id                  UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    document_id         UUID NOT NULL REFERENCES documents(id) ON DELETE CASCADE,
+    script_text         TEXT NOT NULL,                 -- MỚI so với thiết kế gốc, xem ghi chú trên
+    audio_url           TEXT,                            -- nullable trong DB thật (rỗng khi status != ready)
+    duration_seconds    INTEGER,                          -- thêm ngoài thiết kế gốc
+    persona_id          UUID REFERENCES personas(id) ON DELETE SET NULL,
+    status              VARCHAR(20) NOT NULL DEFAULT 'processing',
+    created_at          TIMESTAMPTZ DEFAULT now(),
+    CONSTRAINT chk_podcasts_status_valid CHECK (status IN ('processing', 'ready', 'failed'))
 );
 
+-- transcript_segments: cấu trúc THẬT khác hẳn thiết kế gốc — lưu Ở CẤP TỪNG
+-- TỪ (word-level, phục vụ chấm Dictation theo từ), không phải theo câu/đoạn
+-- (segment-level, text + start_ms/end_ms) như bản thiết kế ban đầu mô tả.
+-- Đã ghi nhận sự khác biệt này từ lumina_context.md mục 3.13 nhưng chưa từng
+-- sửa lại DDL ở file này cho tới lần đối chiếu này.
 CREATE TABLE transcript_segments (
-    id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    podcast_id  UUID NOT NULL REFERENCES podcasts(id) ON DELETE CASCADE,
-    text        TEXT NOT NULL,
-    start_ms    INTEGER NOT NULL,
-    end_ms      INTEGER NOT NULL,
-    CONSTRAINT chk_transcript_segments_range CHECK (end_ms > start_ms)
+    id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    podcast_id      UUID NOT NULL REFERENCES podcasts(id) ON DELETE CASCADE,
+    word_index      INTEGER NOT NULL,
+    word_text       VARCHAR(100) NOT NULL,
+    start_time_ms   INTEGER NOT NULL,
+    end_time_ms     INTEGER NOT NULL
 );
 
+-- dictation_attempts: user_input_text/diff_result/accuracy_score thay cho
+-- transcribed_text/score của thiết kế gốc; start_ms/end_ms thay bằng
+-- start_word_index/end_word_index (đúng theo cấp từ của transcript_segments
+-- ở trên, không phải mốc thời gian tuyệt đối).
 CREATE TABLE dictation_attempts (
-    id                      UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    podcast_id              UUID NOT NULL REFERENCES podcasts(id) ON DELETE CASCADE,
+    id                      UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     user_id                 UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    start_ms                INTEGER NOT NULL,
-    end_ms                  INTEGER NOT NULL,
-    reference_word_tags     JSONB NOT NULL DEFAULT '[]'::jsonb,  -- vd [{"word":"mitochondria","is_rare_or_proper":true}]
-    transcribed_text        TEXT,
-    score                   NUMERIC(4,2),
-    created_at              TIMESTAMPTZ NOT NULL DEFAULT now()
+    podcast_id              UUID NOT NULL REFERENCES podcasts(id) ON DELETE CASCADE,
+    user_input_text         TEXT NOT NULL,
+    diff_result             JSONB,                          -- kết quả difflib chi tiết theo từ
+    accuracy_score          NUMERIC(5,2),
+    start_word_index        INTEGER,
+    end_word_index          INTEGER,
+    audio_segment_path      TEXT,
+    reference_word_tags     JSONB NOT NULL DEFAULT '[]'::jsonb,  -- [{"word":"mitochondria","is_rare_or_proper":true}]
+    created_at              TIMESTAMPTZ DEFAULT now()
+);
+
+
+-- ============================================================================
+-- MODULE NOTEBOOK — RAG Chat (mới, mục 3.12 lumina_context.md — MỚI THÊM VÀO
+-- FILE NÀY lần đối chiếu 2026-09-27; DB thật đã có bảng này từ lâu)
+-- ============================================================================
+
+CREATE TABLE notebook_chat_messages (
+    id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    document_id     UUID NOT NULL REFERENCES documents(id) ON DELETE CASCADE,
+    user_id         UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    role            VARCHAR(10) NOT NULL,
+    content         TEXT NOT NULL,
+    sources         JSONB,                 -- mảng document_chunks.id trích dẫn cho câu trả lời 'assistant'
+    created_at      TIMESTAMPTZ DEFAULT now(),
+    CONSTRAINT chk_notebook_chat_role_valid CHECK (role IN ('user', 'assistant'))
 );
 
 
@@ -305,75 +316,77 @@ CREATE TABLE dictation_attempts (
 -- MODULE 3 — WRITING (tier: Đầy đủ; Rearrange = Thử nghiệm giới hạn)
 -- ============================================================================
 
+-- writing_submissions: 2 CHECK ràng buộc "chấm xong phải có đủ điểm" mà bản
+-- thiết kế gốc đề xuất (chk_writing_submissions_graded_complete,
+-- chk_writing_submissions_rubric) CHƯA từng được áp vào DB thật — chỉ có 3
+-- CHECK dưới đây tồn tại thật. Việc "chấm xong phải có rubric_scores/cefr/ielts"
+-- hiện chỉ được đảm bảo ở tầng service (writing_service.py), không có lưới an
+-- toàn ở DB.
 CREATE TABLE writing_submissions (
-    id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id                  UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     user_id             UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    document_id         UUID REFERENCES documents(id) ON DELETE CASCADE,
-    source_type         writing_source_type_enum NOT NULL,
-    prompt_text         TEXT NOT NULL,
-    certificate_style   certificate_style_enum,
-    submitted_text      TEXT,
-    -- rubric_scores: MỚI (quyết định trong lúc viết schema.sql, xem đầu file
-    -- và TRIGGERS cuối file) — chỉ dùng cho extended_topic/free_topic (rubric
-    -- 4 tiêu chí), NULL với document_summary (chấm theo coverage, không có
-    -- 4 tiêu chí này).
-    -- Hình dạng đề xuất: {"task_response": int, "coherence_cohesion": int,
-    --                      "lexical_resource": int, "grammatical_range_accuracy": int}
-    -- mỗi tiêu chí thang 0-100, cùng thang với intent_score/politeness_score
-    -- của Speaking để nhất quán trong toàn hệ thống.
+    document_id         UUID REFERENCES documents(id) ON DELETE SET NULL,
+    title               VARCHAR(255),                     -- thêm ngoài thiết kế gốc
+    submitted_text      TEXT NOT NULL,
+    overall_score       NUMERIC(5,2),                       -- thiết kế gốc gọi là "score"
+    cefr_level          VARCHAR(15),                         -- thiết kế gốc dùng cefr_level_enum
+    ielts_band          VARCHAR(15),                          -- thiết kế gốc dùng NUMERIC(2,1) — DB thật là chữ (vd "6.5")
+    source_type         VARCHAR(20) NOT NULL DEFAULT 'document_summary',
+    prompt_text         TEXT,
+    certificate_style   VARCHAR(20),
+    -- rubric_scores: {"task_response","coherence_cohesion","lexical_resource",
+    -- "grammatical_range_accuracy"} thang 0-100, chỉ dùng cho extended_topic/
+    -- free_topic — writing_service.submit_essay tự ghi user_errors
+    -- (error_type='writing_coherence') khi coherence_cohesion thấp, KHÔNG qua
+    -- trigger DB (đổi hướng so với đề xuất trigger ban đầu, xem TRIGGERS).
     rubric_scores       JSONB,
-    cefr_level          cefr_level_enum,
-    ielts_band          NUMERIC(2,1),
-    score               NUMERIC(5,2),
     completed_at        TIMESTAMPTZ,
-    created_at          TIMESTAMPTZ NOT NULL DEFAULT now(),
-    -- Giải quyết điểm mở #11 (chính sách CHECK chưa nhất quán): trước đây
-    -- ràng buộc document_id theo source_type chỉ được validate ở tầng service
-    -- (thiet_ke_database.md mục 7). Nay áp CHECK ở DB để nhất quán với cách
-    -- đã làm ở reading_sessions/vocab_items/reading_answers.
-    -- Cập nhật 2026-09-24: bỏ yêu cầu document_id NOT NULL cho document_summary/
-    -- extended_topic — nó xung đột với FK ON DELETE SET NULL làm DELETE documents
-    -- bị chặn. Service bắt document khi tạo đề; submit trả 404 nếu tài liệu đã xoá.
-    CONSTRAINT chk_writing_submissions_source_type CHECK (
+    created_at          TIMESTAMPTZ DEFAULT now(),
+    CONSTRAINT chk_writing_certificate_style_valid CHECK (
+        certificate_style IS NULL OR certificate_style IN ('toeic', 'ielts', 'cambridge')
+    ),
+    CONSTRAINT chk_writing_document_id_by_source CHECK (
         source_type <> 'free_topic' OR document_id IS NULL
     ),
-    -- Formal hoá acceptance criteria đã có ở feature-writing.md mục 1.6:
-    -- cefr_level/ielts_band luôn có giá trị khi bài đã chấm xong.
-    CONSTRAINT chk_writing_submissions_graded_complete CHECK (
-        completed_at IS NULL OR (cefr_level IS NOT NULL AND ielts_band IS NOT NULL)
-    ),
-    -- rubric_scores bắt buộc khi bài extended_topic/free_topic đã chấm xong;
-    -- luôn NULL với document_summary (chấm theo coverage, không dùng rubric này).
-    CONSTRAINT chk_writing_submissions_rubric CHECK (
-        (source_type = 'document_summary' AND rubric_scores IS NULL)
-        OR
-        (source_type <> 'document_summary' AND (completed_at IS NULL OR rubric_scores IS NOT NULL))
+    CONSTRAINT chk_writing_source_type_valid CHECK (
+        source_type IN ('document_summary', 'extended_topic', 'free_topic')
     )
 );
 
+-- writing_insights: title/description/rule/synonyms/suggestion thay cho
+-- explanation đơn của thiết kế gốc — insight giờ có cấu trúc phong phú hơn
+-- (tiêu đề + mô tả riêng, kèm rule tham chiếu và gợi ý synonym khi liên quan).
+-- KHÔNG có CHECK ép offset chỉ tồn tại với insight_type='grammar' như thiết kế
+-- gốc đề xuất — offset luôn nullable độc lập với insight_type trong DB thật.
 CREATE TABLE writing_insights (
-    id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    submission_id   UUID NOT NULL REFERENCES writing_submissions(id) ON DELETE CASCADE,
-    insight_type    writing_insight_type_enum NOT NULL,
-    offset_start    INTEGER,          -- chỉ set khi insight_type = 'grammar', tính theo ký tự UTF-8
-    offset_end      INTEGER,
-    original_text   TEXT,
-    suggested_text  TEXT,
-    explanation     TEXT NOT NULL,
-    created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
-    CONSTRAINT chk_writing_insights_offset CHECK (
-        (insight_type = 'grammar' AND offset_start IS NOT NULL AND offset_end IS NOT NULL AND offset_end > offset_start)
-        OR
-        (insight_type <> 'grammar' AND offset_start IS NULL AND offset_end IS NULL)
-    )
+    id                      UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    writing_submission_id   UUID NOT NULL REFERENCES writing_submissions(id) ON DELETE CASCADE,
+    insight_type            VARCHAR(20) NOT NULL,
+    title                    VARCHAR(150) NOT NULL,        -- thêm ngoài thiết kế gốc
+    description             TEXT NOT NULL,                  -- thiết kế gốc gọi là "explanation"
+    original_text            TEXT,
+    suggested_text            TEXT,
+    error_start_offset        INTEGER,                       -- thiết kế gốc gọi là "offset_start"
+    error_end_offset           INTEGER,                        -- thiết kế gốc gọi là "offset_end"
+    rule                       TEXT,                            -- thêm ngoài thiết kế gốc
+    synonyms                   JSONB,                            -- thêm ngoài thiết kế gốc
+    suggestion                  TEXT,                             -- thêm ngoài thiết kế gốc
+    created_at                  TIMESTAMPTZ DEFAULT now(),
+    CONSTRAINT chk_writing_insights_type_valid CHECK (insight_type IN ('grammar', 'vocabulary', 'style'))
 );
 
+-- rephrase_requests: cấu trúc THẬT khác hẳn thiết kế gốc — mỗi GỢI Ý rephrase
+-- là 1 DÒNG riêng (original_text/rephrased_text/style_target/explanation),
+-- không phải 1 request chứa mảng JSONB suggested_sentences[] như thiết kế gốc.
+-- routers/writing.py: rephrase() trả về nhiều dòng cho 1 câu gốc.
 CREATE TABLE rephrase_requests (
-    id                      UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    submission_id           UUID NOT NULL REFERENCES writing_submissions(id) ON DELETE CASCADE,
-    original_sentence       TEXT NOT NULL,
-    suggested_sentences     JSONB NOT NULL,     -- [{"text": string, "explanation": string}]
-    created_at              TIMESTAMPTZ NOT NULL DEFAULT now()
+    id                      UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    writing_submission_id   UUID REFERENCES writing_submissions(id) ON DELETE CASCADE,
+    original_text            TEXT NOT NULL,               -- thiết kế gốc gọi là "original_sentence"
+    rephrased_text            TEXT NOT NULL,                -- 1 gợi ý / dòng, không phải mảng
+    style_target               VARCHAR(20),                   -- thêm ngoài thiết kế gốc
+    explanation                 TEXT,
+    created_at                   TIMESTAMPTZ DEFAULT now()
 );
 
 
@@ -382,68 +395,100 @@ CREATE TABLE rephrase_requests (
 -- ============================================================================
 
 CREATE TABLE scenarios (
-    id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    description         TEXT NOT NULL,
-    goal                TEXT NOT NULL,                              -- feature-speaking.md 3.3
-    formality_level     formality_level_enum NOT NULL DEFAULT 'neutral',
-    created_at          TIMESTAMPTZ NOT NULL DEFAULT now()
+    id                  UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    title               VARCHAR(150) NOT NULL,           -- thêm ngoài thiết kế gốc
+    description         TEXT,                              -- nullable trong DB thật; thiết kế gốc NOT NULL
+    difficulty_level     VARCHAR(10),                        -- thêm ngoài thiết kế gốc
+    target_intents        JSONB,                               -- thêm ngoài thiết kế gốc
+    goal                   TEXT,                                 -- feature-speaking.md 3.3; nullable trong DB thật
+    formality_level          VARCHAR(20) NOT NULL DEFAULT 'neutral'
 );
 
+-- conversation_sessions: mô hình vòng đời khác hẳn thiết kế gốc — DB thật theo
+-- dõi status ('in_progress'/'completed'/'expired') + ended_at (1 phiên có
+-- điểm kết thúc rõ ràng), thiết kế gốc chỉ có last_active_at (giả định phiên
+-- không bao giờ "kết thúc" chính thức, chỉ có mốc hoạt động gần nhất).
+-- scenario_id/persona_id đều nullable trong DB thật (thiết kế gốc: scenario_id
+-- NOT NULL + ON DELETE RESTRICT).
 CREATE TABLE conversation_sessions (
-    id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    user_id             UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    scenario_id         UUID NOT NULL REFERENCES scenarios(id) ON DELETE RESTRICT,
-    persona_id          UUID REFERENCES personas(id) ON DELETE SET NULL,
-    started_at          TIMESTAMPTZ NOT NULL DEFAULT now(),
-    last_active_at      TIMESTAMPTZ NOT NULL DEFAULT now()
+    id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    user_id         UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    scenario_id     UUID REFERENCES scenarios(id),         -- không có ON DELETE, xem LƯU Ý đầu file
+    persona_id      UUID REFERENCES personas(id),           -- không có ON DELETE, xem LƯU Ý đầu file
+    status          VARCHAR(20) DEFAULT 'in_progress',
+    started_at      TIMESTAMPTZ DEFAULT now(),
+    ended_at        TIMESTAMPTZ,                              -- thiết kế gốc gọi là "last_active_at", ý nghĩa khác
+    CONSTRAINT chk_conversation_sessions_status_valid CHECK (status IN ('in_progress', 'completed', 'expired'))
 );
 
+-- conversation_turns: cấu trúc THẬT khác hẳn thiết kế gốc (đổi tên gần như mọi
+-- cột) — transcription/response_text (thiết kế gốc) → user_transcript/
+-- ai_response_text; thêm corrected_transcript, was_error_detected,
+-- pronunciation_advice, cefr_tip, grammar_tip, ai_response_audio_url,
+-- turn_index (thứ tự lượt nói trong phiên). pronunciation_score/intent_score/
+-- politeness_score là NUMERIC(5,2) (thiết kế gốc: INTEGER 0-100 CHECK) — DB
+-- thật không có CHECK giới hạn khoảng giá trị 0-100 cho 3 cột điểm này.
 CREATE TABLE conversation_turns (
-    id                                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    session_id                          UUID NOT NULL REFERENCES conversation_sessions(id) ON DELETE CASCADE,
-    transcription                       TEXT NOT NULL,
-    response_text                       TEXT NOT NULL,
-    pronunciation_score                 INTEGER CHECK (pronunciation_score BETWEEN 0 AND 100),
-    pronunciation_assessment_failed     BOOLEAN NOT NULL DEFAULT false,
-    intent_score                        INTEGER CHECK (intent_score BETWEEN 0 AND 100),          -- đề xuất, chưa chốt rubric
-    intent_feedback                     TEXT,
-    politeness_score                    INTEGER CHECK (politeness_score BETWEEN 0 AND 100),       -- đề xuất, chưa chốt rubric
-    politeness_feedback                 TEXT,
-    stt_provider_used                   stt_provider_enum NOT NULL,
-    suggested_phrases                   JSONB NOT NULL DEFAULT '[]'::jsonb,
-    created_at                          TIMESTAMPTZ NOT NULL DEFAULT now()
+    id                                  UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    conversation_session_id             UUID NOT NULL REFERENCES conversation_sessions(id) ON DELETE CASCADE,
+    turn_index                          INTEGER NOT NULL,
+    user_audio_url                      TEXT,
+    user_transcript                     TEXT,
+    corrected_transcript                 TEXT,                -- thêm ngoài thiết kế gốc
+    was_error_detected                    BOOLEAN DEFAULT false, -- thêm ngoài thiết kế gốc
+    pronunciation_score                    NUMERIC(5,2),
+    pronunciation_advice                     TEXT,               -- thêm ngoài thiết kế gốc
+    pronunciation_assessment_failed            BOOLEAN NOT NULL DEFAULT false,
+    intent_score                                 NUMERIC(5,2),      -- đề xuất, chưa chốt rubric (mục 4 điểm 6)
+    intent_feedback                               TEXT,
+    politeness_score                                NUMERIC(5,2),   -- đề xuất, chưa chốt rubric (mục 4 điểm 6)
+    politeness_feedback                              TEXT,
+    cefr_tip                                          JSONB,          -- thêm ngoài thiết kế gốc
+    grammar_tip                                         TEXT,          -- thêm ngoài thiết kế gốc
+    ai_response_text                                     TEXT,          -- thiết kế gốc gọi là "response_text"
+    ai_response_audio_url                                 TEXT,          -- thêm ngoài thiết kế gốc
+    stt_provider_used                                       VARCHAR(20),
+    suggested_phrases                                         JSONB,
+    created_at                                                 TIMESTAMPTZ DEFAULT now()
 );
 
 CREATE TABLE slang_phrases (
-    id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    phrase_text         TEXT NOT NULL,
-    meaning             TEXT NOT NULL,
-    example_sentence    TEXT NOT NULL,
-    formality_level     formality_level_enum NOT NULL,
-    source_reference    TEXT NOT NULL,          -- tên nguồn, phục vụ trích dẫn học thuật
-    topic_tags          JSONB NOT NULL DEFAULT '[]'::jsonb,   -- đề xuất, chưa chốt (feature-speaking.md 4.1)
-    created_at          TIMESTAMPTZ NOT NULL DEFAULT now()
+    id                  UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    phrase_text         VARCHAR(150) NOT NULL,
+    meaning              TEXT NOT NULL,
+    example_sentence      TEXT,                          -- nullable trong DB thật; thiết kế gốc NOT NULL
+    formality_level        VARCHAR(20) NOT NULL DEFAULT 'neutral',
+    topic_tags              VARCHAR[],                     -- thiết kế gốc dùng JSONB
+    source_reference          VARCHAR(150) NOT NULL,        -- tên nguồn, phục vụ trích dẫn học thuật
+    CONSTRAINT ck_slang_source_not_empty CHECK (source_reference <> '')
 );
 
+-- user_phrasebook_entries: phrase_text NOT NULL trong DB thật (luôn snapshot
+-- nội dung tại thời điểm lưu, dù có slang_phrase_id hay không) — khác thiết kế
+-- gốc (nullable, chỉ bắt buộc khi slang_phrase_id NULL qua CHECK
+-- chk_phrasebook_has_content, CHECK này KHÔNG tồn tại trong DB thật).
 CREATE TABLE user_phrasebook_entries (
-    id                          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id                          UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     user_id                     UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     slang_phrase_id             UUID REFERENCES slang_phrases(id) ON DELETE SET NULL,
     conversation_turn_id        UUID REFERENCES conversation_turns(id) ON DELETE SET NULL,
-    phrase_text                 TEXT,      -- snapshot, dùng khi slang_phrase_id NULL (LLM sinh tại chỗ)
-    meaning                     TEXT,
-    example_sentence            TEXT,
-    created_at                  TIMESTAMPTZ NOT NULL DEFAULT now(),
-    CONSTRAINT chk_phrasebook_has_content CHECK (
-        slang_phrase_id IS NOT NULL OR phrase_text IS NOT NULL
-    )
+    phrase_text                 VARCHAR(150) NOT NULL,
+    meaning                      TEXT,
+    example_sentence              TEXT,
+    formality_level                 VARCHAR(20),           -- thêm ngoài thiết kế gốc
+    created_at                       TIMESTAMPTZ DEFAULT now()
 );
 
--- Định hướng mở rộng (FUT) — để trống cho tới khi nâng cấp streaming thời gian thực.
+-- realtime_conversation_metrics: định hướng mở rộng, THEO PHIÊN (conversation_
+-- session_id) trong DB thật — không phải theo từng lượt nói (conversation_
+-- turn_id) như thiết kế gốc. Cột avg_latency_ms/interruption_count/
+-- stream_status đã có sẵn (rỗng) từ trước, chờ nâng cấp streaming thật.
 CREATE TABLE realtime_conversation_metrics (
-    id                      UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    conversation_turn_id    UUID NOT NULL REFERENCES conversation_turns(id) ON DELETE CASCADE,
-    created_at              TIMESTAMPTZ NOT NULL DEFAULT now()
+    id                          UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    conversation_session_id     UUID NOT NULL REFERENCES conversation_sessions(id) ON DELETE CASCADE,
+    avg_latency_ms               INTEGER,
+    interruption_count             INTEGER DEFAULT 0,
+    stream_status                   VARCHAR(20)
 );
 
 
@@ -451,82 +496,90 @@ CREATE TABLE realtime_conversation_metrics (
 -- MODULE 0 — ADAPTIVE LEARNING ENGINE (tier: Đầy đủ)
 -- ============================================================================
 
--- quizzes: quyết định rà soát lần 3 (thiet_ke_database.md mục 9.2) — CHỈ dành
--- cho đề động do /api/adaptive/quizzes/generate sinh. Rearrange the Block
--- KHÔNG tạo dòng quizzes, ghi thẳng quiz_attempts (quiz_id = NULL).
 CREATE TABLE quizzes (
-    id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    user_id             UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    -- Các lỗi (user_errors.id) làm nguồn sinh đề; không có FK vì là mảng (Postgres không hỗ trợ FK theo phần tử).
-    generated_from_error_ids UUID[],
-    focus_error_types   JSONB,              -- mảng error_type_enum dạng text, nullable
-    -- Mỗi câu: { question_text, options[], correct_option_index, explanation, error_id, error_type }.
-    -- API chỉ trả question_text/options/error_type cho client; đáp án chỉ trả sau khi nộp bài.
-    questions           JSONB NOT NULL,
-    created_at          TIMESTAMPTZ NOT NULL DEFAULT now()
+    id                          UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    user_id                     UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    generated_from_error_ids     UUID[],           -- không có FK theo phần tử (mảng)
+    focus_error_types             JSONB,
+    questions                       JSONB NOT NULL,
+    created_at                       TIMESTAMPTZ DEFAULT now()
 );
 
+-- quiz_attempts: cột thật là attempt_type (nullable — NULL = lượt làm đề động
+-- Adaptive Engine, không có giá trị 'adaptive_dynamic' minh bạch như thiết kế
+-- gốc đề xuất; CHECK chỉ chấp nhận 'rearrange_reading'/'rearrange_writing' khi
+-- KHÁC NULL). quiz_id → quizzes ON DELETE CASCADE (khác nguyên tắc SET NULL đã
+-- công bố, xem LƯU Ý đầu file). completed_at DEFAULT now() thực chất được set
+-- ngay lúc INSERT (đóng vai trò như created_at, không phải mốc "chấm xong").
+-- KHÔNG có CHECK chk_quiz_attempts_open_form như thiết kế gốc đề xuất.
 CREATE TABLE quiz_attempts (
-    id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    quiz_id         UUID REFERENCES quizzes(id) ON DELETE CASCADE,
     user_id         UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    quiz_id         UUID REFERENCES quizzes(id) ON DELETE SET NULL,   -- chỉ set cho Adaptive Engine
-    quiz_type       quiz_type_enum NOT NULL,
-    is_open_form    BOOLEAN,            -- chỉ có ý nghĩa cho quiz_type = 'rearrange_writing'
-    answers         JSONB,              -- Adaptive quiz: mảng chỉ số đáp án đã chọn, đúng thứ tự câu hỏi
+    attempt_type    VARCHAR(30),                 -- thiết kế gốc gọi là "quiz_type", KHÔNG NULL
+    is_open_form    BOOLEAN,
+    answers         JSONB,
+    payload         JSONB,                         -- thêm ngoài thiết kế gốc
     score           NUMERIC(5,2),
-    created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
-    CONSTRAINT chk_quiz_attempts_open_form CHECK (
-        (quiz_type = 'rearrange_writing') OR (is_open_form IS NULL)
+    completed_at    TIMESTAMPTZ DEFAULT now(),       -- xem ghi chú trên — thực chất là "created_at"
+    CONSTRAINT chk_quiz_attempts_attempt_type_valid CHECK (
+        attempt_type IS NULL OR attempt_type IN ('rearrange_reading', 'rearrange_writing')
     )
 );
 
+-- user_errors.error_type: CHECK trong DB thật ĐÃ CHỐT đúng 9 giá trị đề xuất ở
+-- api-spec.md mục 9 — về mặt vận hành coi như đã "chốt chính thức" (chạy thật
+-- trong production DB), nhưng lumina_context.md mục 4 điểm 1 vẫn liệt kê là
+-- "cần xác nhận lại" ở tầng tài liệu/học thuật — 2 việc khác nhau, giữ nguyên
+-- cả hai ghi chú cho tới khi người dùng xác nhận chính thức bằng văn bản.
 CREATE TABLE user_errors (
-    id                          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id                          UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     user_id                     UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     quiz_attempt_id             UUID REFERENCES quiz_attempts(id) ON DELETE SET NULL,
-    error_type                  error_type_enum NOT NULL,
+    error_type                  VARCHAR(30) NOT NULL,
     spaced_repetition_level     INTEGER NOT NULL DEFAULT 0,
-    -- Nội dung lỗi cụ thể để sinh câu hỏi luyện đúng lỗi:
-    -- { source, original_text?, corrected_text?, explanation? }; NULL với lỗi cũ chỉ có error_type.
-    detail                      JSONB,
-    created_at                  TIMESTAMPTZ NOT NULL DEFAULT now()
+    detail                      JSONB,          -- { source, original_text?, corrected_text?, explanation? }
+    created_at                  TIMESTAMPTZ DEFAULT now(),
+    CONSTRAINT chk_user_errors_error_type_valid CHECK (error_type IN (
+        'grammar', 'vocabulary', 'spelling', 'pronunciation', 'listening_comprehension',
+        'reading_comprehension', 'writing_coherence', 'communicative_intent', 'politeness'
+    ))
 );
 
--- review_priority_queue.source_id là tham chiếu đa hình (vocab_reviews.id
--- hoặc user_errors.id tùy source_type) — KHÔNG enforce bằng FK cứng trong
--- Postgres thuần (cần 2 FK nullable riêng hoặc kiểm tra ở tầng ứng dụng).
--- Giữ nguyên thiết kế đa hình đơn giản theo đúng mô tả gốc, ghi chú rõ đây
--- là giới hạn đã biết, không phải thiếu sót.
--- LƯU Ý (khác biệt với DB thật, xem ../schema.sql): bảng thật dùng item_type
--- VARCHAR(20) ('vocab' | 'error'), item_id, priority_score NUMERIC(6,2) và
--- last_calculated_at thay cho source_type/source_id/priority_score(6,3)/created_at;
--- backend tính lại toàn bộ hàng đợi mỗi lần đọc (priority_queue_service.py).
+-- review_priority_queue: item_type/item_id/last_calculated_at thay cho
+-- source_type/source_id/created_at của thiết kế gốc — cùng bản chất tham
+-- chiếu đa hình (KHÔNG có FK cứng, xem GHI CHÚ CUỐI FILE), backend tính lại
+-- toàn bộ hàng đợi mỗi lần đọc (priority_queue_service.py), không phải bảng
+-- lưu trữ lâu dài.
 CREATE TABLE review_priority_queue (
-    id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     user_id         UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    source_type     review_source_type_enum NOT NULL,
-    source_id       UUID NOT NULL,          -- xem ghi chú trên: không có FK cứng
-    priority_score  NUMERIC(6,3) NOT NULL,
-    created_at      TIMESTAMPTZ NOT NULL DEFAULT now()
+    item_type       VARCHAR(20) NOT NULL,
+    item_id         UUID NOT NULL,
+    priority_score  NUMERIC(6,2) NOT NULL,
+    last_calculated_at TIMESTAMPTZ DEFAULT now(),
+    CONSTRAINT chk_review_priority_item_type_valid CHECK (item_type IN ('vocab', 'error'))
 );
 
+-- streaks: user_id CHÍNH LÀ khóa chính (không có cột id riêng như thiết kế
+-- gốc) — quan hệ 1-1 với users được enforce trực tiếp bằng PK, không cần UNIQUE.
 CREATE TABLE streaks (
-    id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    user_id             UUID NOT NULL UNIQUE REFERENCES users(id) ON DELETE CASCADE,
-    current_streak      INTEGER NOT NULL DEFAULT 0,
-    longest_streak      INTEGER NOT NULL DEFAULT 0,
-    last_active_date    DATE,
-    total_xp            INTEGER NOT NULL DEFAULT 0   -- XP tích luỹ (Gamification, migration 20260920_0012)
+    user_id             UUID PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+    current_streak      INTEGER DEFAULT 0,
+    longest_streak       INTEGER DEFAULT 0,
+    last_active_date      DATE,
+    total_xp                INTEGER DEFAULT 0        -- XP tích luỹ (Gamification, migration 20260920_0012)
 );
 
 CREATE TABLE skill_progress (
-    id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id          UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     user_id     UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    skill       skill_enum NOT NULL,           -- DB thật: skill_name VARCHAR(30) + CHECK 4 kỹ năng (migration 0016)
-    cefr_level  cefr_level_enum,               -- chỉ writing có giá trị (LLM ước lượng)
-    score       NUMERIC(5,2),                  -- trung bình động 0-100 (gamification_service.record_skill_score)
-    updated_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
-    UNIQUE (user_id, skill)
+    skill_name  VARCHAR(30) NOT NULL,          -- thiết kế gốc dùng skill_enum
+    cefr_level  VARCHAR(20),                    -- chỉ writing có giá trị (LLM ước lượng)
+    score       NUMERIC(5,2),                    -- trung bình động 0-100 (gamification_service.record_skill_score)
+    updated_at  TIMESTAMPTZ DEFAULT now(),          -- có trigger trg_skill_progress_updated_at
+    UNIQUE (user_id, skill_name),
+    CONSTRAINT chk_skill_progress_skill_valid CHECK (skill_name IN ('reading', 'listening', 'writing', 'speaking'))
 );
 
 
@@ -535,22 +588,18 @@ CREATE TABLE skill_progress (
 -- ============================================================================
 
 CREATE TABLE refresh_tokens (
-    id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     user_id         UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    token_hash      TEXT NOT NULL UNIQUE,
-    -- Giải quyết điểm mở #13 (phạm vi token Extension): quyết định — token
-    -- client_type='extension' CHỈ được phép gọi /api/extension/* +
-    -- /api/reading/lookup + /api/vocab (không gọi được các route web khác).
-    -- Đây là chính sách TĨNH (giống nhau cho mọi token extension), nên KHÔNG
-    -- cần thêm cột riêng ở đây — enforce bằng middleware đọc client_type và
-    -- so với allow-list route cố định (không phải logic thuộc tầng DB).
-    -- TODO (ngoài phạm vi DB): viết middleware kiểm tra scope này trước khi
-    -- extension đi vào code thật (auth dependency trong FastAPI, áp dụng
-    -- cho mọi router ngoài allow-list).
-    client_type     client_type_enum NOT NULL DEFAULT 'web',
+    token_hash      VARCHAR(255) NOT NULL UNIQUE,     -- thiết kế gốc dùng TEXT
+    is_revoked      BOOLEAN DEFAULT false,              -- thiết kế gốc gọi là "revoked"
+    -- Phạm vi token Extension (điểm mở #13, đã chốt): client_type='extension'
+    -- CHỈ được phép gọi /api/extension/* + /api/reading/lookup + /api/vocab.
+    -- Chính sách TĨNH, enforce ở middleware (app/core/extension_scope.py),
+    -- không phải ở DB.
+    client_type     VARCHAR(20) NOT NULL DEFAULT 'web',
     expires_at      TIMESTAMPTZ NOT NULL,
-    revoked         BOOLEAN NOT NULL DEFAULT false,
-    created_at      TIMESTAMPTZ NOT NULL DEFAULT now()
+    created_at      TIMESTAMPTZ DEFAULT now(),
+    CONSTRAINT chk_refresh_tokens_client_type CHECK (client_type IN ('web', 'extension'))
 );
 
 
@@ -558,159 +607,185 @@ CREATE TABLE refresh_tokens (
 -- MODULE 5 — MOVIE DELIVERY CONTEXT (tier: Thử nghiệm giới hạn + Định hướng mở rộng)
 -- ============================================================================
 
+-- movie_context_tts_fallback: persona_id NULLABLE trong DB thật (thiết kế gốc:
+-- NOT NULL + ON DELETE RESTRICT) — cache dùng chung (câu, persona), tra bằng
+-- IS NOT DISTINCT FROM vì UNIQUE constraint thường không chặn được persona
+-- NULL trùng nhau.
 CREATE TABLE movie_context_tts_fallback (
-    id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     phrase_text     TEXT NOT NULL,
+    persona_id      UUID REFERENCES personas(id),   -- không có ON DELETE, xem LƯU Ý đầu file
     audio_url       TEXT NOT NULL,
-    persona_id      UUID NOT NULL REFERENCES personas(id) ON DELETE RESTRICT,
-    created_at      TIMESTAMPTZ NOT NULL DEFAULT now()
+    created_at      TIMESTAMPTZ DEFAULT now()
 );
 
--- Định hướng mở rộng (FUT) — video_sources/video_subtitle_index CHƯA build
--- trong phạm vi khóa luận. Được tạo sẵn ở đây (giải quyết điểm mở #12) để
--- movie_context_matches.source_type = 'real_video' có FK hợp lệ ngay từ đầu,
--- tránh phải ALTER thêm giá trị enum/FK khi làm nhánh video thật sau này.
--- KHÔNG có nghĩa là nhánh này được implement — chỉ là chuẩn bị sẵn schema.
+-- video_sources/video_subtitle_index: nhánh "tìm phụ đề trong kho video demo"
+-- (lumina_context.md mục 3.14, 2026-09-26/27) — không còn thuần là "Định
+-- hướng mở rộng chưa build" như thiết kế gốc giả định, đã có dữ liệu thật
+-- (3 cảnh mô phỏng + 2 phim thật public domain/CC BY, tổng ~330 câu đã đánh
+-- chỉ mục). Đổi tên cột: url→video_url, phrase→phrase_text, timestamp_ms
+-- (1 điểm mốc) → start_time_ms/end_time_ms (khoảng thời gian, đúng với việc
+-- cần nhảy tới TRƯỚC dòng khớp 2,5 giây và tô màu đúng khoảng phụ đề).
 CREATE TABLE video_sources (
-    id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    title       TEXT NOT NULL,
-    url         TEXT NOT NULL,
-    created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+    id                  UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    title               VARCHAR(255),
+    platform            VARCHAR(30),                    -- thêm ngoài thiết kế gốc (vd 'film', 'demo')
+    video_url           TEXT NOT NULL,
+    subtitle_language   VARCHAR(10) DEFAULT 'en'
 );
 
 CREATE TABLE video_subtitle_index (
-    id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id                  UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     video_source_id     UUID NOT NULL REFERENCES video_sources(id) ON DELETE CASCADE,
-    phrase              TEXT NOT NULL,
-    timestamp_ms        INTEGER NOT NULL
+    phrase_text         TEXT NOT NULL,
+    start_time_ms        INTEGER NOT NULL,
+    end_time_ms            INTEGER NOT NULL
 );
 
+-- movie_context_matches: có thêm user_id trong DB thật — mỗi lượt tìm kiếm
+-- được gắn với user (lịch sử tìm kiếm cá nhân), thiết kế gốc coi bảng này là
+-- kết quả match dùng chung, không gắn user. Nguồn cache dùng chung thật sự chỉ
+-- còn ở movie_context_tts_fallback/video_subtitle_index (2 bảng phía trên).
+-- search_phrase thay cho "phrase" của thiết kế gốc.
 CREATE TABLE movie_context_matches (
-    id                          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    phrase                      TEXT NOT NULL,
-    source_type                 movie_context_source_type_enum NOT NULL,
-    tts_fallback_id             UUID REFERENCES movie_context_tts_fallback(id) ON DELETE CASCADE,
-    video_subtitle_index_id     UUID REFERENCES video_subtitle_index(id) ON DELETE CASCADE,
-    is_saved                    BOOLEAN NOT NULL DEFAULT false,
-    created_at                  TIMESTAMPTZ NOT NULL DEFAULT now(),
-    CONSTRAINT chk_movie_context_matches_source_xor CHECK (
-        (source_type = 'tts_fallback' AND tts_fallback_id IS NOT NULL AND video_subtitle_index_id IS NULL)
-        OR
+    id                          UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    user_id                     UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    search_phrase                VARCHAR(255) NOT NULL,
+    source_type                    VARCHAR(20) NOT NULL,
+    video_subtitle_index_id          UUID REFERENCES video_subtitle_index(id),  -- không có ON DELETE, xem LƯU Ý đầu file
+    tts_fallback_id                    UUID REFERENCES movie_context_tts_fallback(id),  -- không có ON DELETE, xem LƯU Ý đầu file
+    is_saved                             BOOLEAN DEFAULT false,
+    created_at                             TIMESTAMPTZ DEFAULT now(),
+    CONSTRAINT chk_exactly_one_source CHECK (
         (source_type = 'real_video'   AND video_subtitle_index_id IS NOT NULL AND tts_fallback_id IS NULL)
+        OR
+        (source_type = 'tts_fallback' AND tts_fallback_id IS NOT NULL AND video_subtitle_index_id IS NULL)
     )
 );
 
 
 -- ============================================================================
--- INDEXES
+-- INDEXES (tên index đúng như trong DB thật — khác quy ước idx_<table>_<col>
+-- đầy đủ mà thiết kế gốc dùng; nhiều index rút gọn tên bảng, vd idx_chunks_*
+-- cho document_chunks, idx_turns_* cho conversation_turns)
 -- ============================================================================
 
--- FK lookups (Postgres không tự tạo index cho FK)
-CREATE INDEX idx_notebook_folders_user_id ON notebook_folders(user_id);
-CREATE INDEX idx_documents_user_id ON documents(user_id);
-CREATE INDEX idx_documents_folder_id ON documents(folder_id);
-CREATE INDEX idx_documents_tags ON documents USING GIN (tags);
-CREATE INDEX idx_document_chunks_document_id ON document_chunks(document_id);
--- HNSW: không cần tinh chỉnh list count như ivfflat, phù hợp quy mô khóa luận
-CREATE INDEX idx_document_chunks_embedding ON document_chunks USING hnsw (embedding vector_cosine_ops);
-CREATE INDEX idx_document_chunks_embedding_local ON document_chunks USING hnsw (embedding_local vector_cosine_ops);
-CREATE INDEX idx_generated_passages_user_id ON generated_passages(user_id);
+CREATE INDEX idx_notebook_folders_user ON notebook_folders(user_id);
+CREATE INDEX idx_documents_user ON documents(user_id);
+CREATE INDEX idx_documents_folder ON documents(folder_id);
+CREATE INDEX idx_chunks_document ON document_chunks(document_id);
+CREATE INDEX idx_chunks_embedding_hnsw ON document_chunks USING hnsw (embedding vector_cosine_ops);
+CREATE INDEX idx_chunks_embedding_local_hnsw ON document_chunks USING hnsw (embedding_local vector_cosine_ops);
+CREATE INDEX idx_generated_passages_user ON generated_passages(user_id);
+CREATE INDEX idx_generated_passages_source_document ON generated_passages(source_document_id);
 
-CREATE INDEX idx_reading_sessions_user_id ON reading_sessions(user_id);
-CREATE INDEX idx_reading_sessions_document_id ON reading_sessions(document_id);
-CREATE INDEX idx_reading_sessions_generated_passage_id ON reading_sessions(generated_passage_id);
-CREATE INDEX idx_reading_answers_session_id ON reading_answers(session_id);
-CREATE INDEX idx_reading_answers_source_chunk_id ON reading_answers(source_chunk_id);
+CREATE INDEX idx_reading_sessions_user ON reading_sessions(user_id);
+CREATE INDEX idx_reading_sessions_document ON reading_sessions(document_id);
+CREATE INDEX idx_reading_sessions_passage ON reading_sessions(generated_passage_id);
+CREATE INDEX idx_reading_answers_session ON reading_answers(reading_session_id);
+CREATE INDEX idx_reading_answers_source_chunk ON reading_answers(source_chunk_id);
 
-CREATE UNIQUE INDEX uq_vocab_items_user_term ON vocab_items(user_id, lower(term));  -- migration 0016; API trả 409
-CREATE INDEX idx_vocab_items_user_id ON vocab_items(user_id);
-CREATE INDEX idx_vocab_items_document_id ON vocab_items(document_id);
-CREATE INDEX idx_vocab_reviews_next_review_at ON vocab_reviews(next_review_at);
-CREATE INDEX idx_contextual_guess_attempts_user_id ON contextual_guess_attempts(user_id);
-CREATE INDEX idx_contextual_guess_attempts_vocab_item_id ON contextual_guess_attempts(vocab_item_id);
-CREATE INDEX idx_custom_stories_user_id ON custom_stories(user_id);
+CREATE UNIQUE INDEX uq_vocab_items_user_term ON vocab_items(user_id, lower(term));  -- API trả 409 khi trùng
+CREATE INDEX idx_vocab_user ON vocab_items(user_id);
+CREATE INDEX idx_vocab_document ON vocab_items(document_id);
+CREATE INDEX idx_vocab_reviews_next ON vocab_reviews(next_review_at);
+CREATE INDEX idx_contextual_guess_user ON contextual_guess_attempts(user_id);
+CREATE INDEX idx_contextual_guess_vocab_item ON contextual_guess_attempts(vocab_item_id);
+CREATE INDEX idx_custom_stories_user ON custom_stories(user_id);
 
-CREATE INDEX idx_podcasts_document_id ON podcasts(document_id);
-CREATE INDEX idx_podcasts_persona_id ON podcasts(persona_id);
-CREATE INDEX idx_transcript_segments_podcast_id ON transcript_segments(podcast_id);
-CREATE INDEX idx_dictation_attempts_podcast_id ON dictation_attempts(podcast_id);
-CREATE INDEX idx_dictation_attempts_user_id ON dictation_attempts(user_id);
+CREATE INDEX idx_podcasts_document ON podcasts(document_id);
+CREATE INDEX idx_transcript_podcast ON transcript_segments(podcast_id);
+CREATE UNIQUE INDEX uq_transcript_segments_podcast_word ON transcript_segments(podcast_id, word_index);
+CREATE INDEX idx_dictation_attempts_podcast ON dictation_attempts(podcast_id);
+CREATE INDEX idx_dictation_attempts_user ON dictation_attempts(user_id);
 
-CREATE INDEX idx_writing_submissions_user_id ON writing_submissions(user_id);
-CREATE INDEX idx_writing_submissions_document_id ON writing_submissions(document_id);
-CREATE INDEX idx_writing_insights_submission_id ON writing_insights(submission_id);
-CREATE INDEX idx_rephrase_requests_submission_id ON rephrase_requests(submission_id);
+CREATE INDEX idx_notebook_chat_messages_document ON notebook_chat_messages(document_id, created_at);
 
-CREATE INDEX idx_conversation_sessions_user_id ON conversation_sessions(user_id);
-CREATE INDEX idx_conversation_sessions_scenario_id ON conversation_sessions(scenario_id);
-CREATE INDEX idx_conversation_turns_session_id ON conversation_turns(session_id);
-CREATE INDEX idx_user_phrasebook_entries_user_id ON user_phrasebook_entries(user_id);
-CREATE INDEX idx_user_phrasebook_entries_slang_phrase_id ON user_phrasebook_entries(slang_phrase_id);
-CREATE INDEX idx_user_phrasebook_entries_conversation_turn_id ON user_phrasebook_entries(conversation_turn_id);
+CREATE INDEX idx_writing_submissions_user ON writing_submissions(user_id);
+CREATE INDEX idx_writing_submissions_document ON writing_submissions(document_id);
+CREATE INDEX idx_writing_insights_submission ON writing_insights(writing_submission_id);
+CREATE INDEX idx_rephrase_requests_submission ON rephrase_requests(writing_submission_id);
 
-CREATE INDEX idx_quizzes_user_id ON quizzes(user_id);
-CREATE INDEX idx_quiz_attempts_user_id_created_at ON quiz_attempts(user_id, created_at DESC);
-CREATE INDEX idx_quiz_attempts_quiz_id ON quiz_attempts(quiz_id);
+CREATE INDEX idx_conversation_sessions_user ON conversation_sessions(user_id);
+CREATE INDEX idx_turns_session ON conversation_turns(conversation_session_id);
+CREATE UNIQUE INDEX uq_conversation_turns_session_turn ON conversation_turns(conversation_session_id, turn_index);
+-- (3 unique index dưới cùng nhóm: tạo bằng CREATE UNIQUE INDEX riêng trong DB
+-- thật, không phải UNIQUE inline trong CREATE TABLE — giữ đúng cách này để tên
+-- index khớp 100% với DB thật khi đối chiếu bằng psql \d.)
+CREATE INDEX idx_phrasebook_user ON user_phrasebook_entries(user_id);
+CREATE INDEX idx_phrasebook_slang_phrase ON user_phrasebook_entries(slang_phrase_id);
+CREATE INDEX idx_phrasebook_conversation_turn ON user_phrasebook_entries(conversation_turn_id);
+
+CREATE INDEX idx_quizzes_user ON quizzes(user_id);
+CREATE INDEX idx_quiz_attempts_user ON quiz_attempts(user_id);
+CREATE INDEX idx_quiz_attempts_quiz ON quiz_attempts(quiz_id);
 CREATE INDEX idx_user_errors_user_id_error_type ON user_errors(user_id, error_type);
-CREATE INDEX idx_user_errors_quiz_attempt_id ON user_errors(quiz_attempt_id);
-CREATE INDEX idx_review_priority_queue_user_id ON review_priority_queue(user_id, priority_score DESC);
-CREATE INDEX idx_skill_progress_user_id ON skill_progress(user_id);
+CREATE INDEX idx_user_errors_quiz_attempt ON user_errors(quiz_attempt_id);
+CREATE INDEX idx_priority_user ON review_priority_queue(user_id, priority_score DESC);
 
-CREATE INDEX idx_refresh_tokens_user_id_client_type ON refresh_tokens(user_id, client_type);
+CREATE INDEX idx_refresh_tokens_user ON refresh_tokens(user_id);
 
-CREATE INDEX idx_movie_context_matches_phrase ON movie_context_matches(phrase);
-CREATE INDEX idx_video_subtitle_index_video_source_id ON video_subtitle_index(video_source_id);
-CREATE INDEX idx_video_subtitle_index_phrase ON video_subtitle_index(phrase);
+CREATE UNIQUE INDEX uq_tts_fallback_phrase_persona ON movie_context_tts_fallback(phrase_text, persona_id);
+CREATE INDEX idx_movie_matches_user ON movie_context_matches(user_id, is_saved);
+-- ĐÃ XÁC MINH (2026-09-27, đọc trực tiếp movie_context_service.py): index này
+-- dùng cấu hình 'english' nhưng service._search_real_video() query bằng
+-- to_tsvector('simple', ...) (đổi qua 'simple' để không mất idiom nhiều
+-- stopword như "hang out"/"you can say that again" — 'english' bỏ mất các từ
+-- đó). Biểu thức không khớp nên Postgres KHÔNG tận dụng được index GIN này,
+-- luôn quét tuần tự — đây là đánh đổi CÓ CHỦ ĐÍCH, tác giả đã tự ghi chú
+-- (`ponytail:`) là chấp nhận được ở quy mô vài chục dòng phụ đề hiện tại,
+-- hướng nâng cấp đã ghi sẵn: thêm 1 index GIN theo 'simple' khi kho video lớn
+-- lên. Giữ index 'english' này lại làm tài liệu lịch sử (không xoá), không
+-- phải lỗi cần sửa.
+CREATE INDEX idx_subtitle_phrase ON video_subtitle_index USING gin (to_tsvector('english', phrase_text));
 
 
 -- ============================================================================
--- TRIGGERS
+-- TRIGGERS (DB thật CHỈ có 2 trigger — KHÔNG có trg_vocab_reviews_updated_at
+-- (vocab_reviews không có cột updated_at, xem bảng ở trên) và KHÔNG có trigger
+-- ghi user_errors('writing_coherence') như đề xuất ban đầu — logic đó đã
+-- chuyển hẳn vào writing_service.submit_essay, xem ghi chú tại writing_submissions.)
 -- ============================================================================
 
--- vocab_reviews.updated_at — cập nhật tự động mỗi lần review (SM-2).
-CREATE OR REPLACE FUNCTION fn_set_updated_at()
-RETURNS TRIGGER AS $$
+CREATE FUNCTION set_updated_at() RETURNS TRIGGER AS $$
 BEGIN
     NEW.updated_at = now();
     RETURN NEW;
 END;
 $$ LANGUAGE plpgsql;
 
-CREATE TRIGGER trg_vocab_reviews_updated_at
-    BEFORE UPDATE ON vocab_reviews
-    FOR EACH ROW
-    EXECUTE FUNCTION fn_set_updated_at();
-
 CREATE TRIGGER trg_skill_progress_updated_at
     BEFORE UPDATE ON skill_progress
     FOR EACH ROW
-    EXECUTE FUNCTION fn_set_updated_at();
+    EXECUTE FUNCTION set_updated_at();
 
--- Giải quyết điểm mở #9 (writing_coherence "mồ côi"): khi 1 bài
--- extended_topic/free_topic vừa được chấm xong (completed_at chuyển từ NULL
--- sang có giá trị) và điểm Coherence & Cohesion trong rubric_scores dưới
--- ngưỡng, tự động ghi 1 dòng user_errors(error_type='writing_coherence').
--- Ngưỡng đề xuất: < 60/100 — cùng logic phân dải điểm đã dùng cho
--- intent_score/politeness_score ở Speaking (feature-speaking.md mục 3.1:
--- 60-89 = "về cơ bản phù hợp", dưới 60 bắt đầu coi là có vấn đề rõ rệt) —
--- ĐÂY LÀ NGƯỠNG ĐỀ XUẤT, cần xác nhận lại giống các đề xuất khác của module
--- Adaptive Learning Engine trước khi chạy migration thật.
--- ĐÃ BỎ trigger (2026-09-24): writing_service.submit_essay ghi user_errors('writing_coherence')
--- bằng adaptive_service.record_error, kèm detail {source, submission_id, coherence_cohesion}.
+CREATE TRIGGER trg_users_updated_at
+    BEFORE UPDATE ON users
+    FOR EACH ROW
+    EXECUTE FUNCTION set_updated_at();
 
 
 -- ============================================================================
 -- GHI CHÚ CUỐI FILE
 -- ============================================================================
--- 1. custom_stories.vocab_item_ids và quizzes.focus_error_types là JSONB chứa
---    danh sách id/enum, KHÔNG enforce bằng FK — giới hạn đã biết của thiết kế
---    gốc (mảng trong 1 cột), chấp nhận được ở quy mô khóa luận. Nếu cần toàn
---    vẹn tham chiếu chặt hơn, chuyển thành bảng nối (junction table) — ngoài
---    phạm vi rà soát lần này.
--- 2. review_priority_queue.source_id là tham chiếu đa hình, không có FK cứng
---    — xem ghi chú tại chỗ định nghĩa bảng.
--- 3. error_type_enum, quiz_type_enum vẫn ở trạng thái "đề xuất, chưa chốt
---    chính thức" theo lumina_context.md mục 4 — dùng tạm trong file này vì
---    cần kiểu cụ thể để viết được DDL; đừng chạy migration thật cho đến khi
---    xác nhận lại.
+-- 1. custom_stories.vocab_item_ids và quizzes.focus_error_types/
+--    generated_from_error_ids là mảng (UUID[]/JSONB), KHÔNG enforce FK theo
+--    từng phần tử — giới hạn đã biết của thiết kế gốc, chấp nhận được ở quy mô
+--    khóa luận. Nếu cần toàn vẹn tham chiếu chặt hơn, chuyển thành bảng nối
+--    (junction table) — ngoài phạm vi rà soát lần này.
+-- 2. review_priority_queue.item_id là tham chiếu đa hình (vocab_reviews.id
+--    hoặc user_errors.id tùy item_type), không có FK cứng — bảng này thực ra
+--    KHÔNG lưu trữ lâu dài, priority_queue_service.py tính lại toàn bộ mỗi lần
+--    đọc; xem ghi chú tại chỗ định nghĩa bảng.
+-- 3. error_type: CHECK trong DB thật đã chốt đúng 9 giá trị đề xuất — coi như
+--    "chốt vận hành", nhưng lumina_context.md mục 4 điểm 1 vẫn cần 1 xác nhận
+--    chính thức bằng văn bản (khóa luận) trước khi coi là chốt hoàn toàn.
+--    quiz_attempts.attempt_type (2 giá trị, không có 'adaptive_dynamic' minh
+--    bạch — NULL đóng vai trò ngầm định cho Adaptive Engine) vẫn ở trạng thái
+--    "đề xuất trong thiết kế gốc, chưa từng thêm giá trị thứ 3 vào CHECK thật".
+-- 4. Native Postgres ENUM (CREATE TYPE ... AS ENUM) KHÔNG được dùng ở đâu
+--    trong DB thật — mọi cột "enum" đều là VARCHAR(n) + CHECK. Quyết định này
+--    chưa từng được ghi nhận rõ ràng ở nơi nào khác trước bản đối chiếu này;
+--    nên coi là quyết định kiến trúc đã-thành-thực-tế (de facto), tương tự
+--    trường hợp gọi thẳng google-generativeai thay vì qua LangChain.
 -- ============================================================================

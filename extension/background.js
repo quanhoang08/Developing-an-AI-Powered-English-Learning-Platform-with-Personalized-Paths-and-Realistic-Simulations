@@ -1,6 +1,9 @@
 // Service worker: tra từ (không cần đăng nhập), đăng nhập backend, lưu từ vựng, menu chuột phải.
 // Mọi request cross-origin đều đi qua đây (host_permissions) nên không vướng CORS của trang.
-const DEFAULT_API_BASE_URL = "http://localhost:8000";
+// 127.0.0.1 thay vì localhost: localhost ra ::1 (IPv6) trước và bị Docker Desktop/WSL làm treo request.
+const DEFAULT_API_BASE_URL = "http://127.0.0.1:8000";
+// URL đã lưu từ trước có thể vẫn là localhost → đổi sang 127.0.0.1 khi đọc.
+const normalizeBaseUrl = (url) => url.replace(/\/+$/, "").replace("//localhost:", "//127.0.0.1:");
 const MENU_ID = "lumina-add-vocab";
 const DICT_URL = "https://api.dictionaryapi.dev/api/v2/entries/en/";
 const TRANSLATE_URL = "https://api.mymemory.translated.net/get";
@@ -11,7 +14,7 @@ const lookupCache = new Map();
 async function getConfig() {
   const data = await chrome.storage.local.get(["apiBaseUrl", "accessToken", "refreshToken", "email"]);
   return {
-    apiBaseUrl: (data.apiBaseUrl || DEFAULT_API_BASE_URL).replace(/\/+$/, ""),
+    apiBaseUrl: normalizeBaseUrl(data.apiBaseUrl || DEFAULT_API_BASE_URL),
     accessToken: data.accessToken || null,
     refreshToken: data.refreshToken || null,
     email: data.email || null,
@@ -192,7 +195,7 @@ async function readError(response) {
 }
 
 async function login(email, password, apiBaseUrl) {
-  const base = (apiBaseUrl || DEFAULT_API_BASE_URL).replace(/\/+$/, "");
+  const base = normalizeBaseUrl(apiBaseUrl || DEFAULT_API_BASE_URL);
   const response = await fetch(`${base}/api/auth/login`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },

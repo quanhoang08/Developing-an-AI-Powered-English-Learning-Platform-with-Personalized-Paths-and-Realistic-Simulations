@@ -14,7 +14,7 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import get_settings
-from app.models.gamification import SkillProgress, Streak
+from app.models.gamification import SkillProgress, Streak, StudyTimeLog
 
 
 # XP mỗi hoạt động hoàn thành. Số điểm là quy ước của đề tài (spec chưa quy định), đặt cao hơn
@@ -111,13 +111,21 @@ async def award_activity(
 	now: datetime | None = None,
 	score: float | None = None,
 	cefr_level: str | None = None,
+	duration_seconds: int | None = None,
 ) -> None:
 	"""Cộng XP và cập nhật streak; nếu hoạt động thuộc 1 kỹ năng và có `score` (thang 0-100) thì
 	cập nhật luôn skill_progress. KHÔNG commit — gọi cùng transaction với việc lưu kết quả
-	hoạt động để hoặc cả hai cùng được ghi, hoặc cả hai cùng bị huỷ."""
+	hoạt động để hoặc cả hai cùng được ghi, hoặc cả hai cùng bị huỷ.
+
+	`duration_seconds`: CHỈ có giá trị khi client đang bật "chế độ bấm giờ" (users.timer_mode_enabled)
+	và tự đo được — không tự suy diễn/mặc định ở đây. Ghi 1 dòng study_time_log khi > 0 để tính
+	"phút học trong tuần" theo kỹ năng (GET /api/activity/weekly-summary).
+	"""
 	xp = XP_BY_ACTIVITY[activity]
 	if score is not None and activity in SKILL_BY_ACTIVITY:
 		await record_skill_score(db, user_id, SKILL_BY_ACTIVITY[activity], score, cefr_level)
+	if duration_seconds and duration_seconds > 0 and activity in SKILL_BY_ACTIVITY:
+		db.add(StudyTimeLog(user_id=user_id, skill=SKILL_BY_ACTIVITY[activity], duration_seconds=duration_seconds))
 	today = study_today(now)
 
 	# Tạo dòng nếu user chưa có (ON CONFLICT tránh lỗi khi 2 request đầu tiên chạy song song),
@@ -157,4 +165,29 @@ async def get_summary(db: AsyncSession, user_id: uuid.UUID, now: datetime | None
 		"xp_into_level": xp_into_level,
 		"xp_for_next_level": xp_for_next_level,
 		"recent_active_dates": recent_dates,
+	}
+
+
+async def get_weekly_activity(db: AsyncSession, user_id: uuid.UUID, now: datetime | None = None) -> dict:
+	"""Tổng phút học 7 ngày gần nhất theo kỹ năng, cho GET /api/activity/weekly-summary.
+
+	Chỉ tổng hợp study_time_log — bảng này chỉ có dòng khi user đã bật timer mode lúc hoạt động
+	đó diễn ra, nên user chưa từng bật timer mode sẽ luôn ra toàn số 0 (không phải lỗi thiếu dữ
+	liệu, đúng ý nghĩa "chưa đo gì cả").
+	"""
+	since = (now or datetime.now(timezone.utc)) - timedelta(days=7)
+	rows = (
+		await db.execute(
+			select(StudyTimeLog.skill, func.sum(StudyTimeLog.duration_seconds))
+			.where(StudyTimeLog.user_id == user_id, StudyTimeLog.created_at >= since)
+			.group_by(StudyTimeLog.skill)
+		)
+	).all()
+	seconds_by_skill = {skill: 0 for skill in SKILL_BY_ACTIVITY.values()}
+	for skill, total_seconds in rows:
+		seconds_by_skill[skill] = int(total_seconds)
+	minutes_by_skill = {skill: round(seconds / 60) for skill, seconds in seconds_by_skill.items()}
+	return {
+		"minutes_by_skill": minutes_by_skill,
+		"total_minutes": sum(minutes_by_skill.values()),
 	}

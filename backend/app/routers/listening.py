@@ -102,7 +102,7 @@ async def submit_dictation(
 ) -> DictationSubmitResponse:
 	try:
 		attempt = await submit_dictation_attempt(
-			db, current_user.id, attempt_id, request.transcribed_text
+			db, current_user.id, attempt_id, request.transcribed_text, request.duration_seconds
 		)
 	except ValueError as error:
 		_raise_business_error(error)

@@ -49,3 +49,26 @@ class SkillProgress(Base):
 	updated_at: Mapped[datetime] = mapped_column(
 		DateTime(timezone=True), nullable=True, server_default=text("now()")
 	)
+
+
+class StudyTimeLog(Base):
+	"""1 dòng / 1 hoạt động hoàn thành trong lúc user bật timer mode (migration 20260927_0018).
+
+	Ghi bởi gamification_service.award_activity cùng transaction với XP/streak, chỉ khi caller
+	truyền duration_seconds (tức là chỉ khi frontend có bật bấm giờ) — không có dòng nào được suy
+	diễn/mặc định. Dùng để tính "phút học trong tuần" theo kỹ năng (GET /api/activity/weekly-summary).
+	"""
+
+	__tablename__ = "study_time_log"
+
+	id: Mapped[uuid.UUID] = mapped_column(
+		UUID(as_uuid=True), primary_key=True, server_default=text("uuid_generate_v4()")
+	)
+	user_id: Mapped[uuid.UUID] = mapped_column(
+		UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE")
+	)
+	skill: Mapped[str] = mapped_column(String(20))
+	duration_seconds: Mapped[int] = mapped_column(Integer)
+	created_at: Mapped[datetime] = mapped_column(
+		DateTime(timezone=True), nullable=True, server_default=text("now()")
+	)

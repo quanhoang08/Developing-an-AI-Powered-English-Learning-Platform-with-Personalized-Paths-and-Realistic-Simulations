@@ -149,7 +149,11 @@ async def get_owned_attempt(db: AsyncSession, user_id: uuid.UUID, attempt_id: uu
 
 
 async def submit_dictation_attempt(
-	db: AsyncSession, user_id: uuid.UUID, attempt_id: uuid.UUID, transcribed_text: str
+	db: AsyncSession,
+	user_id: uuid.UUID,
+	attempt_id: uuid.UUID,
+	transcribed_text: str,
+	duration_seconds: int | None = None,
 ) -> DictationAttempt:
 	"""Chấm 1 lượt Dictation, ghi user_errors, LƯU kết quả. Idempotent giống Writing/Reading:
 	nộp lại 1 attempt đã chấm trả đúng kết quả cũ, không chấm lại/ghi trùng user_errors."""
@@ -179,7 +183,7 @@ async def submit_dictation_attempt(
 	attempt.diff_result = errors
 	attempt.accuracy_score = score
 	# Attempt đã chấm return sớm (diff_result is not None) nên chỉ lần chấm đầu được cộng XP.
-	await award_activity(db, user_id, "dictation_completed", score=score)
+	await award_activity(db, user_id, "dictation_completed", score=score, duration_seconds=duration_seconds)
 	await db.commit()
 	await db.refresh(attempt)
 	return attempt

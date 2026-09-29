@@ -4,6 +4,7 @@ Các module kỹ năng ghi lỗi qua record_error (không commit, cùng transact
 engine đọc lại để xếp ưu tiên, sinh đề nhắm vào điểm yếu và mô hình hoá thói quen học.
 """
 
+import random
 import uuid
 from collections import Counter
 from datetime import datetime, timedelta, timezone
@@ -127,6 +128,7 @@ async def generate_quiz(
 	questions = validate_questions(generated, sources)
 	if not questions:
 		raise llm_service.AIServiceError("adaptive_quiz_malformed", "ai_bad_output")
+	shuffle_options(questions)
 
 	quiz = Quiz(
 		user_id=user_id,
@@ -138,6 +140,15 @@ async def generate_quiz(
 	await db.commit()
 	await db.refresh(quiz)
 	return quiz
+
+
+def shuffle_options(questions: list[dict]) -> None:
+	"""Model hay đặt đáp án đúng ở cùng 1 vị trí (đo qwen2.5-7b/llama3.2-3b, 13 đề: 59-65% câu ở vị trí B) nên
+	người học đoán được không cần đọc. Xáo lại thứ tự lựa chọn tại chỗ và cập nhật correct_option_index theo."""
+	for question in questions:
+		correct_text = question["options"][question["correct_option_index"]]
+		random.shuffle(question["options"])
+		question["correct_option_index"] = question["options"].index(correct_text)
 
 
 def validate_questions(generated: list[dict], sources: list[dict]) -> list[dict]:

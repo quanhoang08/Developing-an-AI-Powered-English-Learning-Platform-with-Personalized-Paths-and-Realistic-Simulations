@@ -32,7 +32,7 @@
 | AUTH-003 | HP | Đăng nhập thành công | Tài khoản tồn tại, đúng mật khẩu | `POST /api/auth/login` | HTTP 200, trả `access_token` + `refresh_token`, `token_type: "bearer"` |
 | AUTH-004 | ERR | Đăng nhập sai mật khẩu | Tài khoản tồn tại | `POST /api/auth/login` với password sai | HTTP 401, không tiết lộ email có tồn tại hay không (thông báo chung chung) |
 | AUTH-005 | HP | Refresh token hợp lệ | Đã login, có refresh token còn hạn | `POST /api/auth/refresh` | HTTP 200, cấp access token mới (và refresh token mới nếu áp dụng rotation) |
-| AUTH-006 | HP | Extension đổi link code lấy token pair | Đã có `link_code` hợp lệ từ luồng "linking cookie" | `POST /api/auth/extension-token` | HTTP 200, trả token pair riêng, `refresh_tokens.client_type = 'extension'` |
+| AUTH-006 | HP | **[KHÔNG BUILD — extension đăng nhập bằng `POST /api/auth/login` + `client_type: "extension"`, 2026-09-26; test: `test_extension_login_and_refresh_keep_scope_integration`]** Extension đổi link code lấy token pair | Đã có `link_code` hợp lệ từ luồng "linking cookie" | `POST /api/auth/extension-token` | HTTP 200, trả token pair riêng, `refresh_tokens.client_type = 'extension'` |
 | AUTH-007 | BR | Extension token dùng để gọi API ngoài phạm vi cho phép | Có token `client_type='extension'` | Gọi 1 endpoint web thông thường ngoài allow-list (không phải `/api/extension/*`, `/api/reading/lookup`, `/api/vocab`) — ví dụ `GET /api/documents` — bằng token này | **ĐÃ CHỐT (rà soát lần 3, xem `api-spec.md` mục 0.2 + mục 8, `docs/schema.sql` comment tại `refresh_tokens`)**: HTTP 403, `error_code: extension_token_scope_denied`. Enforce qua middleware đọc `client_type` — **đã code 2026-09-25**, test tự động: `tests/test_extension_scope.py` (DB-free + `*_integration`; migration `20260925_0017` đã áp, 14/14 pass 2026-09-26). Lưu ý: `/api/vocab` khớp đúng đường dẫn, không gồm `/api/vocab/*` |
 | AUTH-007b | HP | Extension token gọi đúng route trong allow-list | Có token `client_type='extension'` | Gọi `POST /api/reading/lookup` hoặc `POST /api/vocab` bằng token này (không qua `/api/extension/lookup`) | HTTP 200, xử lý bình thường như token web — 2 route này nằm trong allow-list đã chốt, không bị từ chối |
 | AUTH-008 | HP | Lấy thông tin user hiện tại | Đã login | `GET /api/users/me` | Trả đúng `id`, `email`, `target_level`, `created_at` của chính user gọi request |
@@ -270,19 +270,21 @@
 
 | ID | Loại | Kịch bản | Precondition | Bước thực hiện | Kết quả mong đợi |
 |---|---|---|---|---|---|
-| EXT-001 | HP | Luồng "linking cookie" đầy đủ | Đã login trên web | Login web → cookie set → extension đọc cookie qua `chrome.cookies` → `POST /api/auth/extension-token` | Nhận token pair riêng, `refresh_tokens.client_type = 'extension'` |
+| EXT-001 | HP | **[KHÔNG BUILD — thay bằng popup login, 2026-09-26]** Luồng "linking cookie" đầy đủ | Đã login trên web | Login web → cookie set → extension đọc cookie qua `chrome.cookies` → `POST /api/auth/extension-token` | Nhận token pair riêng, `refresh_tokens.client_type = 'extension'` |
 | EXT-002 | HP | Tra từ qua extension | Đã có extension token | `POST /api/extension/lookup` với `term`, `context_sentence`, `source_url` | Trả định nghĩa giống hệt luồng tra từ web (tái sử dụng `vocab_service`/`llm_service`, không luồng riêng) |
 | EXT-003 | HP | Lưu từ tra qua extension | Đã tra 1 từ qua extension | `POST /api/vocab` với `source_url` (không có `document_id`) | Tạo `vocab_items` với `source_url` set đúng |
-| EXT-004 | EC | Cookie linking hết hạn trước khi extension kịp đổi token | Cookie ngắn hạn đã hết hạn | Extension gọi `POST /api/auth/extension-token` trễ | HTTP 401, yêu cầu user login lại trên web để cookie mới được set |
+| EXT-004 | EC | **[KHÔNG BUILD — thay bằng popup login, 2026-09-26]** Cookie linking hết hạn trước khi extension kịp đổi token | Cookie ngắn hạn đã hết hạn | Extension gọi `POST /api/auth/extension-token` trễ | HTTP 401, yêu cầu user login lại trên web để cookie mới được set |
 
 ### 8.2 Movie Delivery Context — nhánh TTS fallback (Thử nghiệm giới hạn)
 
-> Chỉ nhánh `tts_fallback` được implement (theo quyết định mục 3.7 `lumina_context.md`). Nhánh `real_video` vẫn Định hướng mở rộng — không có test case triển khai thật cho nhánh này.
+> Nhánh `tts_fallback` được implement theo quyết định mục 3.7 `lumina_context.md`. Từ 2026-09-26 có thêm tìm phụ đề trên **3 cảnh mô phỏng dùng cho demo** (EXT-005b/005c); kho video thật (thu thập/đánh chỉ mục) vẫn là Định hướng mở rộng. EXT-007 chỉ áp dụng cho chính nhánh `tts_fallback`.
 
 | ID | Loại | Kịch bản | Precondition | Bước thực hiện | Kết quả mong đợi |
 |---|---|---|---|---|---|
 | EXT-005 | HP | Tìm kiếm cụm từ, chỉ có kết quả TTS fallback | Chưa có nhánh video thật | `GET /api/movie-context/search?phrase=...` | Trả `matches` với `source_type: "tts_fallback"` — sinh câu ví dụ qua `llm_service`, đọc bằng `speech_service` TTS với giọng từ `personas` |
 | EXT-006 | HP | Lưu 1 kết quả tìm được | Đã có `match_id` từ EXT-005 | `POST /api/movie-context/matches/{match_id}/save` | `movie_context_matches.is_saved = true` |
+| EXT-005b | HP | Cụm từ khớp phụ đề 1 cảnh demo | Đã chạy `scripts/seed_demo_videos.py` | `GET /api/movie-context/search?phrase=piece of cake` | `source_type: "real_video"` + `video_url`/`title`/`start_ms`/`end_ms`, `audio_url: null`; không gọi LLM/TTS; `GET .../video` chỉ chủ sở hữu tải được (người khác 404). Test: `test_video_match_preferred_over_tts_and_served` |
+| EXT-005c | EC | Cụm nhiều stopword ("hang out", "you can say that again") không được khớp lỏng vào dòng phụ đề khác | Có kho video demo | Tìm cụm đó | Rơi về `tts_fallback`, không trả cảnh video sai. Test: `test_no_video_match_falls_back_to_tts`, `test_search_save_and_audio` |
 | EXT-007 | BR | Không phát sinh logic search/matching mới trong nhánh TTS fallback | — | Rà soát code implementation | Chỉ gọi `llm_service` (sinh câu ví dụ) + `speech_service` TTS — không có thuật toán tìm kiếm video nào được viết (đúng phạm vi đã chốt mục 3.7 `lumina_context.md`) |
 
 ---

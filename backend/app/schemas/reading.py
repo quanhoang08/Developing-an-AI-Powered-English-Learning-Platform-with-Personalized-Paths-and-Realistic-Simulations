@@ -61,6 +61,9 @@ class ReadingAnswerSubmit(BaseModel):
 class ReadingSubmitRequest(BaseModel):
 	# Nộp toàn bộ đáp án của 1 session (Classic hoặc Skim & Scan) để chấm điểm.
 	answers: list[ReadingAnswerSubmit]
+	# Chỉ gửi khi client đang bật "chế độ bấm giờ" (mục 3.16 lumina_context.md) — thiếu field này
+	# hoàn toàn bình thường, không ghi study_time_log.
+	duration_seconds: int | None = Field(default=None, gt=0)
 
 
 class ReadingResult(BaseModel):

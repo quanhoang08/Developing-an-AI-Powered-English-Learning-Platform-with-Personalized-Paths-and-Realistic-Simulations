@@ -185,7 +185,7 @@ extension/
 
 Content script không được phép gọi thẳng API cross-origin của backend; mọi request phải chuyển qua background service worker (có khai báo `host_permissions`), giữ đúng ranh giới bảo mật của Manifest V3.
 
-**Xác thực — cơ chế "linking cookie":** vì `security.py` hiện phát JWT qua `OAuth2PasswordBearer` (header `Authorization: Bearer`), extension không thể đọc trực tiếp phiên đăng nhập của web app. Giải pháp áp dụng, tương tự cách Notion Web Clipper/Grammarly liên kết extension với tài khoản web:
+**Xác thực — cơ chế "linking cookie" (thiết kế ban đầu; TRONG TRIỂN KHAI ĐÃ THAY bằng đăng nhập ở popup extension + `client_type` từ 2026-09-26 — cookie đọc được làm tăng bề mặt tấn công mà không thêm quyền gì, xem `lumina_context.md` mục 3.14):** vì `security.py` hiện phát JWT qua `OAuth2PasswordBearer` (header `Authorization: Bearer`), extension không thể đọc trực tiếp phiên đăng nhập của web app. Giải pháp áp dụng, tương tự cách Notion Web Clipper/Grammarly liên kết extension với tài khoản web:
 
 1. Khi đăng nhập trên web app, backend set thêm một cookie ngắn hạn (TTL ~5 phút), scope theo domain chính, chứa một mã liên kết (`link_code`) chứ không phải access token thật.
 2. Extension đọc cookie này qua `chrome.cookies` API, gửi `link_code` tới endpoint mới `POST /api/auth/extension-token` để đổi lấy cặp access/refresh token riêng cho extension.

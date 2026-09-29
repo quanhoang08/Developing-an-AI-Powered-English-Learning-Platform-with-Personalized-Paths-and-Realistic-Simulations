@@ -96,7 +96,11 @@ async def get_owned_submission(
 
 
 async def submit_essay(
-	db: AsyncSession, user_id: uuid.UUID, submission_id: uuid.UUID, submitted_text: str
+	db: AsyncSession,
+	user_id: uuid.UUID,
+	submission_id: uuid.UUID,
+	submitted_text: str,
+	duration_seconds: int | None = None,
 ) -> WritingSubmission:
 	"""Nộp bài + chấm điểm. document_summary dùng coverage; extended/free_topic dùng rubric.
 
@@ -161,7 +165,10 @@ async def submit_essay(
 		)
 
 	# Nộp lại submission đã completed return sớm ở đầu hàm nên chỉ lần chấm đầu được cộng XP.
-	await award_activity(db, user_id, "writing_submitted", score=graded["overall_score"], cefr_level=graded["cefr_level"])
+	await award_activity(
+		db, user_id, "writing_submitted", score=graded["overall_score"], cefr_level=graded["cefr_level"],
+		duration_seconds=duration_seconds,
+	)
 	await db.commit()
 	await db.refresh(submission)
 	return submission

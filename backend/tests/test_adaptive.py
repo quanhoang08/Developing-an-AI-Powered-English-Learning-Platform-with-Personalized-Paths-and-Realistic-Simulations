@@ -52,6 +52,22 @@ def test_validate_questions_drops_malformed_llm_output() -> None:
     assert questions[0]["error_type"] == "grammar"
 
 
+def test_shuffle_options_keeps_the_correct_answer_pointing_at_the_same_text() -> None:
+    questions = [
+        {"options": ["a", "b", "c", "d"], "correct_option_index": 1},
+        {"options": ["w", "x", "y", "z"], "correct_option_index": 3},
+    ]
+    seen_positions = set()
+    for _ in range(200):
+        shuffled = [{"options": list(q["options"]), "correct_option_index": q["correct_option_index"]} for q in questions]
+        adaptive_service.shuffle_options(shuffled)
+        assert shuffled[0]["options"][shuffled[0]["correct_option_index"]] == "b"
+        assert shuffled[1]["options"][shuffled[1]["correct_option_index"]] == "z"
+        assert sorted(shuffled[0]["options"]) == ["a", "b", "c", "d"]
+        seen_positions.add(shuffled[0]["correct_option_index"])
+    assert seen_positions == {0, 1, 2, 3}
+
+
 def test_public_questions_hide_answers() -> None:
     public = adaptive_service.public_questions(
         [{"question_text": "q", "options": ["a", "b"], "correct_option_index": 1, "explanation": "x", "error_id": "1", "error_type": "grammar"}]
@@ -224,6 +240,8 @@ def test_quiz_flow_hides_answers_grades_and_updates_errors(
         return fake_quiz(sources, num_questions)
 
     monkeypatch.setattr(llm_service, "generate_adaptive_quiz", fake_generate)
+    # Test này nộp đáp án cố định theo fake_quiz (đúng = index 1), nên tắt xáo trộn ở đây.
+    monkeypatch.setattr(adaptive_service, "shuffle_options", lambda questions: None)
     headers, user_id = login(adaptive_client)
     seed_errors(adaptive_client, user_id, ["grammar", "spelling"])
 

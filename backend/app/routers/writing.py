@@ -132,7 +132,9 @@ async def submit_writing_submission(
 ) -> SubmitEssayResponse:
 	# Service gọi Gemini thật (coverage hoặc rubric 4 tiêu chí tùy source_type) rồi lưu DB.
 	try:
-		submission = await submit_essay(db, current_user.id, submission_id, request.submitted_text)
+		submission = await submit_essay(
+			db, current_user.id, submission_id, request.submitted_text, request.duration_seconds
+		)
 	except ValueError as error:
 		_raise_business_error(error)
 

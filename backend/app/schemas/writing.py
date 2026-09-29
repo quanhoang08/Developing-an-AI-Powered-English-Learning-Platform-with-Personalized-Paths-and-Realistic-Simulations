@@ -50,6 +50,8 @@ class InsightResponse(BaseModel):
 class SubmitEssayRequest(BaseModel):
 	# Nội dung bài luận thật người học nộp để chấm điểm.
 	submitted_text: str = Field(min_length=1, max_length=20000)
+	# Chỉ gửi khi client đang bật "chế độ bấm giờ" (mục 3.16 lumina_context.md).
+	duration_seconds: int | None = Field(default=None, gt=0)
 
 
 class RubricScores(BaseModel):

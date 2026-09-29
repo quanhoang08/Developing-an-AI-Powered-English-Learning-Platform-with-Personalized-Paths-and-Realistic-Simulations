@@ -1,12 +1,15 @@
-// Movie Context Finder (nhánh TTS fallback, thử nghiệm giới hạn): AI viết câu thoại ví dụ chứa
-// cụm từ, đọc mẫu bằng TTS để nghe và đọc nhại. Đây KHÔNG phải cảnh phim thật (nhánh video
-// thật là định hướng mở rộng) nên giao diện nói rõ điều đó thay vì giả làm clip phim.
+// Movie Context Finder: cụm từ khớp phụ đề của phim thật (public domain/CC) hoặc cảnh demo mô phỏng ->
+// xem cảnh (VideoPlayerOverlay); không khớp -> nhánh TTS fallback (AI viết câu thoại ví dụ, đọc mẫu
+// bằng TTS để nghe và đọc nhại). Cảnh mô phỏng và câu AI được ghi rõ trên giao diện, không giả làm phim thật.
 import React, { useEffect, useRef, useState } from "react";
 import { Bookmark, Check, Film, Loader2, Play, Search, Square } from "lucide-react";
 import { fetchAudioObjectUrl, MovieContextMatch, saveMovieMatch, searchMovieContext } from "../api";
 import { ErrorNotice } from "./ErrorNotice";
+import { VideoPlayerOverlay } from "./VideoPlayerOverlay";
 
-const POPULAR = ["piece of cake", "break the ice", "under the weather", "spill the beans", "bite the bullet"];
+// 3 cụm đầu có trong "Tears of Steel", 2 cụm kế trong "The Little Shop of Horrors" (phim thật);
+// "piece of cake" là cảnh mô phỏng; cuối cùng rơi về TTS.
+const POPULAR = ["freaked out", "all systems go", "keep an eye on", "take care of", "piece of cake", "spill the beans"];
 
 export const MovieContextPanel: React.FC = () => {
   const [phrase, setPhrase] = useState("");
@@ -15,6 +18,8 @@ export const MovieContextPanel: React.FC = () => {
   const [error, setError] = useState<unknown>(null);
   const [playingId, setPlayingId] = useState<string | null>(null);
   const [savingId, setSavingId] = useState<string | null>(null);
+  const [watchingId, setWatchingId] = useState<string | null>(null);
+  const watching = matches?.find((item) => item.match_id === watchingId) ?? null;
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const objectUrlRef = useRef<string | null>(null);
 
@@ -51,6 +56,7 @@ export const MovieContextPanel: React.FC = () => {
       return;
     }
     stopAudio();
+    if (!match.audio_url) return;
     setPlayingId(match.match_id);
     try {
       const url = await fetchAudioObjectUrl(match.audio_url);
@@ -86,7 +92,8 @@ export const MovieContextPanel: React.FC = () => {
           <Film className="w-5 h-5 text-indigo-600" /> Hear an idiom used in everyday dialogue
         </div>
         <p className="text-xs text-slate-500">
-          These are AI-written example lines read aloud — not clips from real movies. Listen, then repeat them out loud.
+          Search a phrase to see it used in a real film clip (currently “Tears of Steel” and “The Little Shop of Horrors”) or in a simulated demo
+          scene. Phrases found in neither get AI-written example lines read aloud. Listen, then repeat out loud.
         </p>
 
         <div className="flex gap-2">
@@ -138,12 +145,17 @@ export const MovieContextPanel: React.FC = () => {
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6 items-start">
           {matches.map((match) => (
             <div key={match.match_id} className="surface p-5 space-y-4">
+              {match.source_type === "real_video" && (
+                <p className="text-[11px] font-bold text-slate-500 flex items-center gap-1.5">
+                  <Film className="w-3.5 h-3.5" /> {match.title} <span className="tag">{match.platform === "demo" ? "demo scene" : "film clip"}</span>
+                </p>
+              )}
               <div className="p-4 rounded-2xl bg-indigo-50 border-l-4 border-indigo-400 text-base text-indigo-950 italic font-serif leading-relaxed">
                 “{match.phrase_text}”
               </div>
               <div className="flex items-center justify-between">
                 <button
-                  onClick={() => void togglePlay(match)}
+                  onClick={() => (match.source_type === "real_video" ? setWatchingId(match.match_id) : void togglePlay(match))}
                   className="text-xs font-bold text-indigo-600 hover:text-indigo-700 flex items-center gap-1.5 cursor-pointer"
                 >
                   {playingId === match.match_id ? (
@@ -151,7 +163,7 @@ export const MovieContextPanel: React.FC = () => {
                   ) : (
                     <Play className="w-3.5 h-3.5 fill-indigo-600" />
                   )}
-                  {playingId === match.match_id ? "Stop" : "Listen"}
+                  {match.source_type === "real_video" ? "Watch scene" : playingId === match.match_id ? "Stop" : "Listen"}
                 </button>
                 <button
                   onClick={() => void save(match)}
@@ -167,6 +179,10 @@ export const MovieContextPanel: React.FC = () => {
             </div>
           ))}
         </div>
+      )}
+
+      {watching && (
+        <VideoPlayerOverlay match={watching} onClose={() => setWatchingId(null)} onSave={() => void save(watching)} />
       )}
     </div>
   );

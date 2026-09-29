@@ -24,8 +24,10 @@ class RefreshRequest(BaseModel):
 
 
 class UpdateMeRequest(BaseModel):
-	# PATCH /users/me: hiện chỉ đổi được target_level (api-spec.md mục 1).
+	# PATCH /users/me: target_level (api-spec.md mục 1) + timer_mode_enabled (bật/tắt "chế độ bấm
+	# giờ" cho Dashboard "This week, in minutes", mục 3.16 lumina_context.md).
 	target_level: str | None = Field(default=None, min_length=2, max_length=10)
+	timer_mode_enabled: bool | None = None
 
 
 class UserResponse(BaseModel):
@@ -33,6 +35,7 @@ class UserResponse(BaseModel):
 	id: str
 	email: EmailStr
 	target_level: str | None
+	timer_mode_enabled: bool
 	created_at: str
 
 

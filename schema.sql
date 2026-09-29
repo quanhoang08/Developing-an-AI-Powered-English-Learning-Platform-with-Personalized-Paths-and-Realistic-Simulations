@@ -31,7 +31,7 @@
 -- dùng để khởi tạo DB (2 file có thể tạm lệch nhau về câu chữ/tổ chức, nhưng
 -- file .sql ở đây luôn là nguồn đúng về mặt DDL thực thi được).
 --
--- Sinh lần cuối: 2026-09-26, khớp Alembic revision 20260925_0017 (thêm refresh_tokens.client_type + CHECK cho token extension).
+-- Sinh lần cuối: 2026-09-28, khớp Alembic revision 20260927_0018 (thêm users.timer_mode_enabled + bảng study_time_log cho Dashboard "This week, in minutes"/"Pick up where you left off").
 -- ============================================================================
 
 --
@@ -518,6 +518,21 @@ CREATE TABLE public.streaks (
 
 
 --
+-- Name: study_time_log; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.study_time_log (
+    id uuid DEFAULT public.uuid_generate_v4() NOT NULL,
+    user_id uuid NOT NULL,
+    skill character varying(20) NOT NULL,
+    duration_seconds integer NOT NULL,
+    created_at timestamp with time zone DEFAULT now(),
+    CONSTRAINT chk_study_time_log_duration_positive CHECK ((duration_seconds > 0)),
+    CONSTRAINT chk_study_time_log_skill_valid CHECK (((skill)::text = ANY ((ARRAY['reading'::character varying, 'listening'::character varying, 'writing'::character varying, 'speaking'::character varying])::text[])))
+);
+
+
+--
 -- Name: transcript_segments; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -576,7 +591,8 @@ CREATE TABLE public.users (
     native_language character varying(10) DEFAULT 'vi'::character varying,
     target_level character varying(10),
     created_at timestamp with time zone DEFAULT now(),
-    updated_at timestamp with time zone DEFAULT now()
+    updated_at timestamp with time zone DEFAULT now(),
+    timer_mode_enabled boolean DEFAULT false NOT NULL
 );
 
 
@@ -915,6 +931,14 @@ ALTER TABLE ONLY public.streaks
 
 
 --
+-- Name: study_time_log study_time_log_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.study_time_log
+    ADD CONSTRAINT study_time_log_pkey PRIMARY KEY (id);
+
+
+--
 -- Name: transcript_segments transcript_segments_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -1233,6 +1257,13 @@ CREATE INDEX idx_refresh_tokens_user ON public.refresh_tokens USING btree (user_
 --
 
 CREATE INDEX idx_rephrase_requests_submission ON public.rephrase_requests USING btree (writing_submission_id);
+
+
+--
+-- Name: idx_study_time_log_user_created; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_study_time_log_user_created ON public.study_time_log USING btree (user_id, created_at);
 
 
 --
@@ -1641,6 +1672,14 @@ ALTER TABLE ONLY public.skill_progress
 
 ALTER TABLE ONLY public.streaks
     ADD CONSTRAINT streaks_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id) ON DELETE CASCADE;
+
+
+--
+-- Name: study_time_log study_time_log_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.study_time_log
+    ADD CONSTRAINT study_time_log_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id) ON DELETE CASCADE;
 
 
 --

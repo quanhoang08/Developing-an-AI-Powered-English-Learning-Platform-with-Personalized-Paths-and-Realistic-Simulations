@@ -14,7 +14,9 @@ import {
   sendSpeakingTurn,
 } from "../api";
 import { startWavRecording, WavRecording } from "../wavRecorder";
+import { useStudyTimer } from "../useStudyTimer";
 import { CatMascot, CatMood } from "./CatMascot";
+import { CountdownTimer } from "./CountdownTimer";
 import { PhrasebookPanel } from "./PhrasebookPanel";
 
 type Phase = "idle" | "recording" | "processing" | "speaking";
@@ -41,6 +43,7 @@ const ScoreBar: React.FC<{ label: string; value: number | null; note?: string | 
 );
 
 export const SpeakingView: React.FC = () => {
+  const studyTimer = useStudyTimer();
   const [scenarios, setScenarios] = useState<Scenario[]>([]);
   const [scenarioId, setScenarioId] = useState("");
   const [provider, setProvider] = useState<ChatProvider>(() => {
@@ -177,6 +180,7 @@ export const SpeakingView: React.FC = () => {
     stopSpeaking();
     try {
       const session = await createSpeakingSession(scenarioId);
+      studyTimer.start();
       setSessionId(session.session_id);
       setTurns([]);
       const scenario = scenarios.find((item) => item.id === scenarioId);
@@ -200,7 +204,7 @@ export const SpeakingView: React.FC = () => {
       setPhase("processing");
       setBubble("Hmm, let me think...");
       try {
-        const turn = await sendSpeakingTurn(sessionId, blob, provider);
+        const turn = await sendSpeakingTurn(sessionId, blob, provider, studyTimer.lap());
         setTurns((current) => [...current, turn]);
         setBubble(turn.response_text ?? "");
         await speakReply(turn);
@@ -248,12 +252,15 @@ export const SpeakingView: React.FC = () => {
 
   return (
     <div className="p-6 md:p-10 max-w-7xl mx-auto space-y-8">
-      <div>
-        <p className="text-sm italic text-slate-500 mb-1">Live conversation practice</p>
-        <h1 className="font-display text-4xl font-bold text-slate-900">Speaking Studio</h1>
-        <p className="text-sm text-slate-500 mt-2 max-w-xl">
-          Chat with the cat in a real-life scene. It scores your pronunciation, intent and politeness on every turn.
-        </p>
+      <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4">
+        <div>
+          <p className="text-sm italic text-slate-500 mb-1">Live conversation practice</p>
+          <h1 className="font-display text-4xl font-bold text-slate-900">Speaking Studio</h1>
+          <p className="text-sm text-slate-500 mt-2 max-w-xl">
+            Chat with the cat in a real-life scene. It scores your pronunciation, intent and politeness on every turn.
+          </p>
+        </div>
+        <CountdownTimer skill="speaking" />
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">

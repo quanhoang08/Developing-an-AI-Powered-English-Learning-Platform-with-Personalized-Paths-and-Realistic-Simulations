@@ -26,3 +26,26 @@ class SkillProgressResponse(BaseModel):
 	score: float | None
 	cefr_level: str | None
 	updated_at: datetime | None
+
+
+class WeeklyActivityResponse(BaseModel):
+	"""GET /api/activity/weekly-summary: phút học 7 ngày gần nhất theo kỹ năng.
+
+	timer_mode_enabled cho frontend biết có nên hiển thị số thật hay lời mời bật bấm giờ — số
+	trong minutes_by_skill luôn là 0 khi timer_mode_enabled=false (chưa từng đo).
+	"""
+
+	timer_mode_enabled: bool
+	minutes_by_skill: dict[str, int]
+	total_minutes: int
+
+
+class RecentActivityItem(BaseModel):
+	"""1 phần tử của GET /api/activity/recent — 1 lượt học gần nhất, bất kể kỹ năng nào."""
+
+	skill: str
+	title: str
+	# 0-100 khi hoạt động đó có điểm số thật (reading/dictation/writing); None với speaking (chưa
+	# có điểm tổng theo phiên, chỉ có điểm từng lượt nói) — frontend ẩn progress bar khi None.
+	score: float | None
+	created_at: datetime

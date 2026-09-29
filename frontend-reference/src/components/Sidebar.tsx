@@ -2,6 +2,8 @@
 import React, { useState } from "react";
 import { motion } from "motion/react";
 import { ActiveTab } from "../types";
+import { useLearningStats } from "../stats";
+import { TIMER_LOCK_MESSAGE, useTimerLocked } from "../timerLock";
 import {
   LayoutDashboard,
   BookOpen,
@@ -33,6 +35,9 @@ interface SidebarProps {
   isLoggedIn: boolean;
   userEmail: string | null;
   onLogout: () => void;
+  // Drawer trên màn hình hẹp (< md); từ md trở lên sidebar luôn hiện cố định.
+  isOpen: boolean;
+  onClose: () => void;
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({
@@ -42,8 +47,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
   isLoggedIn,
   userEmail,
   onLogout,
+  isOpen,
+  onClose,
 }) => {
   const [isAccountMenuOpen, setIsAccountMenuOpen] = useState(false);
+  const { stats } = useLearningStats();
+  const timerLocked = useTimerLocked();
   const navItems: NavItem[] = [
     { id: "dashboard", label: "Dashboard", icon: LayoutDashboard },
     { id: "notebook", label: "Knowledge Space", icon: FolderKanban, badge: "AI" },
@@ -55,7 +64,13 @@ export const Sidebar: React.FC<SidebarProps> = ({
   ];
 
   return (
-    <aside className="w-64 bg-paper-deep/60 backdrop-blur-sm flex flex-col h-screen sticky top-0 shrink-0 z-20 select-none border-r border-slate-200/70">
+    <>
+    {isOpen && <div className="fixed inset-0 z-30 bg-slate-900/40 md:hidden" onClick={onClose} aria-hidden="true" />}
+    <aside
+      className={`w-64 bg-paper md:bg-paper-deep/60 backdrop-blur-sm flex flex-col h-screen fixed inset-y-0 left-0 md:sticky md:top-0 md:translate-x-0 transition-transform duration-200 shrink-0 z-40 md:z-20 select-none border-r border-slate-200/70 ${
+        isOpen ? "translate-x-0" : "-translate-x-full"
+      }`}
+    >
       {/* Brand */}
       <div className="px-5 pt-6 pb-4">
         <div className="flex items-center gap-3">
@@ -66,10 +81,10 @@ export const Sidebar: React.FC<SidebarProps> = ({
             </svg>
           </div>
           <div>
-            <h1 className="font-display font-extrabold text-slate-900 text-xl leading-none flex items-center gap-1.5">
+            <p className="font-display font-extrabold text-slate-900 text-xl leading-none flex items-center gap-1.5">
               Lumina
               <span className="tag bg-purple-100 text-purple-700 rotate-2">PRO</span>
-            </h1>
+            </p>
             <p className="text-xs text-slate-500 mt-1">Học tiếng Anh cùng AI</p>
           </div>
         </div>
@@ -84,15 +99,25 @@ export const Sidebar: React.FC<SidebarProps> = ({
           const Icon = item.icon;
           const isActive = activeTab === item.id;
           const isLocked = item.id !== "dashboard" && !isLoggedIn;
+          // aria-disabled (không dùng disabled) để tooltip giải thích vẫn hiện khi rê chuột.
+          const isBlocked = timerLocked && !isActive;
           return (
             <button
               key={item.id}
-              onClick={() => setActiveTab(item.id as ActiveTab)}
-              title={isLocked ? "Sign in to unlock this feature" : undefined}
+              onClick={() => {
+                if (!isBlocked) {
+                  setActiveTab(item.id as ActiveTab);
+                  onClose();
+                }
+              }}
+              title={isBlocked ? TIMER_LOCK_MESSAGE : isLocked ? "Sign in to unlock this feature" : undefined}
               aria-current={isActive ? "page" : undefined}
+              aria-disabled={isBlocked || undefined}
               className={`relative w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-sm font-medium transition-colors duration-200 group active:scale-[0.98] ${
                 isActive
                   ? "text-white"
+                  : isBlocked
+                  ? "text-slate-400 opacity-60 cursor-not-allowed"
                   : isLocked
                   ? "text-slate-400 hover:bg-slate-900/5"
                   : "text-slate-600 hover:bg-slate-900/5 hover:text-slate-900"
@@ -137,17 +162,16 @@ export const Sidebar: React.FC<SidebarProps> = ({
         })}
       </nav>
 
-      {/* Daily Review — "24 Cards Due" là số liệu demo, chưa nối review-priority-queue
-          backend thật (Adaptive Learning Engine chưa implement). Nghiêng nhẹ như tờ giấy nhớ. */}
+      {/* Daily Review — số thẻ đến hạn thật (GET /api/vocab/due qua store stats). Nghiêng nhẹ như tờ giấy nhớ. */}
       <div className="px-3 pb-3">
         <div className="relative p-4 rounded-2xl bg-[#fff0c2] rotate-[-1.2deg] shadow-[0_14px_24px_-14px_rgba(140,90,10,0.55)] hover:rotate-0 transition-transform duration-300">
           <span className="absolute -top-2 left-6 w-10 h-4 rounded-sm bg-purple-300/60 rotate-[-6deg]" aria-hidden="true" />
           <div className="flex items-center justify-between mb-1.5">
             <span className="inline-flex items-center gap-1.5 text-sm font-bold text-amber-900 font-display">
-              <Flame className="w-4 h-4 text-purple-500 fill-purple-500 animate-wiggle" /> 24 cards due
+              <Flame className="w-4 h-4 text-purple-500 fill-purple-500 animate-wiggle" /> {stats.dueCards} {stats.dueCards === 1 ? "card" : "cards"} due
             </span>
           </div>
-          <p className="text-xs text-amber-900/70 mb-3 leading-snug">
+          <p className="text-xs text-amber-900 mb-3 leading-snug">
             Ôn lại từ vựng và ngữ pháp trước khi chúng phai mờ.
           </p>
           <button
@@ -216,5 +240,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
         )}
       </div>
     </aside>
+    </>
   );
 };

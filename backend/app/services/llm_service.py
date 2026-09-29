@@ -1,5 +1,7 @@
-# Lớp gọi Gemini trực tiếp (generate_content + embed_content) cho toàn bộ tính năng AI:
-# chấm điểm Writing, sinh đề/câu hỏi Skim & Scan, trả lời RAG Chat. Không dùng LangChain
+# Lớp gọi LLM cho toàn bộ tính năng AI (chấm điểm Writing, sinh đề/câu hỏi Skim & Scan, trả lời RAG Chat).
+# _generate_json/_generate_text chọn provider theo settings.llm_provider (backend/.env: ollama, chạy local);
+# Gemini (generate_content + embed_content) chỉ chạy khi provider="gemini" (vd chọn ở chat) hoặc
+# EMBEDDING_PROVIDER=gemini. Không dùng LangChain
 # (xem lumina_context.md mục 3.12 về khoảng hở tài liệu-vs-code liên quan).
 import json
 import time

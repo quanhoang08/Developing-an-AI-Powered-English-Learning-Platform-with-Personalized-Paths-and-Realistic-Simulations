@@ -80,7 +80,8 @@ def test_turn_scores_pronunciation_intent_and_replies(chat_client, learner_wav, 
     assert 0 <= turn["intent_score"] <= 100 and 0 <= turn["politeness_score"] <= 100
     assert turn["response_text"].strip()
     # Audio phản hồi TTS thật đã được ghi ra file.
-    assert turn["response_audio_url"] and os.path.getsize(turn["response_audio_url"]) > 1000
+    reply_audio = chat_client.get(turn["response_audio_url"], headers=headers)
+    assert reply_audio.status_code == 200 and len(reply_audio.content) > 1000
 
     detail = chat_client.get(f"/api/speaking/sessions/{session_id}", headers=headers).json()
     assert detail["status"] == "in_progress" and len(detail["turns"]) == 1

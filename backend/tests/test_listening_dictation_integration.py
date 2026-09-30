@@ -153,7 +153,8 @@ def test_create_dictation_attempt_without_segment_range_covers_whole_transcript(
     body = created.json()
     assert body["attempt_id"]
     # Cắt audio thật đã chạy — file tồn tại trên đĩa, không phải giá trị giả.
-    assert Path(body["audio_url"]).exists()
+    audio = listening_client.get(body["audio_url"], headers=headers)
+    assert audio.status_code == 200 and audio.content[:4] == b"RIFF"
 
     # Vì transcript ngắn hơn DEFAULT_SEGMENT_SECONDS (20s), toàn bộ 9 từ đều nằm trong đoạn —
     # nộp đúng nguyên câu phải cho điểm tuyệt đối 100.

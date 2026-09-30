@@ -52,7 +52,9 @@ def test_podcast_from_audio_keeps_original_file_and_supports_dictation(chat_clie
     assert podcast["status"] == "ready"
     # Audio gốc: audio_url trỏ đúng file đã upload, không sinh TTS mới (mục 1.6).
     document_file = chat_client.get(f"/api/documents/{document_id}", headers=headers).json()
-    assert os.path.basename(podcast["audio_url"]).startswith(document_id)
+    assert podcast["audio_url"] == f"/api/listening/podcasts/{podcast['id']}/audio"
+    audio = chat_client.get(podcast["audio_url"], headers=headers)
+    assert audio.status_code == 200 and audio.content[:4] == b"RIFF"
 
     segments = _assert_transcript_is_word_level(chat_client, headers, podcast["id"])
     assert "great" in " ".join(item["text"].lower() for item in segments)
@@ -85,7 +87,8 @@ def test_podcast_from_docx_generates_tts_audio_and_transcript(chat_client) -> No
     assert created.status_code == 201, created.text
     podcast = created.json()
     assert podcast["status"] == "ready"
-    assert podcast["audio_url"].endswith(".wav") and "podcast_" in podcast["audio_url"]
+    assert podcast["audio_url"] == f"/api/listening/podcasts/{podcast['id']}/audio"
+    assert chat_client.get(podcast["audio_url"], headers=headers).content[:4] == b"RIFF"
     assert podcast["duration_seconds"] > 5
     _assert_transcript_is_word_level(chat_client, headers, podcast["id"])
 

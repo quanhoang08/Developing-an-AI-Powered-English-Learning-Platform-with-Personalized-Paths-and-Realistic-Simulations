@@ -10,6 +10,7 @@ import uuid
 from datetime import datetime, timedelta, timezone
 
 from fastapi.testclient import TestClient
+from sqlalchemy import delete
 from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from app.models.gamification import StudyTimeLog
@@ -108,6 +109,7 @@ def test_recent_activity_merges_skills_by_most_recent_first(
 	headers = _login(client)
 	user_id = uuid.UUID(client.get("/api/users/me", headers=headers).json()["id"])
 	now = datetime.now(timezone.utc)
+	scenario_ids: list[uuid.UUID] = []
 
 	async def seed() -> None:
 		async with session_factory() as session:
@@ -157,6 +159,7 @@ def test_recent_activity_merges_skills_by_most_recent_first(
 			scenario = Scenario(title="Ordering coffee", formality_level="casual")
 			session.add(scenario)
 			await session.flush()
+			scenario_ids.append(scenario.id)
 			speaking_session = ConversationSession(
 				user_id=user_id, scenario_id=scenario.id, started_at=now - timedelta(days=1)
 			)
@@ -167,13 +170,22 @@ def test_recent_activity_merges_skills_by_most_recent_first(
 			)
 			await session.commit()
 
-	_run(seed())
+	async def cleanup() -> None:
+		# scenarios là dữ liệu dùng chung (danh sách scene của Speaking) — không để lại rác trong DB dev.
+		async with session_factory() as session:
+			await session.execute(delete(ConversationSession).where(ConversationSession.scenario_id.in_(scenario_ids)))
+			await session.execute(delete(Scenario).where(Scenario.id.in_(scenario_ids)))
+			await session.commit()
 
-	items = client.get("/api/activity/recent", headers=headers, params={"limit": 10}).json()
-	skills_in_order = [item["skill"] for item in items]
-	# Mới nhất trước: dictation (30 phút trước) -> writing (1h) -> reading (3h) -> speaking (1 ngày).
-	assert skills_in_order == ["listening", "writing", "reading", "speaking"]
-	assert items[0]["title"] == "Dictation — Business English"
-	assert items[0]["score"] == 90.0
-	assert items[2]["score"] == 80.0  # 0.8 * 100
-	assert items[3]["score"] is None  # speaking chưa có điểm tổng theo phiên
+	_run(seed())
+	try:
+		items = client.get("/api/activity/recent", headers=headers, params={"limit": 10}).json()
+		skills_in_order = [item["skill"] for item in items]
+		# Mới nhất trước: dictation (30 phút trước) -> writing (1h) -> reading (3h) -> speaking (1 ngày).
+		assert skills_in_order == ["listening", "writing", "reading", "speaking"]
+		assert items[0]["title"] == "Dictation — Business English"
+		assert items[0]["score"] == 90.0
+		assert items[2]["score"] == 80.0  # 0.8 * 100
+		assert items[3]["score"] is None  # speaking chưa có điểm tổng theo phiên
+	finally:
+		_run(cleanup())

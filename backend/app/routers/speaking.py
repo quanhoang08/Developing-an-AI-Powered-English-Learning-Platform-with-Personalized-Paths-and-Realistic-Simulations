@@ -49,7 +49,8 @@ def _turn_response(turn: ConversationTurn) -> TurnResponse:
 		turn_id=str(turn.id),
 		user_transcript=turn.user_transcript,
 		response_text=turn.ai_response_text,
-		response_audio_url=turn.ai_response_audio_url,
+		# URL API tải audio (có kiểm tra quyền), không lộ đường dẫn file trên server.
+		response_audio_url=f"/api/speaking/turns/{turn.id}/audio" if turn.ai_response_audio_url else None,
 		pronunciation_score=float(turn.pronunciation_score)
 		if turn.pronunciation_score is not None
 		else None,

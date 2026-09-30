@@ -204,7 +204,14 @@ Meaning: To make people feel more comfortable in a social setting.`
     return matchesFolder && matchesSearch;
   });
 
-  const activeMaterial = materials.find((m) => m.id === activeMaterialId) || materials[0] || demoMaterials[0];
+  // Đã kết nối mà chưa có tài liệu nào: hiện khung trống, không mượn tài liệu demo làm nội dung.
+  const emptyMaterial = {
+    id: "1", title: "No documents yet", folder: "all", type: "EMPTY", date: "—", size: "—", tags: [] as string[],
+    starred: false, isDemo: false, status: "empty",
+    content: "Upload a .docx or audio file with \"Add Note or Document\" to start studying here.",
+  };
+  const activeMaterial =
+    materials.find((m) => m.id === activeMaterialId) || materials[0] || (isBackendConnected ? emptyMaterial : demoMaterials[0]);
   // Chat RAG chỉ khả dụng cho document thật (không phải demo) đã ingest xong (status=ready).
   const isChatAvailable = isBackendConnected && !activeMaterial.isDemo && activeMaterial.status === "ready";
 
@@ -487,6 +494,8 @@ Meaning: To make people feel more comfortable in a social setting.`
                     <p className="text-xs font-medium">
                       {activeMaterial.isDemo
                         ? "Chat is only available for documents connected to your real account."
+                        : activeMaterial.status === "empty"
+                        ? "Upload a document first, then you can chat with it here."
                         : activeMaterial.status === "failed"
                         ? "This file failed to ingest, so there's no content to chat about."
                         : "This document is still processing. Chat unlocks once ingestion is done (status: ready)."}

@@ -89,7 +89,7 @@ async def create_dictation(
 		) from error
 
 	return DictationCreateResponse(
-		attempt_id=str(attempt.id), audio_url=attempt.audio_segment_path
+		attempt_id=str(attempt.id), audio_url=f"/api/listening/dictation/{attempt.id}/audio"
 	)
 
 
@@ -120,7 +120,8 @@ def _podcast_response(podcast) -> PodcastResponse:
 	return PodcastResponse(
 		id=str(podcast.id),
 		status=podcast.status,
-		audio_url=podcast.audio_url,
+		# URL API tải audio, không lộ đường dẫn file trên server.
+		audio_url=f"/api/listening/podcasts/{podcast.id}/audio" if podcast.audio_url else None,
 		persona_id=str(podcast.persona_id) if podcast.persona_id else None,
 		duration_seconds=podcast.duration_seconds,
 	)

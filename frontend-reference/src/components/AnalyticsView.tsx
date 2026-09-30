@@ -8,7 +8,9 @@ import {
   AdaptiveError,
   AdaptiveHabits,
   SkillProgress,
+  ReviewQueueItem,
   getAdaptiveHabits,
+  getReviewQueue,
   getSkills,
   listAdaptiveErrors,
 } from "../api";
@@ -70,16 +72,19 @@ export const AnalyticsView: React.FC = () => {
   const [errors, setErrors] = useState<AdaptiveError[]>([]);
   const [habits, setHabits] = useState<AdaptiveHabits | null>(null);
   const [skills, setSkills] = useState<SkillProgress[]>([]);
+  const [reviewQueue, setReviewQueue] = useState<ReviewQueueItem[]>([]);
   const [loadError, setLoadError] = useState<string | null>(null);
   const { stats } = useLearningStats();
 
   const loadAdaptive = useCallback(async () => {
     try {
-      const [loadedErrors, loadedHabits, loadedSkills] = await Promise.all([
+      const [loadedErrors, loadedHabits, loadedSkills, loadedQueue] = await Promise.all([
         listAdaptiveErrors(ERRORS_FETCHED),
         getAdaptiveHabits(),
         getSkills(),
+        getReviewQueue(),
       ]);
+      setReviewQueue(loadedQueue);
       setErrors(loadedErrors);
       setHabits(loadedHabits);
       setSkills(loadedSkills);
@@ -318,6 +323,21 @@ export const AnalyticsView: React.FC = () => {
           </div>
         </motion.div>
       </div>
+
+      {/* Hàng đợi ôn tập ưu tiên (GET /api/adaptive/review-queue): từ vựng + lỗi cần ôn trước */}
+      {reviewQueue.length > 0 && (
+        <motion.div variants={item} className="surface p-7 space-y-3">
+          <h3 className="font-display text-2xl font-bold text-slate-900">Review next</h3>
+          <ul className="grid sm:grid-cols-2 gap-2">
+            {reviewQueue.slice(0, 6).map((entry) => (
+              <li key={`${entry.item_type}-${entry.item_id}`} className="flex items-center gap-3 text-sm px-4 py-2.5 rounded-xl bg-white ring-1 ring-slate-900/10">
+                <span className="tag bg-slate-100 text-slate-600">{entry.item_type === "vocab" ? "word" : "mistake"}</span>
+                <span className="flex-1 truncate text-slate-800">{entry.label ?? "—"}</span>
+              </li>
+            ))}
+          </ul>
+        </motion.div>
+      )}
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
         <motion.div variants={item} className="lg:col-span-7">

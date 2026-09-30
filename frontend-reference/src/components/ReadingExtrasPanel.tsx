@@ -1,0 +1,175 @@
+// Hai bài luyện từ vựng của Reading nối API thật: Guess the Context (POST /api/reading/guess-context)
+// và Story từ từ đã lưu (POST /api/stories). Cả hai chạy LLM nên có trạng thái chờ + ErrorNotice.
+import React, { useState } from "react";
+import { BookMarked, CheckCircle2, Loader2, XCircle } from "lucide-react";
+import {
+  DueVocabulary,
+  GuessContextAttempt,
+  createGuessContext,
+  createStory,
+  listDueVocabulary,
+  submitGuessContext,
+} from "../api";
+import { ErrorNotice } from "./ErrorNotice";
+
+export const ReadingExtrasPanel: React.FC = () => {
+  const [term, setTerm] = useState("");
+  const [attempt, setAttempt] = useState<GuessContextAttempt | null>(null);
+  const [picked, setPicked] = useState<number | null>(null);
+  const [answer, setAnswer] = useState<{ correct: boolean; correct_option_index: number } | null>(null);
+
+  const [vocab, setVocab] = useState<DueVocabulary[] | null>(null);
+  const [selected, setSelected] = useState<string[]>([]);
+  const [story, setStory] = useState<{ content: string; missing_terms: string[] } | null>(null);
+
+  const [busy, setBusy] = useState<"guess" | "answer" | "vocab" | "story" | null>(null);
+  const [error, setError] = useState<{ cause: unknown; retry: () => void } | null>(null);
+
+  // Bọc mọi thao tác: bật busy, xóa lỗi cũ, và gắn nút "Try again" chạy lại đúng thao tác vừa lỗi.
+  const run = async (kind: NonNullable<typeof busy>, action: () => Promise<void>) => {
+    setBusy(kind);
+    setError(null);
+    try {
+      await action();
+    } catch (cause) {
+      setError({ cause, retry: () => run(kind, action) });
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const startGuess = () =>
+    run("guess", async () => {
+      setAttempt(null);
+      setAnswer(null);
+      setPicked(null);
+      setAttempt(await createGuessContext({ term: term.trim() }));
+    });
+
+  const choose = (index: number) => {
+    if (!attempt || answer) return;
+    setPicked(index);
+    run("answer", async () => setAnswer(await submitGuessContext(attempt.attempt_id, index)));
+  };
+
+  const loadVocab = () => run("vocab", async () => setVocab(await listDueVocabulary()));
+
+  const makeStory = () =>
+    run("story", async () => {
+      setStory(null);
+      setStory(await createStory(selected));
+    });
+
+  const toggle = (id: string) =>
+    setSelected((current) => (current.includes(id) ? current.filter((x) => x !== id) : [...current, id].slice(0, 15)));
+
+  return (
+    <div className="surface p-7 space-y-8">
+      <section className="space-y-4">
+        <h3 className="font-display text-2xl font-bold text-slate-900 flex items-center gap-2">
+          <BookMarked className="w-6 h-6 text-indigo-600" /> Guess the context
+        </h3>
+        <div className="flex gap-2">
+          <input
+            value={term}
+            onChange={(e) => setTerm(e.target.value)}
+            placeholder="A word you want to practise…"
+            maxLength={100}
+            className="flex-1 px-4 py-2.5 rounded-xl ring-1 ring-slate-900/10 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/60"
+          />
+          <button
+            onClick={startGuess}
+            disabled={busy !== null || !term.trim()}
+            className="px-4 py-2 bg-indigo-700 hover:bg-indigo-800 disabled:opacity-50 text-white font-bold text-sm rounded-2xl flex items-center gap-2 cursor-pointer"
+          >
+            {busy === "guess" && <Loader2 className="w-4 h-4 animate-spin" />} Challenge me
+          </button>
+        </div>
+        {attempt && (
+          <div className="space-y-3">
+            <p className="font-serif text-lg text-slate-800">{attempt.challenge_sentence}</p>
+            <ul className="grid sm:grid-cols-2 gap-2">
+              {attempt.options.map((option, index) => {
+                const right = answer?.correct_option_index === index;
+                const wrong = answer !== null && picked === index && !right;
+                return (
+                  <li key={index}>
+                    <button
+                      onClick={() => choose(index)}
+                      disabled={busy !== null || answer !== null}
+                      className={`w-full text-left px-4 py-2.5 rounded-xl border text-sm flex items-center gap-2 cursor-pointer ${
+                        right
+                          ? "border-emerald-400 bg-emerald-50 text-emerald-900"
+                          : wrong
+                            ? "border-rose-400 bg-rose-50 text-rose-900"
+                            : "border-slate-200 bg-white hover:bg-slate-50"
+                      }`}
+                    >
+                      <span className="flex-1">{option}</span>
+                      {right && <CheckCircle2 className="w-4 h-4 text-emerald-600" />}
+                      {wrong && <XCircle className="w-4 h-4 text-rose-600" />}
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
+            {answer && (
+              <p className="text-sm font-bold text-slate-900">
+                {answer.correct ? "Correct!" : "Not quite — the right answer is highlighted."}
+              </p>
+            )}
+          </div>
+        )}
+      </section>
+
+      <section className="space-y-4 border-t border-dashed border-slate-200 pt-6">
+        <h3 className="font-display text-2xl font-bold text-slate-900">Story from your words</h3>
+        {vocab === null ? (
+          <button
+            onClick={loadVocab}
+            disabled={busy !== null}
+            className="px-4 py-2 bg-indigo-700 hover:bg-indigo-800 disabled:opacity-50 text-white font-bold text-sm rounded-2xl flex items-center gap-2 cursor-pointer"
+          >
+            {busy === "vocab" && <Loader2 className="w-4 h-4 animate-spin" />} Pick words to review
+          </button>
+        ) : vocab.length === 0 ? (
+          <p className="text-sm text-slate-500">No words due for review — save some words while reading first.</p>
+        ) : (
+          <>
+            <div className="flex flex-wrap gap-2">
+              {vocab.map((item) => (
+                <button
+                  key={item.id}
+                  onClick={() => toggle(item.id)}
+                  aria-pressed={selected.includes(item.id)}
+                  className={`px-3 py-1.5 rounded-full text-xs font-bold cursor-pointer ${
+                    selected.includes(item.id) ? "bg-indigo-700 text-white" : "bg-slate-100 text-slate-700 hover:bg-slate-200"
+                  }`}
+                >
+                  {item.term}
+                </button>
+              ))}
+            </div>
+            <button
+              onClick={makeStory}
+              disabled={busy !== null || selected.length === 0}
+              className="px-4 py-2 bg-emerald-700 hover:bg-emerald-800 disabled:opacity-50 text-white font-bold text-sm rounded-2xl flex items-center gap-2 cursor-pointer"
+            >
+              {busy === "story" && <Loader2 className="w-4 h-4 animate-spin" />} Write my story
+            </button>
+          </>
+        )}
+        {story && (
+          <div className="space-y-2">
+            <p className="whitespace-pre-wrap font-serif text-[17px] leading-8 text-slate-800">{story.content}</p>
+            {story.missing_terms.length > 0 && (
+              <p className="text-xs text-slate-500">Not used by the AI: {story.missing_terms.join(", ")}</p>
+            )}
+          </div>
+        )}
+      </section>
+
+      {error && <ErrorNotice error={error.cause} onRetry={error.retry} retryLabel="Try again" />}
+    </div>
+  );
+};

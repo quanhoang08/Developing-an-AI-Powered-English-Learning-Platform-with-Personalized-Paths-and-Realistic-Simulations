@@ -33,6 +33,7 @@ File này đóng vai trò là bảng chỉ mục cho toàn bộ tài liệu nghi
 - [Đặc tả chức năng — Writing](feature-writing.md)
 - [Đặc tả chức năng — Speaking](feature-speaking.md)
 - [Đặc tả API](api-spec.md) — route/method/request/response toàn bộ backend, kèm phụ lục đề xuất enum `error_type` và danh sách điểm lệch ERD cần xác nhận.
+- [Tích hợp Frontend ↔ Backend](tich_hop_frontend_backend.md) — các endpoint được nối bổ sung vào giao diện, kiến trúc chọn provider AI (Ollama/Gemini/Azure), hạn chế và việc còn lại.
 - [Test cases](test-cases%20(1).md) — bộ test case bám theo acceptance criteria/business rules/edge cases của 4 file feature spec.
 
 ## Trạng thái hiện tại

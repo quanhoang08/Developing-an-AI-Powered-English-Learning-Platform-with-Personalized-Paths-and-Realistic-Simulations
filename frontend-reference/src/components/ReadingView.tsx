@@ -7,6 +7,7 @@ import { CountdownTimer } from "./CountdownTimer";
 import { AiWait } from "./AiWait";
 import { WordHoverLookup } from "./WordHoverLookup";
 import { RearrangePanel } from "./RearrangePanel";
+import { ReadingExtrasPanel } from "./ReadingExtrasPanel";
 import { useStudyTimer } from "../useStudyTimer";
 import {
   createClassicSession,
@@ -576,6 +577,7 @@ Furthermore, the ethical implications surrounding data privacy remain deeply con
       </div>
 
       <RearrangePanel skill="reading" />
+      <ReadingExtrasPanel />
 
       {/* Skim & Scan Generator Modal */}
       {isGeneratorOpen && (

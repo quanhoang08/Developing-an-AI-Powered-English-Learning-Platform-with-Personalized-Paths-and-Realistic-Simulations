@@ -31,13 +31,14 @@
 -- dùng để khởi tạo DB (2 file có thể tạm lệch nhau về câu chữ/tổ chức, nhưng
 -- file .sql ở đây luôn là nguồn đúng về mặt DDL thực thi được).
 --
--- Sinh lần cuối: 2026-09-28, khớp Alembic revision 20260927_0018 (thêm users.timer_mode_enabled + bảng study_time_log cho Dashboard "This week, in minutes"/"Pick up where you left off").
+-- Sinh lần cuối: 2026-09-30, khớp Alembic revision 20260930_0019 (thêm users.email_verified_at + bảng auth_tokens cho xác minh email/đặt lại mật khẩu bằng OTP).
 -- ============================================================================
 
 --
 -- PostgreSQL database dump
 --
 
+\restrict iYZn4vePnZNPlyoJNwXMdbBGJnpxAD0O8wqGNkw6R14yC7e48PFa02FtTkHAuUk
 
 -- Dumped from database version 16.15 (Debian 16.15-1.pgdg12+2)
 -- Dumped by pg_dump version 16.15 (Debian 16.15-1.pgdg12+2)
@@ -85,6 +86,23 @@ END;
 $$;
 
 
+
+
+--
+-- Name: auth_tokens; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.auth_tokens (
+    id uuid DEFAULT public.uuid_generate_v4() NOT NULL,
+    user_id uuid NOT NULL,
+    purpose character varying(20) NOT NULL,
+    token_hash character varying(255) NOT NULL,
+    expires_at timestamp with time zone NOT NULL,
+    used_at timestamp with time zone,
+    attempts integer DEFAULT 0 NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT auth_tokens_purpose_check CHECK (((purpose)::text = ANY ((ARRAY['verify_email'::character varying, 'reset_password'::character varying])::text[])))
+);
 
 
 --
@@ -592,7 +610,8 @@ CREATE TABLE public.users (
     target_level character varying(10),
     created_at timestamp with time zone DEFAULT now(),
     updated_at timestamp with time zone DEFAULT now(),
-    timer_mode_enabled boolean DEFAULT false NOT NULL
+    timer_mode_enabled boolean DEFAULT false NOT NULL,
+    email_verified_at timestamp with time zone
 );
 
 
@@ -704,6 +723,14 @@ CREATE TABLE public.writing_submissions (
     CONSTRAINT chk_writing_document_id_by_source CHECK ((((source_type)::text <> 'free_topic'::text) OR (document_id IS NULL))),
     CONSTRAINT chk_writing_source_type_valid CHECK (((source_type)::text = ANY ((ARRAY['document_summary'::character varying, 'extended_topic'::character varying, 'free_topic'::character varying])::text[])))
 );
+
+
+--
+-- Name: auth_tokens auth_tokens_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.auth_tokens
+    ADD CONSTRAINT auth_tokens_pkey PRIMARY KEY (id);
 
 
 --
@@ -1344,6 +1371,13 @@ CREATE INDEX idx_writing_submissions_user ON public.writing_submissions USING bt
 
 
 --
+-- Name: ix_auth_tokens_user_purpose; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_auth_tokens_user_purpose ON public.auth_tokens USING btree (user_id, purpose);
+
+
+--
 -- Name: uq_conversation_turns_session_turn; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -1376,6 +1410,14 @@ CREATE TRIGGER trg_skill_progress_updated_at BEFORE UPDATE ON public.skill_progr
 --
 
 CREATE TRIGGER trg_users_updated_at BEFORE UPDATE ON public.users FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
+
+
+--
+-- Name: auth_tokens auth_tokens_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.auth_tokens
+    ADD CONSTRAINT auth_tokens_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id) ON DELETE CASCADE;
 
 
 --
@@ -1790,4 +1832,5 @@ ALTER TABLE ONLY public.writing_submissions
 -- PostgreSQL database dump complete
 --
 
+\unrestrict iYZn4vePnZNPlyoJNwXMdbBGJnpxAD0O8wqGNkw6R14yC7e48PFa02FtTkHAuUk
 

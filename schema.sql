@@ -38,7 +38,6 @@
 -- PostgreSQL database dump
 --
 
-\restrict iYZn4vePnZNPlyoJNwXMdbBGJnpxAD0O8wqGNkw6R14yC7e48PFa02FtTkHAuUk
 
 -- Dumped from database version 16.15 (Debian 16.15-1.pgdg12+2)
 -- Dumped by pg_dump version 16.15 (Debian 16.15-1.pgdg12+2)
@@ -1832,5 +1831,4 @@ ALTER TABLE ONLY public.writing_submissions
 -- PostgreSQL database dump complete
 --
 
-\unrestrict iYZn4vePnZNPlyoJNwXMdbBGJnpxAD0O8wqGNkw6R14yC7e48PFa02FtTkHAuUk
 

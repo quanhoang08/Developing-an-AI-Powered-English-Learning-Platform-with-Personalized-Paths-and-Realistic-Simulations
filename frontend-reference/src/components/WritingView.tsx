@@ -3,7 +3,7 @@
 // (mất ~25 s với Ollama local), trước đó panel phản hồi ở trạng thái trống.
 import React, { useEffect, useState } from "react";
 import { WritingInsight } from "../types";
-import { createWritingSubmission, submitWritingEssay } from "../api";
+import { checkGrammarPreview, createWritingSubmission, rephraseSentence, submitWritingEssay, suggestWritingPrompt } from "../api";
 import { useStudyTimer } from "../useStudyTimer";
 import { CountdownTimer } from "./CountdownTimer";
 import { AiWait } from "./AiWait";
@@ -52,6 +52,59 @@ export const WritingView: React.FC = () => {
 
   const [insights, setInsights] = useState<WritingInsight[]>([]);
 
+  // Gợi ý đề (POST /prompts/suggest): nếu đã gõ tiêu đề thì coi đó là chủ đề, không thì xin đề kiểu IELTS.
+  const [promptOptions, setPromptOptions] = useState<string[]>([]);
+  const [isSuggesting, setIsSuggesting] = useState(false);
+  // Viết lại câu yếu nhất (POST /rephrase) — cần submission đã nộp.
+  const [submissionId, setSubmissionId] = useState<string | null>(null);
+  const [rephrased, setRephrased] = useState<Awaited<ReturnType<typeof rephraseSentence>> | null>(null);
+  const [isRephrasing, setIsRephrasing] = useState(false);
+
+  const handleSuggestPrompt = async () => {
+    setAnalyzeError(null);
+    setIsSuggesting(true);
+    try {
+      const topic = essayTitle.trim();
+      const result = await suggestWritingPrompt(topic ? { topic } : { certificateStyle: "ielts" });
+      const options = result.prompt_options ?? (result.prompt_text ? [result.prompt_text] : []);
+      if (options.length === 1) setEssayTitle(options[0]);
+      setPromptOptions(options.length === 1 ? [] : options);
+    } catch (error) {
+      setAnalyzeError(error instanceof Error ? error.message : "Failed to suggest a topic");
+    } finally {
+      setIsSuggesting(false);
+    }
+  };
+
+  // Kiểm tra nhanh ngữ pháp (POST /grammar-check với raw_text) — chỉ xem trước, không tạo submission.
+  const [grammarHints, setGrammarHints] = useState<Awaited<ReturnType<typeof checkGrammarPreview>>["insights"] | null>(null);
+  const [isCheckingGrammar, setIsCheckingGrammar] = useState(false);
+
+  const handleGrammarCheck = async () => {
+    setAnalyzeError(null);
+    setIsCheckingGrammar(true);
+    try {
+      setGrammarHints((await checkGrammarPreview(essayText)).insights);
+    } catch (error) {
+      setAnalyzeError(error instanceof Error ? error.message : "Failed to check grammar");
+    } finally {
+      setIsCheckingGrammar(false);
+    }
+  };
+
+  const handleRephrase = async () => {
+    if (!submissionId) return;
+    setAnalyzeError(null);
+    setIsRephrasing(true);
+    try {
+      setRephrased(await rephraseSentence(submissionId));
+    } catch (error) {
+      setAnalyzeError(error instanceof Error ? error.message : "Failed to rephrase");
+    } finally {
+      setIsRephrasing(false);
+    }
+  };
+
   // Gọi FastAPI Writing thật: tạo 1 submission free_topic (đề = essayTitle) rồi nộp bài ngay
   // để chấm điểm — mỗi lần bấm "Analyze" là 1 submission mới (không sửa lại bài cũ).
   const handleAnalyzeWriting = async () => {
@@ -65,6 +118,8 @@ export const WritingView: React.FC = () => {
     try {
       const submission = await createWritingSubmission(essayTitle || "Untitled Essay");
       const result = await submitWritingEssay(submission.submission_id, essayText, studyTimer.lap());
+      setSubmissionId(submission.submission_id);
+      setRephrased(null);
       setOverallScore(Math.round(result.score));
       setCefrLevel(result.cefr_level);
       setIeltsScore(`${result.ielts_band} IELTS`);
@@ -148,6 +203,29 @@ export const WritingView: React.FC = () => {
               className="w-full font-display text-3xl font-bold text-slate-900 placeholder-slate-300 bg-transparent border-b-2 border-dashed border-slate-200 pb-3 focus:outline-none focus:border-indigo-500 transition-colors"
             />
 
+            <div className="space-y-2">
+              <button
+                onClick={handleSuggestPrompt}
+                disabled={isSuggesting}
+                className="text-xs font-bold text-indigo-700 hover:text-indigo-800 flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+              >
+                <Sparkles className={`w-3.5 h-3.5 ${isSuggesting ? "animate-spin" : ""}`} />
+                {isSuggesting ? "Thinking of topics…" : "Suggest a topic (uses the title as theme, or IELTS style)"}
+              </button>
+              {promptOptions.map((option) => (
+                <button
+                  key={option}
+                  onClick={() => {
+                    setEssayTitle(option);
+                    setPromptOptions([]);
+                  }}
+                  className="block w-full text-left text-sm px-4 py-2 rounded-xl bg-indigo-50 hover:bg-indigo-100 text-indigo-900 cursor-pointer"
+                >
+                  {option}
+                </button>
+              ))}
+            </div>
+
             {/* Rich Text Toolbar */}
             <div className="flex items-center gap-1 p-1.5 bg-paper-deep/80 rounded-full w-fit text-slate-600">
               <button className="p-1.5 hover:bg-white rounded-lg transition-colors cursor-pointer" title="Bold">
@@ -176,6 +254,25 @@ export const WritingView: React.FC = () => {
               placeholder="Write your essay here..."
               className="w-full px-5 py-4 text-[17px] text-slate-800 bg-[#fffef9] ring-1 ring-slate-900/10 rounded-2xl focus:outline-none focus:ring-2 focus:ring-indigo-500/60 leading-8 font-serif [background-image:repeating-linear-gradient(transparent,transparent_31px,rgba(169,159,140,0.25)_31px,rgba(169,159,140,0.25)_32px)] bg-local"
             />
+
+            <button
+              onClick={handleGrammarCheck}
+              disabled={isCheckingGrammar || !essayText.trim()}
+              className="px-4 py-2 bg-white ring-1 ring-slate-900/10 hover:ring-indigo-400 disabled:opacity-50 text-slate-700 font-bold text-xs rounded-2xl cursor-pointer"
+            >
+              {isCheckingGrammar ? "Checking…" : "Quick grammar check"}
+            </button>
+            {grammarHints !== null && (
+              <div className="space-y-2 text-sm">
+                {grammarHints.length === 0 && <p className="text-slate-500">No grammar issues found.</p>}
+                {grammarHints.map((hint, i) => (
+                  <p key={i} className="p-3 rounded-xl bg-rose-50 border-l-4 border-rose-400">
+                    <span className="line-through text-rose-700">{hint.original_text}</span> → <span className="font-semibold">{hint.suggested_text}</span>
+                    <span className="block text-xs text-slate-500">{hint.explanation}</span>
+                  </p>
+                ))}
+              </div>
+            )}
 
             {reviewedText !== null && (
               <div className="space-y-2">
@@ -235,6 +332,29 @@ export const WritingView: React.FC = () => {
             )}
             {overallScore !== null && insights.length === 0 && (
               <p className="text-sm text-slate-500 leading-relaxed">AI không tìm thấy lỗi nào cần sửa trong bài này.</p>
+            )}
+
+            {submissionId && (
+              <div className="space-y-2">
+                <button
+                  onClick={handleRephrase}
+                  disabled={isRephrasing}
+                  className="px-4 py-2 bg-indigo-700 hover:bg-indigo-800 disabled:opacity-50 text-white font-bold text-xs rounded-2xl cursor-pointer"
+                >
+                  {isRephrasing ? "Rephrasing…" : "Rephrase my weakest sentence"}
+                </button>
+                {rephrased && (
+                  <div className="p-4 rounded-2xl bg-white ring-1 ring-slate-900/10 space-y-2 text-sm">
+                    <p className="text-slate-500 italic">"{rephrased.original_sentence}"</p>
+                    {rephrased.suggested_sentences.map((s, i) => (
+                      <p key={i} className="text-slate-800">
+                        <span className="font-serif font-medium">{s.text}</span>
+                        <span className="block text-xs text-slate-500">{s.explanation}</span>
+                      </p>
+                    ))}
+                  </div>
+                )}
+              </div>
             )}
 
             {insights.map((ins, idx) => (

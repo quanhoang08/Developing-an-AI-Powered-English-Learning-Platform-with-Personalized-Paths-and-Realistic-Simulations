@@ -220,6 +220,15 @@ export function register(email: string, password: string, targetLevel: string) {
   });
 }
 
+// Xác minh email / quên & đặt lại mật khẩu bằng mã OTP 6 số gửi qua email.
+const postJson = (path: string, body: object) =>
+  request<void>(path, { method: "POST", body: JSON.stringify(body) });
+export const verifyEmail = (email: string, code: string) => postJson("/api/auth/verify-email", { email, code });
+export const resendVerification = (email: string) => postJson("/api/auth/resend-verification", { email });
+export const forgotPassword = (email: string) => postJson("/api/auth/forgot-password", { email });
+export const resetPassword = (email: string, code: string, newPassword: string) =>
+  postJson("/api/auth/reset-password", { email, code, new_password: newPassword });
+
 // Lấy thông tin user đang đăng nhập (dùng token hiện tại để xác định danh tính).
 export function getCurrentUser() {
   return request<AuthUser>("/api/users/me");
@@ -760,4 +769,66 @@ export function submitRearrange(skill: RearrangeSkill, attemptId: string, blockO
     method: "POST",
     body: JSON.stringify({ block_order: blockOrder }),
   });
+}
+
+// ---------------------------------------------------------------- Endpoint bổ sung (Reading/Writing/Adaptive)
+
+export interface GuessContextAttempt {
+  attempt_id: string;
+  challenge_sentence: string;
+  options: string[];
+}
+
+export function createGuessContext(input: { term?: string; vocabItemId?: string }) {
+  return request<GuessContextAttempt>("/api/reading/guess-context", {
+    method: "POST",
+    body: JSON.stringify({ term: input.term, vocab_item_id: input.vocabItemId }),
+  });
+}
+
+export function submitGuessContext(attemptId: string, selectedOptionIndex: number) {
+  return request<{ correct: boolean; correct_option_index: number }>(
+    `/api/reading/guess-context/${attemptId}/submit`,
+    { method: "POST", body: JSON.stringify({ selected_option_index: selectedOptionIndex }) },
+  );
+}
+
+export function createStory(vocabItemIds: string[], theme?: string, length: "short" | "medium" | "long" = "medium") {
+  return request<{ id: string; content: string; missing_terms: string[] }>("/api/stories", {
+    method: "POST",
+    body: JSON.stringify({ vocab_item_ids: vocabItemIds, theme: theme || undefined, length }),
+  });
+}
+
+// Backend yêu cầu đúng 1 trong 2: topic (người học tự nêu chủ đề) hoặc certificate_style.
+export function suggestWritingPrompt(input: { topic?: string; certificateStyle?: "toeic" | "ielts" | "cambridge" }) {
+  return request<{ prompt_text: string | null; prompt_options: string[] | null }>("/api/writing/prompts/suggest", {
+    method: "POST",
+    body: JSON.stringify({ source_type: "free_topic", topic: input.topic, certificate_style: input.certificateStyle }),
+  });
+}
+
+// Xem trước lỗi ngữ pháp trên văn bản thô (raw_text): backend không lưu gì.
+export function checkGrammarPreview(rawText: string) {
+  return request<{
+    insights: { offset_start: number; offset_end: number; original_text: string; suggested_text: string; explanation: string }[];
+  }>("/api/writing/grammar-check", { method: "POST", body: JSON.stringify({ raw_text: rawText }) });
+}
+
+export function rephraseSentence(submissionId: string, sentenceText?: string) {
+  return request<{ original_sentence: string; suggested_sentences: { text: string; explanation: string }[] }>(
+    "/api/writing/rephrase",
+    { method: "POST", body: JSON.stringify({ submission_id: submissionId, sentence_text: sentenceText || undefined }) },
+  );
+}
+
+export interface ReviewQueueItem {
+  item_type: "vocab" | "error";
+  item_id: string;
+  priority_score: number;
+  label: string | null;
+}
+
+export function getReviewQueue() {
+  return request<ReviewQueueItem[]>("/api/adaptive/review-queue");
 }

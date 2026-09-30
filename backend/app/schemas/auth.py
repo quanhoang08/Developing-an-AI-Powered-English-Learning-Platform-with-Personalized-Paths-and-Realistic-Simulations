@@ -23,6 +23,18 @@ class RefreshRequest(BaseModel):
 	refresh_token: str = Field(min_length=1)
 
 
+class EmailRequest(BaseModel):
+	email: EmailStr
+
+
+class OtpRequest(EmailRequest):
+	code: str = Field(pattern=r"^\d{6}$")
+
+
+class ResetPasswordRequest(OtpRequest):
+	new_password: str = Field(min_length=8, max_length=128)
+
+
 class UpdateMeRequest(BaseModel):
 	# PATCH /users/me: target_level (api-spec.md mục 1) + timer_mode_enabled (bật/tắt "chế độ bấm
 	# giờ" cho Dashboard "This week, in minutes", mục 3.16 lumina_context.md).

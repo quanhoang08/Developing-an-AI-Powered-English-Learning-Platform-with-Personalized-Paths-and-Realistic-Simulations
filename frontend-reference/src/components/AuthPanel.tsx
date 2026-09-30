@@ -2,7 +2,7 @@ import React, { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { motion } from "motion/react";
 import { LogIn, UserPlus, X } from "lucide-react";
-import { getAccessToken, login, register } from "../api";
+import { forgotPassword, getAccessToken, login, register, resendVerification, resetPassword, verifyEmail } from "../api";
 
 interface AuthPanelProps {
   onAuthChanged: () => void;
@@ -17,6 +17,10 @@ const INPUT_CLASS =
 export const AuthPanel: React.FC<AuthPanelProps> = ({ onAuthChanged }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [isRegistering, setIsRegistering] = useState(false);
+  // "verify": nhập mã OTP xác minh email; "forgot": xin mã đặt lại; "reset": nhập mã + mật khẩu mới.
+  const [mode, setMode] = useState<"auth" | "verify" | "forgot" | "reset">("auth");
+  const [code, setCode] = useState("");
+  const [notice, setNotice] = useState<string | null>(null);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [isLoggedIn, setIsLoggedIn] = useState(Boolean(getAccessToken()));
@@ -41,18 +45,55 @@ export const AuthPanel: React.FC<AuthPanelProps> = ({ onAuthChanged }) => {
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
     setError(null);
+    setNotice(null);
     setIsSubmitting(true);
     try {
-      if (isRegistering) {
+      if (mode === "forgot") {
+        await forgotPassword(email);
+        setMode("reset");
+        setNotice("If that email has an account, we sent a 6-digit code to it.");
+        return;
+      }
+      if (mode === "reset") {
+        await resetPassword(email, code, password);
+        setPassword("");
+        setCode("");
+        setMode("auth");
+        setNotice("Password updated. Log in with your new password.");
+        return;
+      }
+      if (mode === "verify") {
+        await verifyEmail(email, code);
+        setCode("");
+      } else if (isRegistering) {
         await register(email, password, "");
       }
       await login(email, password);
       setIsLoggedIn(true);
       setIsOpen(false);
+      // Xóa trạng thái form: lần mở sau (sau khi đăng xuất) phải về màn đăng nhập sạch, không còn mật khẩu/bước cũ.
+      setMode("auth");
+      setIsRegistering(false);
+      setPassword("");
+      setCode("");
+      setNotice(null);
       window.dispatchEvent(new Event("lumina-auth-changed"));
       onAuthChanged();
     } catch (submitError) {
-      setError(submitError instanceof Error ? submitError.message : "Authentication failed");
+      if ((submitError as { code?: string }).code === "email_not_verified") {
+        // Production bắt buộc xác minh: register/login bị 403 -> chuyển sang bước nhập mã (register đã gửi mã sẵn).
+        if (mode === "auth" && !isRegistering) await resendVerification(email).catch(() => undefined);
+        setIsRegistering(false);
+        setMode("verify");
+        setNotice("We sent a 6-digit code to your email. Enter it to verify your account.");
+      } else {
+        const errorCode = (submitError as { code?: string }).code;
+        setError(
+          errorCode === "invalid_or_expired_code"
+            ? "That code is wrong or has expired. Use \"Resend code\" to get a new one."
+            : submitError instanceof Error ? submitError.message : "Authentication failed",
+        );
+      }
     } finally {
       setIsSubmitting(false);
     }
@@ -89,10 +130,10 @@ export const AuthPanel: React.FC<AuthPanelProps> = ({ onAuthChanged }) => {
               <div>
                 <h2 className="flex items-center gap-2 font-display text-2xl font-bold text-slate-900">
                   {isRegistering ? <UserPlus className="h-5 w-5 text-indigo-600" /> : <LogIn className="h-5 w-5 text-indigo-600" />}
-                  {isRegistering ? "Create your account" : "Welcome back"}
+                  {mode === "verify" ? "Verify your email" : mode === "forgot" ? "Forgot password" : mode === "reset" ? "Set a new password" : isRegistering ? "Create your account" : "Welcome back"}
                 </h2>
                 <p className="text-xs text-slate-500 mt-1">
-                  {isRegistering ? "One step to register and connect." : "Connect your Lumina account to continue."}
+                  {mode === "verify" ? "Enter the 6-digit code we emailed you." : mode === "forgot" ? "We'll email you a 6-digit code." : mode === "reset" ? "Enter the code and choose a new password." : isRegistering ? "One step to register and connect." : "Connect your Lumina account to continue."}
                 </p>
               </div>
               <button
@@ -107,20 +148,37 @@ export const AuthPanel: React.FC<AuthPanelProps> = ({ onAuthChanged }) => {
             <input
               type="email"
               required
+              readOnly={mode === "verify" || mode === "reset"}
               value={email}
               onChange={(event) => setEmail(event.target.value)}
               placeholder="Email"
               className={INPUT_CLASS}
             />
-            <input
+            {(mode === "verify" || mode === "reset") && <input
+              inputMode="numeric"
+              autoComplete="one-time-code"
+              required
+              pattern="\d{6}"
+              maxLength={6}
+              value={code}
+              onChange={(event) => setCode(event.target.value.replace(/\D/g, ""))}
+              placeholder="6-digit code"
+              className={INPUT_CLASS}
+            />}
+            {(mode === "auth" || mode === "reset") && <input
               type="password"
               required
               minLength={8}
               value={password}
               onChange={(event) => setPassword(event.target.value)}
-              placeholder="Password (at least 8 characters)"
+              placeholder={mode === "reset" ? "New password (at least 8 characters)" : "Password (at least 8 characters)"}
               className={INPUT_CLASS}
-            />
+            />}
+            {notice && (
+              <p role="status" className="text-xs text-emerald-800 bg-emerald-50 rounded-lg px-3 py-2">
+                {notice}
+              </p>
+            )}
             {error && (
               <p role="alert" className="text-xs text-red-700 bg-red-50 rounded-lg px-3 py-2">
                 {error}
@@ -131,14 +189,32 @@ export const AuthPanel: React.FC<AuthPanelProps> = ({ onAuthChanged }) => {
               disabled={isSubmitting}
               className="w-full rounded-xl bg-indigo-700 px-3 py-3 text-sm font-semibold text-white hover:bg-indigo-800 active:scale-[0.98] transition-all disabled:opacity-50 cursor-pointer"
             >
-              {isSubmitting ? "Connecting..." : isRegistering ? "Register and connect" : "Log in"}
+              {isSubmitting ? "Connecting..." : mode === "verify" ? "Verify and log in" : mode === "forgot" ? "Send code" : mode === "reset" ? "Update password" : isRegistering ? "Register and connect" : "Log in"}
             </button>
+            {(mode === "verify" || mode === "reset") && (
+              <button
+                type="button"
+                onClick={() => (mode === "verify" ? resendVerification(email) : forgotPassword(email)).then(() => setNotice("New code sent."))}
+                className="w-full text-xs font-semibold text-indigo-700 hover:text-indigo-800 cursor-pointer"
+              >
+                Resend code
+              </button>
+            )}
+            {mode === "auth" && !isRegistering && (
+              <button
+                type="button"
+                onClick={() => { setMode("forgot"); setError(null); }}
+                className="w-full text-xs font-semibold text-slate-500 hover:text-slate-700 cursor-pointer"
+              >
+                Forgot password?
+              </button>
+            )}
             <button
               type="button"
-              onClick={() => setIsRegistering((value) => !value)}
+              onClick={() => { if (mode === "auth") setIsRegistering((value) => !value); else setMode("auth"); setError(null); setNotice(null); }}
               className="w-full text-xs font-semibold text-indigo-700 hover:text-indigo-800 cursor-pointer"
             >
-              {isRegistering ? "Already have an account? Log in" : "Need an account? Register"}
+              {mode !== "auth" ? "Back to log in" : isRegistering ? "Already have an account? Log in" : "Need an account? Register"}
             </button>
           </motion.form>
         </div>,

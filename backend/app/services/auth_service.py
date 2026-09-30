@@ -1,16 +1,19 @@
 # Business logic Auth: đăng ký, đăng nhập, cấp access/refresh token. Router auth.py chỉ gọi
 # các hàm ở đây, không tự thao tác DB.
 import hashlib
+import hmac
 import secrets
 from datetime import datetime, timedelta, timezone
 
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import get_settings
 from app.core.security import create_access_token, hash_password, verify_password
+from app.models.auth_token import AuthToken
 from app.models.refresh_token import RefreshToken
 from app.models.user import User
+from app.services.email_service import send_email
 
 
 def hash_refresh_token(token: str) -> str:
@@ -86,3 +89,88 @@ async def create_token_pair(db: AsyncSession, user: User, client_type: str = "we
 	)
 	await db.commit()
 	return access_token, refresh_token
+
+
+OTP_TTL = timedelta(minutes=10)
+OTP_MAX_ATTEMPTS = 5
+
+
+def _otp_hash(user: User, code: str) -> str:
+	# Gắn user_id vào hash: mã 6 số chỉ có 10^6 giá trị nên phải luôn tra theo user, không tra theo mã.
+	return hash_refresh_token(f"{user.id}:{code}")
+
+
+async def _send_otp(db: AsyncSession, user: User, purpose: str) -> None:
+	# Thu hồi mã cũ cùng mục đích, tạo mã mới (chỉ lưu hash) và gửi qua email.
+	await db.execute(
+		update(AuthToken)
+		.where(AuthToken.user_id == user.id, AuthToken.purpose == purpose, AuthToken.used_at.is_(None))
+		.values(used_at=datetime.now(timezone.utc))
+	)
+	code = f"{secrets.randbelow(10**6):06d}"
+	db.add(
+		AuthToken(
+			user_id=user.id,
+			purpose=purpose,
+			token_hash=_otp_hash(user, code),
+			expires_at=datetime.now(timezone.utc) + OTP_TTL,
+		)
+	)
+	await db.commit()
+	what = "verify your email" if purpose == "verify_email" else "reset your password"
+	await send_email(
+		user.email,
+		f"Your Lumina code: {code}",
+		f"Your Lumina code to {what} is {code}. It expires in 10 minutes. If you did not ask for it, ignore this email.",
+	)
+
+
+async def send_verification_email(db: AsyncSession, user: User) -> None:
+	await _send_otp(db, user, "verify_email")
+
+
+async def request_email_flow(db: AsyncSession, email: str, purpose: str) -> None:
+	# Endpoint công khai: email không tồn tại / đã xác minh -> im lặng, tránh dò email.
+	user = await db.scalar(select(User).where(User.email == email.lower()))
+	if user is None or (purpose == "verify_email" and user.email_verified_at is not None):
+		return
+	await _send_otp(db, user, purpose)
+
+
+async def _consume_otp(db: AsyncSession, email: str, code: str, purpose: str) -> User | None:
+	user = await db.scalar(select(User).where(User.email == email.lower()))
+	if user is None:
+		return None
+	stored = await db.scalar(
+		select(AuthToken)
+		.where(AuthToken.user_id == user.id, AuthToken.purpose == purpose, AuthToken.used_at.is_(None))
+		.order_by(AuthToken.created_at.desc())
+	)
+	if stored is None or stored.expires_at <= datetime.now(timezone.utc) or stored.attempts >= OTP_MAX_ATTEMPTS:
+		return None
+	if not hmac.compare_digest(stored.token_hash, _otp_hash(user, code)):
+		stored.attempts += 1
+		await db.commit()
+		return None
+	stored.used_at = datetime.now(timezone.utc)
+	return user
+
+
+async def verify_email(db: AsyncSession, email: str, code: str) -> bool:
+	user = await _consume_otp(db, email, code, "verify_email")
+	if user is None:
+		return False
+	user.email_verified_at = datetime.now(timezone.utc)
+	await db.commit()
+	return True
+
+
+async def reset_password(db: AsyncSession, email: str, code: str, new_password: str) -> bool:
+	user = await _consume_otp(db, email, code, "reset_password")
+	if user is None:
+		return False
+	user.password_hash = hash_password(new_password)
+	# Đặt lại mật khẩu = nghi ngờ lộ tài khoản: thu hồi mọi phiên đăng nhập cũ.
+	await db.execute(update(RefreshToken).where(RefreshToken.user_id == user.id).values(is_revoked=True))
+	await db.commit()
+	return True

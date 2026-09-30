@@ -2,19 +2,34 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.dependencies import get_current_user
+from app.core.rate_limit import auth_rate_limit
 from app.database import get_db
 from app.models.user import User
-from app.schemas.auth import LoginRequest, RefreshRequest, RegisterRequest, TokenResponse, UserResponse
+from app.core.config import get_settings
+from app.schemas.auth import (
+	EmailRequest,
+	OtpRequest,
+	LoginRequest,
+	RefreshRequest,
+	RegisterRequest,
+	ResetPasswordRequest,
+	TokenResponse,
+	UserResponse,
+)
 from app.services.auth_service import (
 	authenticate_user,
 	create_token_pair,
 	register_user,
+	request_email_flow,
+	reset_password,
 	rotate_refresh_token,
+	send_verification_email,
+	verify_email,
 )
 
 
 # Nhóm endpoint xác thực; main.py mount router này dưới /api.
-router = APIRouter(prefix="/auth", tags=["auth"])
+router = APIRouter(prefix="/auth", tags=["auth"], dependencies=[Depends(auth_rate_limit)])
 
 
 def user_response(user: User) -> UserResponse:
@@ -44,6 +59,7 @@ async def register(
 				detail="email_already_registered",
 			) from error
 		raise
+	await send_verification_email(db, user)
 	return user_response(user)
 
 
@@ -59,6 +75,8 @@ async def login(
 			detail="invalid_credentials",
 			headers={"WWW-Authenticate": "Bearer"},
 		)
+	if get_settings().require_email_verification and user.email_verified_at is None:
+		raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="email_not_verified")
 	access_token, refresh_token = await create_token_pair(db, user, request.client_type)
 	return TokenResponse(access_token=access_token, refresh_token=refresh_token)
 
@@ -76,3 +94,25 @@ async def refresh(
 			headers={"WWW-Authenticate": "Bearer"},
 		)
 	return TokenResponse(access_token=pair[0], refresh_token=pair[1])
+
+
+@router.post("/verify-email", status_code=status.HTTP_204_NO_CONTENT)
+async def verify_email_endpoint(request: OtpRequest, db: AsyncSession = Depends(get_db)) -> None:
+	if not await verify_email(db, request.email, request.code):
+		raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="invalid_or_expired_code")
+
+
+@router.post("/resend-verification", status_code=status.HTTP_204_NO_CONTENT)
+async def resend_verification(request: EmailRequest, db: AsyncSession = Depends(get_db)) -> None:
+	await request_email_flow(db, request.email, "verify_email")
+
+
+@router.post("/forgot-password", status_code=status.HTTP_204_NO_CONTENT)
+async def forgot_password(request: EmailRequest, db: AsyncSession = Depends(get_db)) -> None:
+	await request_email_flow(db, request.email, "reset_password")
+
+
+@router.post("/reset-password", status_code=status.HTTP_204_NO_CONTENT)
+async def reset_password_endpoint(request: ResetPasswordRequest, db: AsyncSession = Depends(get_db)) -> None:
+	if not await reset_password(db, request.email, request.code, request.new_password):
+		raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="invalid_or_expired_code")

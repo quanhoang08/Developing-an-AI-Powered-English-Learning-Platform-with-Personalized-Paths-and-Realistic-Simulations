@@ -1,4 +1,5 @@
 import asyncio
+import re
 import uuid
 from collections.abc import Generator
 
@@ -152,3 +153,75 @@ def test_login_rejects_wrong_password(postgres_client: TestClient) -> None:
     )
     assert wrong_login.status_code == 401
     assert wrong_login.json()["detail"] == "invalid_credentials"
+
+
+@pytest.fixture
+def outbox(monkeypatch) -> list[tuple[str, str]]:
+    # Chặn gửi mail thật, gom (to, body) để test lấy link chứa token.
+    sent: list[tuple[str, str]] = []
+
+    async def fake_send(to: str, subject: str, body: str) -> None:
+        sent.append((to, body))
+
+    monkeypatch.setattr("app.services.auth_service.send_email", fake_send)
+    return sent
+
+
+def _code_from(outbox: list[tuple[str, str]], email: str) -> str:
+    body = [b for to, b in outbox if to == email][-1]
+    return re.search(r"\b(\d{6})\b", body).group(1)
+
+
+def _wrong(code: str) -> str:
+    return "000000" if code != "000000" else "111111"
+
+
+def test_email_verification_flow(postgres_client: TestClient, outbox, monkeypatch) -> None:
+    email = f"verify_{uuid.uuid4().hex[:12]}@example.com"
+    payload = {"email": email, "password": "StrongPass123"}
+    assert postgres_client.post("/api/auth/register", json=payload).status_code == 201
+    code = _code_from(outbox, email)
+
+    # Bật bắt buộc xác minh: chưa xác minh thì đăng nhập bị 403.
+    monkeypatch.setattr(get_settings(), "require_email_verification", True)
+    blocked = postgres_client.post("/api/auth/login", json=payload)
+    assert blocked.status_code == 403 and blocked.json()["detail"] == "email_not_verified"
+
+    verify = "/api/auth/verify-email"
+    assert postgres_client.post(verify, json={"email": email, "code": _wrong(code)}).status_code == 400
+    assert postgres_client.post(verify, json={"email": email, "code": code}).status_code == 204
+    assert postgres_client.post("/api/auth/login", json=payload).status_code == 200
+    # Mã dùng 1 lần.
+    assert postgres_client.post(verify, json={"email": email, "code": code}).status_code == 400
+
+
+def test_otp_locks_after_too_many_wrong_attempts(postgres_client: TestClient, outbox) -> None:
+    email = f"lock_{uuid.uuid4().hex[:12]}@example.com"
+    assert postgres_client.post("/api/auth/register", json={"email": email, "password": "StrongPass123"}).status_code == 201
+    code = _code_from(outbox, email)
+    verify = "/api/auth/verify-email"
+    for _ in range(5):
+        assert postgres_client.post(verify, json={"email": email, "code": _wrong(code)}).status_code == 400
+    # Sau 5 lần sai, ngay cả mã đúng cũng bị khóa: phải xin mã mới.
+    assert postgres_client.post(verify, json={"email": email, "code": code}).status_code == 400
+    assert postgres_client.post("/api/auth/resend-verification", json={"email": email}).status_code == 204
+    assert postgres_client.post(verify, json={"email": email, "code": _code_from(outbox, email)}).status_code == 204
+
+
+def test_password_reset_flow(postgres_client: TestClient, outbox) -> None:
+    email, tokens = _register_and_login(postgres_client, "reset")
+    n = len(outbox)
+
+    # Email lạ: vẫn 204 và không gửi mail (không lộ email tồn tại).
+    unknown = postgres_client.post("/api/auth/forgot-password", json={"email": "nobody_x@example.com"})
+    assert unknown.status_code == 204 and len(outbox) == n
+
+    assert postgres_client.post("/api/auth/forgot-password", json={"email": email}).status_code == 204
+    body = {"email": email, "code": _code_from(outbox, email), "new_password": "NewStrongPass456"}
+    assert postgres_client.post("/api/auth/reset-password", json=body).status_code == 204
+
+    assert postgres_client.post("/api/auth/login", json={"email": email, "password": "StrongPass123"}).status_code == 401
+    assert postgres_client.post("/api/auth/login", json={"email": email, "password": "NewStrongPass456"}).status_code == 200
+    # Phiên cũ bị thu hồi, mã reset không dùng lại được.
+    assert postgres_client.post("/api/auth/refresh", json={"refresh_token": tokens["refresh_token"]}).status_code == 401
+    assert postgres_client.post("/api/auth/reset-password", json=body).status_code == 400

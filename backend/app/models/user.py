@@ -27,6 +27,8 @@ class User(Base):
 	# "Chế độ bấm giờ" (mục 3.16 lumina_context.md): user tự bật để đo phút học thật; mặc định tắt
 	# nên không có hoạt động nào tự động log thời gian khi chưa bật (migration 20260927_0018).
 	timer_mode_enabled: Mapped[bool] = mapped_column(Boolean, server_default=text("false"))
+	# NULL = chưa xác minh email (migration 20260930_0019; user cũ được coi là đã xác minh).
+	email_verified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 	created_at: Mapped[datetime] = mapped_column(
 		DateTime(timezone=True), server_default=text("now()")
 	)

@@ -15,6 +15,15 @@ class Settings(BaseSettings):
 		validation_alias=AliasChoices("SECRET_KEY", "JWT_SECRET_KEY"),
 	)
 	access_token_expire_minutes: int = 30
+	# Email qua Brevo HTTP API (không dùng SMTP vì nhiều host chặn cổng SMTP). BREVO_API_KEY rỗng -> chỉ log mã (dev).
+	# MAIL_FROM_EMAIL phải là sender đã xác minh trong Brevo.
+	brevo_api_key: str = ""
+	mail_from_email: str = "no-reply@lumina.local"
+	mail_from_name: str = "Lumina"
+	# True (production): chưa xác minh email thì không đăng nhập được.
+	require_email_verification: bool = False
+	# Số request/phút/IP cho mỗi endpoint /auth/*; 0 = tắt (production đặt ~20).
+	auth_rate_limit_per_minute: int = 0
 	refresh_token_expire_days: int = 30
 	# Độ lệch UTC (giờ) dùng để xác định "ngày học" của streak; mặc định UTC+7 (Việt Nam).
 	study_utc_offset_hours: int = Field(
@@ -103,4 +112,14 @@ class Settings(BaseSettings):
 @lru_cache
 def get_settings() -> Settings:
 	# Cache settings để mọi module dùng cùng một cấu hình trong suốt vòng đời process.
-	return Settings()
+	settings = Settings()
+	# Render/Heroku cấp URL dạng postgres:// hoặc postgresql://; SQLAlchemy cần chỉ rõ driver psycopg.
+	for field in ("database_url", "database_url_sync"):
+		url = getattr(settings, field)
+		for prefix in ("postgres://", "postgresql://"):
+			if url.startswith(prefix):
+				setattr(settings, field, "postgresql+psycopg://" + url[len(prefix):])
+	# Secret mặc định nằm trong mã nguồn công khai -> ai cũng ký được JWT giả. Chặn khởi động ở production.
+	if settings.environment == "production" and settings.secret_key.startswith("development-only"):
+		raise RuntimeError("SECRET_KEY phải được đặt khi ENV=production")
+	return settings

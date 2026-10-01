@@ -23,7 +23,7 @@ class ReviewQueueItem(BaseModel):
 
 class QuizGenerateRequest(BaseModel):
 	focus_error_types: list[str] | None = None
-	num_questions: int = Field(default=5, ge=1, le=10)
+	num_questions: int = Field(default=5, ge=1, le=15)
 
 
 class QuizQuestionPublic(BaseModel):
@@ -52,6 +52,7 @@ class QuizAttemptResponse(BaseModel):
 	attempt_id: UUID
 	score: float
 	results: list[QuizQuestionResult]
+	streak_restored: bool = False
 
 
 class HabitsResponse(BaseModel):

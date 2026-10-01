@@ -1,10 +1,12 @@
-// Hai bài luyện từ vựng của Reading nối API thật: Guess the Context (POST /api/reading/guess-context)
-// và Story từ từ đã lưu (POST /api/stories). Cả hai chạy LLM nên có trạng thái chờ + ErrorNotice.
+// Ba bài luyện từ vựng của Reading nối API thật: Guess the Context (POST /api/reading/guess-context)
+// và Story từ từ đã lưu (POST /api/stories), Use it in a sentence (POST /api/vocab/{id}/check-sentence). Cả ba chạy LLM nên có trạng thái chờ + ErrorNotice.
 import React, { useState } from "react";
 import { BookMarked, CheckCircle2, Loader2, XCircle } from "lucide-react";
 import {
   DueVocabulary,
   GuessContextAttempt,
+  SentenceVerdict,
+  checkVocabSentence,
   createGuessContext,
   createStory,
   listDueVocabulary,
@@ -22,7 +24,11 @@ export const ReadingExtrasPanel: React.FC = () => {
   const [selected, setSelected] = useState<string[]>([]);
   const [story, setStory] = useState<{ content: string; missing_terms: string[] } | null>(null);
 
-  const [busy, setBusy] = useState<"guess" | "answer" | "vocab" | "story" | null>(null);
+  const [sentenceWordId, setSentenceWordId] = useState<string | null>(null);
+  const [sentence, setSentence] = useState("");
+  const [verdict, setVerdict] = useState<SentenceVerdict | null>(null);
+
+  const [busy, setBusy] = useState<"guess" | "answer" | "vocab" | "story" | "sentence" | null>(null);
   const [error, setError] = useState<{ cause: unknown; retry: () => void } | null>(null);
 
   // Bọc mọi thao tác: bật busy, xóa lỗi cũ, và gắn nút "Try again" chạy lại đúng thao tác vừa lỗi.
@@ -58,6 +64,18 @@ export const ReadingExtrasPanel: React.FC = () => {
     run("story", async () => {
       setStory(null);
       setStory(await createStory(selected));
+    });
+
+  const sentenceTerm = vocab?.find((item) => item.id === sentenceWordId)?.term ?? "";
+  // Khớp đầu từ như backend (find_missing_terms) để "run" vẫn khớp "running".
+  const sentenceMissingTerm =
+    sentence.trim().length >= 3 &&
+    !new RegExp(`\\b${sentenceTerm.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`, "i").test(sentence);
+
+  const checkSentence = () =>
+    run("sentence", async () => {
+      setVerdict(null);
+      setVerdict(await checkVocabSentence(sentenceWordId!, sentence.trim()));
     });
 
   const toggle = (id: string) =>
@@ -166,6 +184,82 @@ export const ReadingExtrasPanel: React.FC = () => {
               <p className="text-xs text-slate-500">Not used by the AI: {story.missing_terms.join(", ")}</p>
             )}
           </div>
+        )}
+      </section>
+
+      <section className="space-y-4 border-t border-dashed border-slate-200 pt-6">
+        <h3 className="font-display text-2xl font-bold text-slate-900">Use it in a sentence</h3>
+        {vocab === null ? (
+          <button
+            onClick={loadVocab}
+            disabled={busy !== null}
+            className="px-4 py-2 bg-indigo-700 hover:bg-indigo-800 disabled:opacity-50 text-white font-bold text-sm rounded-2xl flex items-center gap-2 cursor-pointer"
+          >
+            {busy === "vocab" && <Loader2 className="w-4 h-4 animate-spin" />} Pick a word
+          </button>
+        ) : vocab.length === 0 ? (
+          <p className="text-sm text-slate-500">No words due for review — save some words while reading first.</p>
+        ) : (
+          <>
+            <div className="flex flex-wrap gap-2">
+              {vocab.map((item) => (
+                <button
+                  key={item.id}
+                  onClick={() => {
+                    setSentenceWordId(item.id);
+                    setVerdict(null);
+                  }}
+                  aria-pressed={sentenceWordId === item.id}
+                  className={`px-3 py-1.5 rounded-full text-xs font-bold cursor-pointer ${
+                    sentenceWordId === item.id ? "bg-indigo-700 text-white" : "bg-slate-100 text-slate-700 hover:bg-slate-200"
+                  }`}
+                >
+                  {item.term}
+                </button>
+              ))}
+            </div>
+            {sentenceWordId && (
+              <div className="space-y-3">
+                <textarea
+                  value={sentence}
+                  onChange={(e) => setSentence(e.target.value)}
+                  placeholder="Write your own sentence with this word…"
+                  maxLength={300}
+                  rows={2}
+                  className="w-full px-4 py-2.5 rounded-xl ring-1 ring-slate-900/10 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/60"
+                />
+                <button
+                  onClick={checkSentence}
+                  disabled={busy !== null || sentence.trim().length < 3 || sentenceMissingTerm}
+                  className="px-4 py-2 bg-emerald-700 hover:bg-emerald-800 disabled:opacity-50 text-white font-bold text-sm rounded-2xl flex items-center gap-2 cursor-pointer"
+                >
+                  {busy === "sentence" && <Loader2 className="w-4 h-4 animate-spin" />} Check my sentence
+                </button>
+                {sentenceMissingTerm && (
+                  <p className="text-xs text-rose-700" role="alert">
+                    Your sentence must include “{sentenceTerm}”.
+                  </p>
+                )}
+              </div>
+            )}
+            {verdict && (
+              <div className="rounded-2xl bg-slate-50 p-4 space-y-2 text-sm" role="status">
+                <p className="flex items-center gap-2 font-bold text-slate-900">
+                  {verdict.meaning_fits && verdict.grammar_ok ? (
+                    <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                  ) : (
+                    <XCircle className="w-4 h-4 text-rose-600" />
+                  )}
+                  {verdict.meaning_fits ? "Word used correctly" : "Check the word's meaning"} ·{" "}
+                  {verdict.grammar_ok ? "grammar OK" : "grammar needs a fix"}
+                </p>
+                {!verdict.grammar_ok && (
+                  <p className="font-serif text-slate-800">Suggested: {verdict.corrected_sentence}</p>
+                )}
+                <p className="text-slate-600">{verdict.feedback_vi}</p>
+              </div>
+            )}
+          </>
         )}
       </section>
 

@@ -267,6 +267,8 @@ Chi tiết SQL cụ thể và log test xem trực tiếp `docs/schema.sql` (ph�
 
 ## 6. Tài liệu tham chiếu khác
 
+- `docs/feature-backlog.md` (2026-09-30): backlog tính năng mở rộng (từ vựng/ngữ pháp/IELTS/TOEIC/literal_translation (trước đây gọi là "Vietnglish", đã đổi tên)/streak freeze/lớp học...). Người dùng chốt: xây tới đâu hay tới đó, gặp khó khăn hoặc phát sinh chi phí thì được bỏ qua mục đó và ghi lý do trong file.
+
 - `de_cuong_khoa_luan.md`: đề cương khóa luận chính thức (formal thesis outline) — hiện đã gồm cả phần kiến trúc/thiết kế dữ liệu chi tiết (mục 9-11).
 - `thiet_ke_database.md`, `erd_1.mermaid`, `docs/schema.sql`: 3 tài liệu nguồn cho phần dữ liệu chi tiết (được đề cương chính thức tham chiếu tới, không lặp lại toàn bộ) — `erd.mermaid` (sơ đồ) và `schema.sql` (DDL thật, đã test trên PostgreSQL 16 + pgvector) được dựng lần đầu ở rà soát lần 3/mục 3.10; trước đó project chỉ có `thiet_ke_database.md` dạng văn xuôi.
 - `docs/feature-reading.md`, `docs/feature-listening.md`, `docs/feature-writing.md`, `docs/feature-speaking.md`, `docs/feature-notebook.md` (mới, mục 3.12): đặc tả kỹ thuật cấp triển khai cho từng module — mục tiêu, input/output, flow, business rules, edge cases, acceptance criteria cho từng chức năng con. Bổ sung cho đề cương (vốn dừng ở mức thiết kế), phục vụ trực tiếp việc code.

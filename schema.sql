@@ -394,7 +394,8 @@ CREATE TABLE public.reading_answers (
     selected_option_index smallint,
     is_correct boolean,
     source_chunk_id uuid,
-    created_at timestamp with time zone DEFAULT now()
+    created_at timestamp with time zone DEFAULT now(),
+    explanation text
 );
 
 

@@ -2,7 +2,7 @@
 // reviewVocabulary), fallback về SAMPLE_FLASHCARDS demo khi chưa đăng nhập hoặc chưa có từ đến hạn.
 import React, { useEffect, useState } from "react";
 import { FlashcardItem } from "../types";
-import { getAccessToken, listDueVocabulary, reviewVocabulary } from "../api";
+import { getAccessToken, importVocabularyFromErrors, listDueVocabulary, reviewVocabulary } from "../api";
 import { X, RotateCw, CheckCircle2, Zap, ArrowRight, BookOpen, Volume2 } from "lucide-react";
 
 interface SpacedRepetitionModalProps {
@@ -57,9 +57,10 @@ export const SpacedRepetitionModal: React.FC<SpacedRepetitionModalProps> = ({
   const [reviewedCount, setReviewedCount] = useState(0);
   const [backendCards, setBackendCards] = useState<FlashcardItem[]>([]);
 
-  useEffect(() => {
-    // Khi đã login, ưu tiên dữ liệu due thật từ SM-2 backend.
-    if (!isOpen || !getAccessToken()) return;
+  const [importMessage, setImportMessage] = useState("");
+  const [importing, setImporting] = useState(false);
+
+  const loadDue = () =>
     listDueVocabulary()
       .then((items) => {
         setBackendCards(items.map((item) => ({
@@ -73,7 +74,30 @@ export const SpacedRepetitionModal: React.FC<SpacedRepetitionModalProps> = ({
         setReviewedCount(0);
       })
       .catch(() => setBackendCards([]));
+
+  useEffect(() => {
+    // Khi đã login, ưu tiên dữ liệu due thật từ SM-2 backend.
+    if (!isOpen || !getAccessToken()) return;
+    void loadDue();
   }, [isOpen]);
+
+  const handleImport = async () => {
+    setImporting(true);
+    setImportMessage("");
+    try {
+      const added = await importVocabularyFromErrors();
+      setImportMessage(
+        added.length
+          ? `Added ${added.length} word${added.length > 1 ? "s" : ""} you missed in Dictation.`
+          : "No new missed words to add.",
+      );
+      if (added.length) await loadDue();
+    } catch (error) {
+      setImportMessage(error instanceof Error ? error.message : "Could not add words.");
+    } finally {
+      setImporting(false);
+    }
+  };
 
   if (!isOpen) return null;
 
@@ -178,6 +202,19 @@ export const SpacedRepetitionModal: React.FC<SpacedRepetitionModalProps> = ({
               Scheduled with the SuperMemo-2 algorithm
             </div>
           </div>
+
+          {getAccessToken() && (
+            <div className="mt-4 flex items-center justify-between gap-3 text-xs text-slate-500">
+              <span role="status">{importMessage}</span>
+              <button
+                onClick={() => void handleImport()}
+                disabled={importing}
+                className="px-3 py-1.5 rounded-full bg-paper-deep hover:bg-indigo-100 text-indigo-800 font-semibold disabled:opacity-50 cursor-pointer"
+              >
+                {importing ? "Adding…" : "Add words I missed in Dictation"}
+              </button>
+            </div>
+          )}
 
           {/* Answer Controls */}
           {isFlipped ? (

@@ -20,11 +20,17 @@ from app.models.speaking import ConversationSession, ConversationTurn
 from app.models.vocab import VocabItem, VocabReview
 from app.models.writing import WritingSubmission
 from app.services import llm_service, priority_queue_service
-from app.services.gamification_service import award_activity
+from app.services.gamification_service import award_activity, restore_streak
 
 _MAX_SOURCE_ERRORS = 8
 _HABIT_WINDOW_DAYS = 30
 _MAX_LEVEL = 5
+_FALLBACK_SOURCES = [
+	{"id": None, "error_type": "grammar", "detail": {
+		"topic": "common grammar: verb tenses, articles, prepositions, subject-verb agreement"}},
+	{"id": None, "error_type": "vocabulary", "detail": {
+		"topic": "common vocabulary: word choice, collocations, easily confused word pairs"}},
+]
 
 
 def record_error(
@@ -121,6 +127,12 @@ async def generate_quiz(
 		ranked = [error for error in ranked if error["error_type"] in focus_error_types]
 	sources = ranked[:_MAX_SOURCE_ERRORS]
 	if not sources:
+		# Chưa có lỗi nào (user mới): đề dự phòng theo chủ đề chung, không gắn với user_errors nào.
+		sources = [
+			source for source in _FALLBACK_SOURCES
+			if not focus_error_types or source["error_type"] in focus_error_types
+		]
+	if not sources:
 		raise ValueError("no_errors_to_practice")
 
 	generated = await llm_service.generate_adaptive_quiz(sources, num_questions)
@@ -132,7 +144,7 @@ async def generate_quiz(
 
 	quiz = Quiz(
 		user_id=user_id,
-		generated_from_error_ids=[source["id"] for source in sources],
+		generated_from_error_ids=[source["id"] for source in sources if source["id"] is not None],
 		focus_error_types=focus_error_types or sorted({source["error_type"] for source in sources}),
 		questions=questions,
 	)
@@ -169,7 +181,7 @@ def validate_questions(generated: list[dict], sources: list[dict]) -> list[dict]
 				"options": options,
 				"correct_option_index": correct,
 				"explanation": item.get("explanation", ""),
-				"error_id": str(source["id"]),
+				"error_id": str(source["id"]) if source["id"] is not None else None,
 				"error_type": source["error_type"],
 			}
 		)
@@ -206,7 +218,7 @@ async def submit_quiz_attempt(
 		is_correct = chosen == question["correct_option_index"]
 		correct_count += is_correct
 		if is_correct:
-			error = await db.get(UserError, uuid.UUID(question["error_id"]))
+			error = await db.get(UserError, uuid.UUID(question["error_id"])) if question["error_id"] else None
 			if error is not None and error.user_id == user_id:
 				error.spaced_repetition_level = min((error.spaced_repetition_level or 0) + 1, _MAX_LEVEL)
 		else:
@@ -230,8 +242,14 @@ async def submit_quiz_attempt(
 	# Làm lại cùng 1 đề không cộng thêm XP, tránh cày điểm bằng cách nộp lặp.
 	if first_attempt:
 		await award_activity(db, user_id, "quiz_completed")
+	streak_restored = await restore_streak(db, user_id, len(quiz.questions), float(attempt.score))
 	await db.commit()
-	return {"attempt_id": attempt.id, "score": float(attempt.score), "results": results}
+	return {
+		"attempt_id": attempt.id,
+		"score": float(attempt.score),
+		"results": results,
+		"streak_restored": streak_restored,
+	}
 
 
 def summarize_habits(

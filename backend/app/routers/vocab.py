@@ -1,6 +1,6 @@
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.dependencies import get_current_user
@@ -12,8 +12,10 @@ from app.schemas.vocab import (
 	VocabResponse,
 	VocabReviewRequest,
 	VocabReviewResponse,
+	VocabSentenceRequest,
+	VocabSentenceResponse,
 )
-from app.services.vocab_service import create_vocab_item, list_due_vocab, review_vocab
+from app.services.vocab_service import check_vocab_sentence, create_vocab_item, import_from_errors, list_due_vocab, review_vocab
 
 
 router = APIRouter(prefix="/vocab", tags=["vocabulary"])
@@ -66,6 +68,17 @@ async def create_vocab(
 	return vocab_response(item)
 
 
+@router.post("/from-errors", response_model=list[VocabResponse])
+async def vocab_from_errors(
+	limit: int = Query(5, ge=1, le=10),
+	current_user: User = Depends(get_current_user),
+	db: AsyncSession = Depends(get_db),
+) -> list[VocabResponse]:
+	# Mỗi từ tốn 1 lần tra Ollama nên giới hạn số từ mỗi lần gọi.
+	items = await import_from_errors(db, current_user.id, limit)
+	return [vocab_response(item) for item in items]
+
+
 @router.get("/due", response_model=list[VocabResponse])
 async def get_due_vocab(
 	current_user: User = Depends(get_current_user),
@@ -92,3 +105,18 @@ async def review_vocab_item(
 		next_review_at=review.next_review_at,
 		ease_factor=float(review.ease_factor),
 	)
+
+
+@router.post("/{vocab_item_id}/check-sentence", response_model=VocabSentenceResponse)
+async def check_sentence(
+	vocab_item_id: UUID,
+	request: VocabSentenceRequest,
+	current_user: User = Depends(get_current_user),
+	db: AsyncSession = Depends(get_db),
+) -> VocabSentenceResponse:
+	try:
+		verdict = await check_vocab_sentence(db, current_user.id, vocab_item_id, request.sentence)
+	except ValueError as error:
+		code = str(error)
+		raise HTTPException(status_code=422 if code == "term_not_used" else 404, detail=code) from error
+	return VocabSentenceResponse(**verdict)

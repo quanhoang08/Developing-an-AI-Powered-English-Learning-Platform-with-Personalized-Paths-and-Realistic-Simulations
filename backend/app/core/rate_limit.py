@@ -15,7 +15,7 @@ async def auth_rate_limit(request: Request) -> None:
 	limit = get_settings().auth_rate_limit_per_minute
 	if limit <= 0:
 		return
-	# Sau proxy (Render) IP thật nằm ở X-Forwarded-For.
+	# Sau reverse proxy IP thật nằm ở X-Forwarded-For.
 	forwarded = request.headers.get("x-forwarded-for", "")
 	ip = forwarded.split(",")[0].strip() or (request.client.host if request.client else "unknown")
 	hits = _hits[f"{ip}:{request.url.path}"]

@@ -186,3 +186,78 @@ def test_vocab_duplicate_term_returns_409_case_insensitive(vocab_client: TestCli
     # User khác vẫn lưu được cùng từ.
     other = login(vocab_client)
     assert vocab_client.post("/api/vocab", headers=other, json=payload).status_code == 201
+
+
+def test_vocab_from_errors_imports_dictation_words_once(vocab_client: TestClient, monkeypatch) -> None:
+    from app.database import get_db as db_dependency
+    from app.services import adaptive_service, reading_service
+
+    async def fake_lookup(term: str, context: str) -> dict:
+        return {"definition": f"nghia {term}", "ipa": None, "example_sentence": "", "synonyms": [], "antonyms": []}
+
+    monkeypatch.setattr(reading_service, "lookup_term", fake_lookup)
+    headers = login(vocab_client)
+    user_id = uuid.UUID(vocab_client.get("/api/users/me", headers=headers).json()["id"])
+
+    async def seed() -> None:
+        async for db in app.dependency_overrides[db_dependency]():
+            for word in ("ephemeral", "Ephemeral", "tenacious"):
+                adaptive_service.record_error(db, user_id, "vocabulary", {"source": "dictation", "original_text": word})
+            # Lỗi nguồn khác (Writing) không được biến thành thẻ từ.
+            adaptive_service.record_error(db, user_id, "vocabulary", {"source": "writing", "original_text": "ignored"})
+            await db.commit()
+
+    asyncio.run(seed())
+
+    first = vocab_client.post("/api/vocab/from-errors", headers=headers)
+    assert first.status_code == 200
+    assert sorted(item["term"] for item in first.json()) == ["ephemeral", "tenacious"]
+    # Gọi lại: từ đã có thẻ thì không tạo trùng.
+    assert vocab_client.post("/api/vocab/from-errors", headers=headers).json() == []
+    # Thẻ mới vào lịch SM-2 và đến hạn ôn ngay.
+    assert len(vocab_client.get("/api/vocab/due", headers=headers).json()) == 2
+
+
+def test_check_sentence_validates_term_records_grammar_error_and_scopes_owner(
+    vocab_client: TestClient, monkeypatch
+) -> None:
+    from app.services import llm_service
+
+    calls: list[str] = []
+
+    async def fake_judge(term: str, sentence: str) -> dict:
+        calls.append(sentence)
+        return {
+            "meaning_fits": True,
+            "grammar_ok": "go" not in sentence,
+            "corrected_sentence": "She went to a tenacious fight.",
+            "feedback_vi": "Sai thì của động từ.",
+        }
+
+    monkeypatch.setattr(llm_service, "judge_vocab_sentence", fake_judge)
+    headers = login(vocab_client)
+    item_id = vocab_client.post(
+        "/api/vocab", headers=headers, json={"term": "tenacious", "definition": "kiên trì", "source_url": "https://e.com"}
+    ).json()["id"]
+    url = f"/api/vocab/{item_id}/check-sentence"
+
+    # Câu không chứa từ: 422 và không tốn lượt gọi LLM.
+    missing = vocab_client.post(url, headers=headers, json={"sentence": "She is very brave."})
+    assert missing.status_code == 422 and missing.json()["detail"] == "term_not_used"
+    assert calls == []
+
+    # Biến thể từ ("tenaciously") vẫn tính là có dùng từ; câu đúng thì không ghi lỗi.
+    good = vocab_client.post(url, headers=headers, json={"sentence": "She fought tenaciously."})
+    assert good.status_code == 200 and good.json()["grammar_ok"] is True
+    assert vocab_client.get("/api/adaptive/errors", headers=headers).json() == []
+
+    # Câu sai ngữ pháp: trả đáp án sửa và ghi 1 lỗi grammar có nguồn vocab_sentence.
+    bad = vocab_client.post(url, headers=headers, json={"sentence": "She go to a tenacious fight."})
+    assert bad.json()["grammar_ok"] is False
+    errors = vocab_client.get("/api/adaptive/errors", headers=headers).json()
+    assert [e["error_type"] for e in errors] == ["grammar"]
+    assert errors[0]["detail"]["source"] == "vocab_sentence"
+
+    # User khác không chấm được từ của người này.
+    other = login(vocab_client)
+    assert vocab_client.post(url, headers=other, json={"sentence": "A tenacious cat."}).status_code == 404

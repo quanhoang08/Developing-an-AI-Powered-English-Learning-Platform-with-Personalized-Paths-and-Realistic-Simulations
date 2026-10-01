@@ -77,6 +77,9 @@ class ConversationTurn(Base):
 	intent_feedback: Mapped[str] = mapped_column(Text, nullable=True)
 	politeness_feedback: Mapped[str] = mapped_column(Text, nullable=True)
 	suggested_phrases: Mapped[list] = mapped_column(JSONB, nullable=True)
+	# Migration 0020: câu nói lại tự nhiên + danh sách [{original, natural, explanation}] lỗi literal_translation.
+	natural_rephrase: Mapped[str] = mapped_column(Text, nullable=True)
+	literal_translation: Mapped[list] = mapped_column(JSONB, nullable=True)
 
 
 class SlangPhrase(Base):

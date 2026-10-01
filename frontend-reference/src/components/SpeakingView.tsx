@@ -387,6 +387,29 @@ export const SpeakingView: React.FC = () => {
                 <ScoreBar label="Intent" value={latest.intent_score} note={latest.intent_feedback} />
                 <ScoreBar label="Politeness" value={latest.politeness_score} note={latest.politeness_feedback} />
 
+                {latest.natural_rephrase && (
+                  <div className="p-4 rounded-2xl bg-emerald-50">
+                    <p className="text-sm italic text-emerald-700">Say it more naturally</p>
+                    <p className="text-base text-slate-800 font-serif mt-1">“{latest.natural_rephrase}”</p>
+                  </div>
+                )}
+
+                {latest.literal_translation.length > 0 && (
+                  <div className="space-y-2">
+                    <p className="text-sm italic text-slate-400">Literal translation from Vietnamese</p>
+                    {latest.literal_translation.map((note) => (
+                      <div key={note.original} className="p-4 rounded-2xl bg-amber-50 text-sm">
+                        <p className="text-slate-700">
+                          <span className="line-through text-rose-600">{note.original}</span>
+                          {" → "}
+                          <span className="font-bold text-emerald-700">{note.natural}</span>
+                        </p>
+                        {note.explanation && <p className="text-xs text-slate-600 mt-1">{note.explanation}</p>}
+                      </div>
+                    ))}
+                  </div>
+                )}
+
                 {latest.suggested_phrases.length > 0 && (
                   <div className="space-y-2">
                     <p className="text-sm italic text-slate-400">Useful phrases</p>

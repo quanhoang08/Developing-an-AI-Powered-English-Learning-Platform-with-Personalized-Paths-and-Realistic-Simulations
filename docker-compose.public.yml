@@ -1,0 +1,25 @@
+# Mở web ra Internet từ chính máy này (Ollama giữ nguyên trên máy):
+#   docker compose -f docker-compose.yml -f docker-compose.public.yml up -d --build
+#   docker compose -f docker-compose.yml -f docker-compose.public.yml logs cloudflared   # tìm URL https://xxx.trycloudflare.com
+# Xem docs/public_online.md.
+services:
+  db:
+    ports: !override []          # DB không cần lộ ra ngoài
+  api:
+    ports: !override ["127.0.0.1:8000:8000"]
+    environment:
+      ENV: production            # bắt buộc JWT_SECRET_KEY thật trong backend/.env
+      AUTH_RATE_LIMIT_PER_MINUTE: "20"
+  web:
+    build: ./frontend-reference
+    container_name: lumina_web
+    restart: unless-stopped
+    depends_on: [api]
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    container_name: lumina_tunnel
+    restart: unless-stopped
+    # Mặc định: URL tạm trycloudflare (đổi mỗi lần khởi động). URL cố định cần domain: đặt trong .env
+    # CLOUDFLARED_ARGS=tunnel --no-autoupdate run --token <token> rồi trỏ tunnel về http://web:80 trên dashboard Cloudflare.
+    command: ${CLOUDFLARED_ARGS:-tunnel --no-autoupdate --url http://web:80}
+    depends_on: [web]

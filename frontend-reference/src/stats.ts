@@ -20,6 +20,8 @@ export interface LearningStats {
   xpIntoLevel: number;
   xpForNextLevel: number;
   recentActiveDates: string[];
+  restorableStreak: number;
+  freezesAvailable: number;
   dueCards: number;
   // Điểm trung bình các kỹ năng đã có điểm (0-100) và mức CEFR của Writing; null khi chưa có dữ liệu.
   masteryPercent: number | null;
@@ -42,6 +44,8 @@ const EMPTY_STATS: LearningStats = {
   xpIntoLevel: 0,
   xpForNextLevel: 100,
   recentActiveDates: [],
+  restorableStreak: 0,
+  freezesAvailable: 0,
   dueCards: 0,
   masteryPercent: null,
   cefrLevel: null,
@@ -88,6 +92,8 @@ async function loadStats() {
       xpIntoLevel: data.xp_into_level,
       xpForNextLevel: data.xp_for_next_level,
       recentActiveDates: data.recent_active_dates,
+      restorableStreak: data.restorable_streak,
+      freezesAvailable: data.freezes_available,
       timerModeEnabled: weekly.timer_mode_enabled,
       minutesBySkill: weekly.minutes_by_skill,
       totalMinutes: weekly.total_minutes,

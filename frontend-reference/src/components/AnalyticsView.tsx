@@ -182,7 +182,11 @@ export const AnalyticsView: React.FC = () => {
               {stats.todayActive ? "Done today" : "Not yet today"}
             </span>
           </div>
-          <p className="text-xs text-slate-500 mt-1">Longest: <span className="num font-bold">{stats.longestStreak}</span> days</p>
+          <p className="text-xs text-slate-500 mt-1">
+            Longest: <span className="num font-bold">{stats.longestStreak}</span> days · Freezes:{" "}
+            <span className="num font-bold">{stats.freezesAvailable}</span>
+          </p>
+          <p className="text-[11px] text-slate-400 mt-1">Every 7-day streak earns a freeze (max 2) that covers a missed day.</p>
         </motion.div>
 
         <motion.div variants={item} className="surface md:col-span-1 p-6">

@@ -449,6 +449,8 @@ CREATE TABLE conversation_turns (
     ai_response_audio_url                                 TEXT,          -- thêm ngoài thiết kế gốc
     stt_provider_used                                       VARCHAR(20),
     suggested_phrases                                         JSONB,
+    natural_rephrase                                          TEXT,          -- migration 20261001_0020
+    literal_translation                                       JSONB,         -- [{original, natural, explanation}]; thêm ở migration 20261001_0020 tên "vietnglish", đổi tên ở 20261001_0021
     created_at                                                 TIMESTAMPTZ DEFAULT now()
 );
 
@@ -568,7 +570,10 @@ CREATE TABLE streaks (
     current_streak      INTEGER DEFAULT 0,
     longest_streak       INTEGER DEFAULT 0,
     last_active_date      DATE,
-    total_xp                INTEGER DEFAULT 0        -- XP tích luỹ (Gamification, migration 20260920_0012)
+    total_xp                INTEGER DEFAULT 0,       -- XP tích luỹ (Gamification, migration 20260920_0012)
+    lost_streak             INTEGER NOT NULL DEFAULT 0,  -- chuỗi vừa đứt, khôi phục bằng quiz (migration 20261001_0020)
+    lost_on                 DATE,
+    freezes_available       INTEGER NOT NULL DEFAULT 0   -- freeze tặng mỗi 7 ngày liên tiếp, tối đa 2 (migration 20261001_0020)
 );
 
 CREATE TABLE skill_progress (

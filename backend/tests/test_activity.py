@@ -189,3 +189,5 @@ def test_recent_activity_merges_skills_by_most_recent_first(
 		assert items[3]["score"] is None  # speaking chưa có điểm tổng theo phiên
 	finally:
 		_run(cleanup())
+
+

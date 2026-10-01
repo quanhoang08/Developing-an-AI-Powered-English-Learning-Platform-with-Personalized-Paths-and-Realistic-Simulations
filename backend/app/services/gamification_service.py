@@ -39,6 +39,14 @@ SKILL_BY_ACTIVITY: dict[str, str] = {
 # Trọng số của điểm mới trong trung bình động: 0.3 → mỗi bài mới chiếm 30%, bài cũ phai dần.
 SKILL_SCORE_WEIGHT = 0.3
 
+# Khôi phục chuỗi đứt bằng quiz: chuỗi đủ dài mới đáng khôi phục, quiz 10-15 câu, đạt >= 70%.
+MIN_RESTORABLE_STREAK = 2
+# Freeze: mỗi 7 ngày liên tiếp được tặng 1, giữ tối đa 2; tự dùng khi bỏ lỡ ngày.
+FREEZE_EVERY_DAYS = 7
+MAX_FREEZES = 2
+RESTORE_MIN_QUESTIONS = 10
+RESTORE_MIN_SCORE = 70
+
 
 def study_today(now: datetime | None = None) -> date:
 	"""Ngày học hiện tại theo múi giờ cấu hình (nhận `now` để test cố định thời điểm)."""
@@ -69,9 +77,17 @@ def next_streak(current: int, last_active: date | None, today: date) -> int:
 	return 1
 
 
-def visible_streak(current: int, last_active: date | None, today: date) -> int:
-	"""Streak hiển thị: chuỗi còn sống nếu học hôm qua hoặc hôm nay, ngược lại đã đứt (0)."""
-	if last_active is not None and last_active >= today - timedelta(days=1):
+def missed_days(current: int, last_active: date | None, today: date) -> int:
+	"""Số ngày trọn vẹn bị bỏ lỡ giữa lần học cuối và hôm nay (0 nếu chưa có chuỗi)."""
+	if current <= 0 or last_active is None or today <= last_active:
+		return 0
+	return (today - last_active).days - 1
+
+
+def visible_streak(current: int, last_active: date | None, today: date, freezes: int = 0) -> int:
+	"""Streak hiển thị: chuỗi còn sống nếu học hôm qua hoặc hôm nay (hoặc freeze đủ lấp các ngày
+	bỏ lỡ), ngược lại đã đứt (0)."""
+	if last_active is not None and last_active >= today - timedelta(days=1 + freezes):
 		return current
 	return 0
 
@@ -133,10 +149,41 @@ async def award_activity(
 	await db.execute(pg_insert(Streak).values(user_id=user_id).on_conflict_do_nothing(index_elements=["user_id"]))
 	streak = await db.scalar(select(Streak).where(Streak.user_id == user_id).with_for_update())
 
-	streak.current_streak = next_streak(streak.current_streak or 0, streak.last_active_date, today)
+	# Chuỗi >= MIN_RESTORABLE_STREAK vừa đứt (hôm nay là ngày học đầu tiên sau khi đứt) -> nhớ lại để
+	# user khôi phục bằng quiz trong ngày (restore_streak).
+	previous = streak.current_streak or 0
+	freezes = streak.freezes_available or 0
+	if previous >= MIN_RESTORABLE_STREAK and visible_streak(previous, streak.last_active_date, today, freezes) == 0:
+		streak.lost_streak, streak.lost_on = previous, today
+	last_active = streak.last_active_date
+	missed = missed_days(previous, last_active, today)
+	if 0 < missed <= freezes:
+		# Freeze tự động lấp các ngày bỏ lỡ: coi như hôm qua vẫn có học.
+		freezes -= missed
+		last_active = today - timedelta(days=1)
+	streak.current_streak = next_streak(previous, last_active, today)
+	if streak.current_streak != previous and streak.current_streak % FREEZE_EVERY_DAYS == 0:
+		freezes = min(freezes + 1, MAX_FREEZES)
+	streak.freezes_available = freezes
 	streak.longest_streak = max(streak.longest_streak or 0, streak.current_streak)
 	streak.last_active_date = today
 	streak.total_xp = (streak.total_xp or 0) + xp
+
+
+async def restore_streak(
+	db: AsyncSession, user_id: uuid.UUID, num_questions: int, score: float, now: datetime | None = None
+) -> bool:
+	"""Gọi sau khi chấm quiz (KHÔNG commit): quiz đủ dài + đạt điểm thì lấy lại chuỗi vừa đứt, tính
+	cả hôm nay. Chỉ hiệu lực trong đúng ngày phát hiện đứt và chỉ 1 lần. Trả True nếu đã khôi phục."""
+	if num_questions < RESTORE_MIN_QUESTIONS or score < RESTORE_MIN_SCORE:
+		return False
+	streak = await db.scalar(select(Streak).where(Streak.user_id == user_id).with_for_update())
+	if streak is None or not streak.lost_streak or streak.lost_on != study_today(now):
+		return False
+	streak.current_streak = streak.lost_streak + 1
+	streak.longest_streak = max(streak.longest_streak or 0, streak.current_streak)
+	streak.lost_streak, streak.lost_on = 0, None
+	return True
 
 
 async def get_summary(db: AsyncSession, user_id: uuid.UUID, now: datetime | None = None) -> dict:
@@ -146,7 +193,8 @@ async def get_summary(db: AsyncSession, user_id: uuid.UUID, now: datetime | None
 
 	total_xp = (streak.total_xp or 0) if streak else 0
 	last_active = streak.last_active_date if streak else None
-	current = visible_streak(streak.current_streak or 0, last_active, today) if streak else 0
+	freezes = (streak.freezes_available or 0) if streak else 0
+	current = visible_streak(streak.current_streak or 0, last_active, today, freezes) if streak else 0
 	level, xp_into_level, xp_for_next_level = level_from_xp(total_xp)
 
 	# Chuỗi hiện tại kết thúc ở last_active_date và dài `current` ngày.
@@ -165,7 +213,16 @@ async def get_summary(db: AsyncSession, user_id: uuid.UUID, now: datetime | None
 		"xp_into_level": xp_into_level,
 		"xp_for_next_level": xp_for_next_level,
 		"recent_active_dates": recent_dates,
+		"restorable_streak": _restorable(streak, current, today) if streak else 0,
+		"freezes_available": freezes,
 	}
+
+
+def _restorable(streak: Streak, visible: int, today: date) -> int:
+	# Đã đứt nhưng chưa có hoạt động nào hôm nay -> chuỗi cũ; đã học lại hôm nay -> lost_streak.
+	if visible == 0 and (streak.current_streak or 0) >= MIN_RESTORABLE_STREAK:
+		return streak.current_streak
+	return streak.lost_streak or 0 if streak.lost_on == today else 0
 
 
 async def get_weekly_activity(db: AsyncSession, user_id: uuid.UUID, now: datetime | None = None) -> dict:

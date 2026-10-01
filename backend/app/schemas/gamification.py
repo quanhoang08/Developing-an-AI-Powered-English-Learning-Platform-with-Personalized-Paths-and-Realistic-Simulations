@@ -17,6 +17,10 @@ class StreakResponse(BaseModel):
 	# Các ngày thuộc chuỗi hiện tại (ISO), không phải toàn bộ lịch sử học — bảng streaks chỉ
 	# lưu last_active_date + độ dài chuỗi, không lưu từng ngày.
 	recent_active_dates: list[date]
+	# >0: chuỗi vừa đứt, làm quiz >=10 câu đạt >=70% trong ngày để lấy lại (+1 cho hôm nay).
+	restorable_streak: int = 0
+	# Freeze còn lại: mỗi 7 ngày liên tiếp được tặng 1 (tối đa 2), tự dùng khi bỏ lỡ ngày.
+	freezes_available: int = 0
 
 
 class SkillProgressResponse(BaseModel):

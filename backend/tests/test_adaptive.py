@@ -12,6 +12,7 @@ from app.core.config import get_settings
 from app.database import get_db
 from app.main import app
 from app.models.adaptive import UserError
+from app.models.gamification import Streak
 from app.services import adaptive_service, llm_service
 from app.services.priority_queue_service import error_priority, vocab_priority
 
@@ -212,17 +213,79 @@ def test_review_queue_contains_user_errors(adaptive_client: TestClient) -> None:
     assert len(adaptive_client.get("/api/adaptive/review-queue", headers=headers).json()) == 2
 
 
-def test_quiz_generate_without_errors_returns_conflict(
+def test_quiz_generate_without_errors_uses_fallback_topics(
     adaptive_client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    async def unexpected(*_args, **_kwargs):
-        raise AssertionError("LLM không được gọi khi chưa có lỗi nào")
+    async def fake_generate(sources: list[dict], num_questions: int) -> list[dict]:
+        assert all(source["id"] is None for source in sources)
+        return fake_quiz(sources, num_questions)
 
-    monkeypatch.setattr(llm_service, "generate_adaptive_quiz", unexpected)
+    monkeypatch.setattr(llm_service, "generate_adaptive_quiz", fake_generate)
+    monkeypatch.setattr(adaptive_service, "shuffle_options", lambda questions: None)  # đáp án đúng cố định = 1
     headers, _ = login(adaptive_client)
-    response = adaptive_client.post("/api/adaptive/quizzes/generate", headers=headers, json={})
+    response = adaptive_client.post("/api/adaptive/quizzes/generate", headers=headers, json={"num_questions": 4})
+    assert response.status_code == 201
+    quiz = response.json()
+    assert len(quiz["questions"]) == 4
+    # Câu sai của đề dự phòng vẫn ghi lỗi mới để lần sau có dữ liệu thật; câu đúng không lỗi.
+    answers = [1, 0, 1, 0]
+    attempt = adaptive_client.post(
+        f"/api/adaptive/quizzes/{quiz['quiz_id']}/attempts", headers=headers, json={"answers": answers}
+    )
+    assert attempt.status_code == 200
+    assert attempt.json()["score"] == 50
+    assert len(adaptive_client.get("/api/adaptive/errors", headers=headers).json()) == 2
+
+
+def test_quiz_generate_without_errors_and_unsupported_focus_returns_conflict(
+    adaptive_client: TestClient,
+) -> None:
+    headers, _ = login(adaptive_client)
+    response = adaptive_client.post(
+        "/api/adaptive/quizzes/generate", headers=headers, json={"focus_error_types": ["pronunciation"]}
+    )
     assert response.status_code == 409
     assert response.json()["detail"] == "no_errors_to_practice"
+
+
+def test_broken_streak_is_restored_by_a_long_enough_passing_quiz(
+    adaptive_client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    async def fake_generate(sources: list[dict], num_questions: int) -> list[dict]:
+        return fake_quiz(sources, num_questions)
+
+    monkeypatch.setattr(llm_service, "generate_adaptive_quiz", fake_generate)
+    monkeypatch.setattr(adaptive_service, "shuffle_options", lambda questions: None)  # đáp án đúng cố định = 1
+    headers, user_id = login(adaptive_client)
+
+    async def seed_broken_streak() -> None:
+        async with adaptive_client.session_factory() as session:  # type: ignore[attr-defined]
+            today = datetime.now(timezone.utc).date()
+            session.add(Streak(user_id=user_id, current_streak=5, longest_streak=5, last_active_date=today - timedelta(days=4)))
+            await session.commit()
+
+    asyncio.run(seed_broken_streak())
+    assert adaptive_client.get("/api/streaks", headers=headers).json()["restorable_streak"] == 5
+
+    def attempt(num_questions: int, answer: int) -> dict:
+        quiz = adaptive_client.post(
+            "/api/adaptive/quizzes/generate", headers=headers, json={"num_questions": num_questions}
+        ).json()
+        return adaptive_client.post(
+            f"/api/adaptive/quizzes/{quiz['quiz_id']}/attempts",
+            headers=headers,
+            json={"answers": [answer] * num_questions},
+        ).json()
+
+    # Đề quá ngắn hoặc điểm thấp thì không khôi phục (đáp án đúng của fake_quiz luôn là 1).
+    assert attempt(5, 1)["streak_restored"] is False
+    assert attempt(10, 0)["streak_restored"] is False
+    assert attempt(10, 1)["streak_restored"] is True
+
+    streak = adaptive_client.get("/api/streaks", headers=headers).json()
+    # 5 ngày cũ + hôm nay; chỉ khôi phục được 1 lần.
+    assert streak["current_streak"] == 6 and streak["restorable_streak"] == 0
+    assert attempt(10, 1)["streak_restored"] is False
 
 
 def test_quiz_generate_rejects_unknown_focus_type(adaptive_client: TestClient) -> None:

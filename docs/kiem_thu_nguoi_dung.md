@@ -1,6 +1,6 @@
 # Kế hoạch kiểm thử người dùng cuối (User Acceptance / Usability Test)
 
-Mục tiêu: xem người học thật có hoàn thành được các luồng chính **không cần hướng dẫn**, và họ cảm thấy gì. Chạy trên bản đã deploy online (Render + Vercel, xem `deploy_online.md`), không phải máy dev.
+Mục tiêu: xem người học thật có hoàn thành được các luồng chính **không cần hướng dẫn**, và họ cảm thấy gì. Chạy trên bản demo cài sẵn (backend + Ollama chạy local), không phải máy dev đang sửa code.
 
 ## 1. Người tham gia
 - 5–8 người (5 người đủ phát hiện ~85% lỗi usability). Chưa từng thấy hệ thống.

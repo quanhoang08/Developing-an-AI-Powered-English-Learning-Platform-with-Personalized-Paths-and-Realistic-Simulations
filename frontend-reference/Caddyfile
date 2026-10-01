@@ -1,0 +1,18 @@
+:80 {
+	encode gzip
+	# Upload tài liệu/audio lớn đi qua đây; không giới hạn ở proxy, backend tự kiểm MAX_UPLOAD_SIZE_MB.
+	# handle: chỉ 1 khối chạy, tránh try_files của SPA nuốt request API.
+	handle /api/* {
+		reverse_proxy api:8000 {
+			# Chờ LLM/Azure lâu hơn mặc định trước khi bỏ cuộc.
+			transport http {
+				response_header_timeout 300s
+			}
+		}
+	}
+	handle {
+		root * /srv
+		try_files {path} /index.html
+		file_server
+	}
+}

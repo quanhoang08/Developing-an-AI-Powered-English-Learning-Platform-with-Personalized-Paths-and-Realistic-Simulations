@@ -146,6 +146,42 @@ def _award(gamification_client: TestClient, user_id: str, activity: str, **kwarg
     asyncio.run(run())
 
 
+def test_seven_day_streak_earns_a_freeze_that_covers_one_missed_day(gamification_client: TestClient) -> None:
+    headers = login(gamification_client)
+    user_id = gamification_client.get("/api/users/me", headers=headers).json()["id"]
+
+    def noon(month: int, day: int) -> datetime:
+        return datetime(2026, month, day, 5, 0, tzinfo=timezone.utc)
+
+    def summary(now: datetime) -> dict:
+        async def run() -> dict:
+            engine = create_async_engine(get_settings().database_url, poolclass=NullPool)
+            try:
+                async with async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)() as session:
+                    return await gamification.get_summary(session, uuid.UUID(user_id), now=now)
+            finally:
+                await engine.dispose()
+
+        return asyncio.run(run())
+
+    for day in range(1, 7):
+        _award(gamification_client, user_id, "vocab_review", now=noon(1, day))
+    assert summary(noon(1, 6))["freezes_available"] == 0
+    _award(gamification_client, user_id, "vocab_review", now=noon(1, 7))
+    assert summary(noon(1, 7))["freezes_available"] == 1
+
+    # Bỏ lỡ 8/1: freeze còn nên chuỗi vẫn sống (hiển thị) và khi học lại 9/1 thì nối tiếp, freeze bị dùng.
+    assert summary(noon(1, 9))["current_streak"] == 7
+    _award(gamification_client, user_id, "vocab_review", now=noon(1, 9))
+    after = summary(noon(1, 9))
+    assert after["current_streak"] == 8 and after["freezes_available"] == 0 and after["restorable_streak"] == 0
+
+    # Hết freeze: bỏ lỡ 10/1 thì chuỗi đứt, học lại 11/1 về 1 và nhớ chuỗi cũ để khôi phục.
+    _award(gamification_client, user_id, "vocab_review", now=noon(1, 11))
+    broken = summary(noon(1, 11))
+    assert broken["current_streak"] == 1 and broken["restorable_streak"] == 8
+
+
 def test_skills_require_authentication_and_new_user_has_none(gamification_client: TestClient) -> None:
     assert gamification_client.get("/api/skills").status_code == 401
     assert gamification_client.get("/api/skills", headers=login(gamification_client)).json() == []

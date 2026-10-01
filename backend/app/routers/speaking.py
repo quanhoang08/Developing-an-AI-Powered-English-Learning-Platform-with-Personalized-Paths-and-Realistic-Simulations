@@ -18,6 +18,7 @@ from app.schemas.speaking import (
 	SlangPhraseResponse,
 	SuggestedPhrase,
 	TurnResponse,
+	LiteralTranslationNote,
 )
 from app.services import speaking_service
 
@@ -62,6 +63,8 @@ def _turn_response(turn: ConversationTurn) -> TurnResponse:
 		politeness_feedback=turn.politeness_feedback,
 		suggested_phrases=[SuggestedPhrase(**item) for item in (turn.suggested_phrases or [])],
 		stt_provider_used=turn.stt_provider_used,
+		natural_rephrase=turn.natural_rephrase,
+		literal_translation=[LiteralTranslationNote(**item) for item in (turn.literal_translation or [])],
 	)
 
 

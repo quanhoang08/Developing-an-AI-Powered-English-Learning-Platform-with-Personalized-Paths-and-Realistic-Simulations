@@ -6,8 +6,10 @@ from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.models.adaptive import UserError
 from app.models.notebook import Document
 from app.models.vocab import VocabItem, VocabReview
+from app.services import adaptive_service, llm_service, reading_service, vocab_practice_service
 from app.services.gamification_service import award_activity
 from app.services.sm2_service import apply_sm2
 
@@ -105,3 +107,73 @@ async def review_vocab(
 	await db.commit()
 	await db.refresh(review)
 	return review
+
+
+async def import_from_errors(db: AsyncSession, user_id: uuid.UUID, limit: int) -> list[VocabItem]:
+	"""Biến từ nghe sai trong Dictation (user_errors) thành thẻ vocab vào lịch SM-2.
+
+	Chỉ lấy lỗi vocabulary/spelling của Dictation: đó là nguồn duy nhất ghi đúng 1 từ lẻ;
+	lỗi Writing/Speaking là cụm/câu nên không đem làm thẻ từ được.
+	"""
+	rows = await db.scalars(
+		select(UserError.detail["original_text"].astext)
+		.where(
+			UserError.user_id == user_id,
+			UserError.error_type.in_(("vocabulary", "spelling")),
+			UserError.detail["source"].astext == "dictation",
+		)
+		.order_by(UserError.created_at.desc())
+		.limit(200)
+	)
+	known = {t.lower() for t in await db.scalars(select(VocabItem.term).where(VocabItem.user_id == user_id))}
+	created: list[VocabItem] = []
+	for word in dict.fromkeys(w.strip().lower() for w in rows if w):
+		if len(created) >= limit:
+			break
+		if not word.isalpha() or word in known:
+			continue
+		try:
+			info = await reading_service.lookup_term(word, f"The word \"{word}\" appeared in an English listening exercise.")
+			item = await create_vocab_item(
+				db, user_id, word, info["definition"], None, None, info["ipa"], None,
+				info["example_sentence"] or None, info["synonyms"], info["antonyms"],
+			)
+		except (llm_service.AIServiceError, ValueError):
+			# Tra từ lỗi hoặc trùng đồng thời: bỏ từ này, các từ còn lại vẫn được thêm.
+			continue
+		created.append(item)
+	return created
+
+
+async def check_vocab_sentence(
+	db: AsyncSession, user_id: uuid.UUID, vocab_item_id: uuid.UUID, sentence: str
+) -> dict:
+	"""Chấm câu người học đặt với từ đã lưu; câu sai ngữ pháp được ghi vào user_errors."""
+	item = await db.scalar(
+		select(VocabItem).where(VocabItem.id == vocab_item_id, VocabItem.user_id == user_id)
+	)
+	if item is None:
+		raise ValueError("vocab_not_found")
+	sentence = sentence.strip()
+	# Kiểm tra từ có trong câu trước khi gọi LLM: tiết kiệm lượt gọi và khỏi để model chấm câu lạc đề.
+	if vocab_practice_service.find_missing_terms(sentence, [item.term]):
+		raise ValueError("term_not_used")
+
+	verdict = await llm_service.judge_vocab_sentence(item.term, sentence)
+	# Model local đôi khi cắt cụt nhận xét: thay bằng câu chung còn hơn hiển thị nửa câu.
+	if len(verdict["feedback_vi"].strip()) < 15:
+		verdict["feedback_vi"] = "Câu đúng." if verdict["grammar_ok"] else "Câu cần sửa như gợi ý."
+	if not verdict["grammar_ok"]:
+		adaptive_service.record_error(
+			db,
+			user_id,
+			"grammar",
+			{
+				"source": "vocab_sentence",
+				"original_text": sentence,
+				"corrected_text": verdict["corrected_sentence"],
+				"explanation": verdict["feedback_vi"],
+			},
+		)
+		await db.commit()
+	return verdict

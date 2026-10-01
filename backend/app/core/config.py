@@ -8,7 +8,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 # Pydantic Settings tự đọc biến môi trường và backend/.env, đồng thời kiểm tra kiểu dữ liệu.
 class Settings(BaseSettings):
 	app_name: str = "Lumina API"
-	environment: str = "development"
+	environment: str = Field(default="development", validation_alias=AliasChoices("ENV", "ENVIRONMENT"))
 	debug: bool = False
 	secret_key: str = Field(
 		default="development-only-change-this-secret-key",
@@ -68,6 +68,11 @@ class Settings(BaseSettings):
 	ollama_model_name: str = Field(
 		default="qwen2.5:7b-instruct-q4_K_M", validation_alias=AliasChoices("OLLAMA_MODEL_NAME")
 	)
+	# Model riêng cho các tác vụ CHẤM điểm (vd chấm câu đặt với từ vựng): benchmark 9 câu cho thấy
+	# llama3.1:8b nhận ra câu vô nghĩa mà qwen2.5:7b bỏ sót. Chưa pull thì tự lùi về ollama_model_name.
+	ollama_judge_model_name: str = Field(
+		default="llama3.1:8b", validation_alias=AliasChoices("OLLAMA_JUDGE_MODEL_NAME")
+	)
 	ollama_temperature: float = Field(
 		default=0.7, validation_alias=AliasChoices("OLLAMA_TEMPERATURE")
 	)
@@ -113,7 +118,7 @@ class Settings(BaseSettings):
 def get_settings() -> Settings:
 	# Cache settings để mọi module dùng cùng một cấu hình trong suốt vòng đời process.
 	settings = Settings()
-	# Render/Heroku cấp URL dạng postgres:// hoặc postgresql://; SQLAlchemy cần chỉ rõ driver psycopg.
+	# Nhiều nhà cung cấp Postgres cấp URL dạng postgres:// hoặc postgresql://; SQLAlchemy cần chỉ rõ driver psycopg.
 	for field in ("database_url", "database_url_sync"):
 		url = getattr(settings, field)
 		for prefix in ("postgres://", "postgresql://"):

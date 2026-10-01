@@ -8,6 +8,10 @@ import {
   generateAdaptiveQuiz,
   submitAdaptiveQuiz,
 } from "../api";
+import { useLearningStats } from "../stats";
+
+const RESTORE_QUESTIONS = 10;
+const RESTORE_MIN_SCORE = 70;
 
 // Backend trả mã lỗi ngắn gọn (detail); đổi sang câu người học đọc được.
 const ERROR_MESSAGES: Record<string, string> = {
@@ -25,6 +29,9 @@ export const AdaptiveQuizPanel: React.FC<AdaptiveQuizPanelProps> = ({ onComplete
   const [result, setResult] = useState<AdaptiveQuizResult | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const { stats } = useLearningStats();
+  // Chuỗi vừa đứt: đề dài 10 câu, đạt >= 70% trong ngày sẽ lấy lại chuỗi (backend kiểm tra).
+  const restoring = stats.restorableStreak > 0;
 
   const showError = (caught: unknown) => {
     const message = caught instanceof Error ? caught.message : "";
@@ -36,7 +43,7 @@ export const AdaptiveQuizPanel: React.FC<AdaptiveQuizPanelProps> = ({ onComplete
     setError(null);
     setResult(null);
     try {
-      const created = await generateAdaptiveQuiz(null, 5);
+      const created = await generateAdaptiveQuiz(null, restoring ? RESTORE_QUESTIONS : 5);
       setQuiz(created);
       setAnswers(created.questions.map(() => null));
     } catch (caught) {
@@ -84,9 +91,17 @@ export const AdaptiveQuizPanel: React.FC<AdaptiveQuizPanelProps> = ({ onComplete
         </p>
       )}
 
+      {restoring && !result && (
+        <p className="text-sm text-amber-800 bg-amber-50 rounded-xl px-4 py-3">
+          Your {stats.restorableStreak}-day streak just broke. Score at least {RESTORE_MIN_SCORE}% on this{" "}
+          {RESTORE_QUESTIONS}-question quiz today to get it back.
+        </p>
+      )}
+
       {!quiz && !error && (
         <p className="text-sm text-slate-500">
-          A short quiz built from the mistakes you made most often and most recently.
+          A short quiz built from the mistakes you made most often and most recently
+          (or common grammar and vocabulary if you have no mistakes yet).
         </p>
       )}
 
@@ -146,9 +161,16 @@ export const AdaptiveQuizPanel: React.FC<AdaptiveQuizPanelProps> = ({ onComplete
           })}
 
           {result ? (
-            <p className="text-sm font-bold text-slate-900">
-              Score: <span className="num">{Math.round(result.score)}%</span>
-            </p>
+            <div className="space-y-2">
+              <p className="text-sm font-bold text-slate-900">
+                Score: <span className="num">{Math.round(result.score)}%</span>
+              </p>
+              {result.streak_restored && (
+                <p className="text-sm text-emerald-800 bg-emerald-50 rounded-xl px-4 py-3">
+                  Streak restored! Keep it going tomorrow.
+                </p>
+              )}
+            </div>
           ) : (
             <button
               onClick={submit}

@@ -102,6 +102,9 @@ Furthermore, the ethical implications surrounding data privacy remain deeply con
   const [classicQuestions, setClassicQuestions] = useState<Array<{ id: string; text: string; options: string[] }>>([]);
   const [classicChoices, setClassicChoices] = useState<Record<string, number>>({});
   const [classicScore, setClassicScore] = useState<number | null>(null);
+  // Đáp án đúng + giải thích theo từng câu, chỉ có sau khi nộp bài.
+  const [classicResults, setClassicResults] = useState<Record<string, { correct: number; explanation: string | null }>>({});
+  const [questionType, setQuestionType] = useState<"multiple_choice" | "tfng">("multiple_choice");
   const [isStartingClassic, setIsStartingClassic] = useState(false);
 
   // Lấy document ready đầu tiên rồi tạo Classic session bằng backend thật.
@@ -138,6 +141,11 @@ Furthermore, the ethical implications surrounding data privacy remain deeply con
         studyTimer.lap(),
       );
       setClassicScore(result.score);
+      setClassicResults(
+        Object.fromEntries(
+          result.results.map((item) => [item.question_id, { correct: item.correct_option_index, explanation: item.explanation ?? null }]),
+        ),
+      );
     } catch (error) {
       console.error("Classic Reading submit failed", error);
     }
@@ -208,8 +216,8 @@ Furthermore, the ethical implications surrounding data privacy remain deeply con
     try {
       const session = await createSkimScanSession(
         storySource === "document"
-          ? { level: storyLevel.toLowerCase(), documentId: selectedDocumentId }
-          : { level: storyLevel.toLowerCase(), topic: storyTopic },
+          ? { level: storyLevel.toLowerCase(), documentId: selectedDocumentId, questionType }
+          : { level: storyLevel.toLowerCase(), topic: storyTopic, questionType },
       );
       setPassage({
         title: session.title || "Skim & Scan Passage",
@@ -233,6 +241,7 @@ Furthermore, the ethical implications surrounding data privacy remain deeply con
       setClassicQuestion(questions[0] || null);
       setClassicChoices({});
       setClassicScore(null);
+      setClassicResults({});
       setTimerSeed({ seconds: session.time_limit_seconds, key: Date.now() });
       setIsGeneratorOpen(false);
     } catch (error) {
@@ -360,20 +369,36 @@ Furthermore, the ethical implications surrounding data privacy remain deeply con
               {classicQuestions.length > 0 ? classicQuestions.map((question, questionIndex) => (
                 <div key={question.id} className="space-y-2">
                   <p className="text-sm font-semibold text-slate-800">{questionIndex + 1}. {question.text}</p>
-                  {question.options.map((option, optionIndex) => (
-                    <button
-                      key={optionIndex}
-                      onClick={() => setClassicChoices((current) => ({ ...current, [question.id]: optionIndex }))}
-                      disabled={classicScore !== null}
-                      className={`w-full p-3 rounded-xl text-xs font-medium text-left transition-all cursor-pointer ${
-                        classicChoices[question.id] === optionIndex
-                          ? "bg-indigo-100 text-indigo-950 ring-2 ring-indigo-500 font-bold"
-                          : "bg-[#fffdf8] ring-1 ring-slate-900/10 hover:ring-indigo-400 text-slate-700"
-                      }`}
-                    >
-                      {option}
-                    </button>
-                  ))}
+                  {question.options.map((option, optionIndex) => {
+                    const result = classicResults[question.id];
+                    const feedback = result
+                      ? optionIndex === result.correct
+                        ? "bg-emerald-100 text-emerald-900 ring-2 ring-emerald-500 font-bold"
+                        : classicChoices[question.id] === optionIndex
+                          ? "bg-rose-100 text-rose-900 ring-2 ring-rose-400 font-bold"
+                          : "bg-[#fffdf8] ring-1 ring-slate-900/10 text-slate-500"
+                      : null;
+                    return (
+                      <button
+                        key={optionIndex}
+                        onClick={() => setClassicChoices((current) => ({ ...current, [question.id]: optionIndex }))}
+                        disabled={classicScore !== null}
+                        className={`w-full p-3 rounded-xl text-xs font-medium text-left transition-all cursor-pointer ${
+                          feedback ??
+                          (classicChoices[question.id] === optionIndex
+                            ? "bg-indigo-100 text-indigo-950 ring-2 ring-indigo-500 font-bold"
+                            : "bg-[#fffdf8] ring-1 ring-slate-900/10 hover:ring-indigo-400 text-slate-700")
+                        }`}
+                      >
+                        {option}
+                      </button>
+                    );
+                  })}
+                  {classicResults[question.id]?.explanation && (
+                    <p className="text-xs text-slate-600 italic bg-white/70 rounded-xl p-3">
+                      {classicResults[question.id].explanation}
+                    </p>
+                  )}
                 </div>
               )) : (
                 <>
@@ -673,6 +698,23 @@ Furthermore, the ethical implications surrounding data privacy remain deeply con
                     }`}
                   >
                     {lvl}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold text-slate-700 mb-1">Question type</label>
+              <div className="grid grid-cols-2 gap-2">
+                {([["multiple_choice", "Multiple choice"], ["tfng", "True / False / Not Given"]] as const).map(([value, label]) => (
+                  <button
+                    key={value}
+                    onClick={() => setQuestionType(value)}
+                    className={`py-2 text-xs font-bold rounded-xl transition-colors cursor-pointer ${
+                      questionType === value ? "bg-indigo-700 text-white" : "bg-slate-100 text-slate-700 hover:bg-slate-200"
+                    }`}
+                  >
+                    {label}
                   </button>
                 ))}
               </div>

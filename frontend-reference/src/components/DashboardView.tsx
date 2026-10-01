@@ -250,6 +250,14 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             <span className="mx-2">·</span>
             <span className="num font-bold text-slate-700">{stats.totalXp.toLocaleString("en-US")}</span> XP, level {stats.level}
           </p>
+          <p className="text-xs text-slate-500 mt-2">
+            Freezes: <span className="num font-bold text-slate-700">{stats.freezesAvailable}</span> (a new one every 7-day streak, max 2)
+          </p>
+          {stats.restorableStreak > 0 && (
+            <p className="text-xs text-amber-800 bg-amber-50 rounded-lg px-3 py-2 mt-3">
+              Your {stats.restorableStreak}-day streak broke. Pass a 10-question quiz in Progress today to restore it.
+            </p>
+          )}
         </motion.div>
 
         {/* Spaced repetition: nền màu đặc, không viền */}

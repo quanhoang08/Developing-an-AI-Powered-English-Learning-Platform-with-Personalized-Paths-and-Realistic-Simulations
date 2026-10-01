@@ -48,3 +48,15 @@ class VocabReviewResponse(BaseModel):
 	# Lịch ôn tập tiếp theo do sm2_service tính ra sau khi ghi nhận review này.
 	next_review_at: datetime
 	ease_factor: float
+
+
+class VocabSentenceRequest(BaseModel):
+	# Câu người học tự đặt với từ; giới hạn độ dài để chặn prompt quá lớn.
+	sentence: str = Field(min_length=3, max_length=300)
+
+
+class VocabSentenceResponse(BaseModel):
+	meaning_fits: bool
+	grammar_ok: bool
+	corrected_sentence: str
+	feedback_vi: str

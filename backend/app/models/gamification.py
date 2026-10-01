@@ -26,6 +26,10 @@ class Streak(Base):
 	# các model khác cũng khai báo cột nullable bằng nullable=True.
 	last_active_date: Mapped[date] = mapped_column(Date, nullable=True)
 	total_xp: Mapped[int] = mapped_column(Integer, server_default=text("0"))
+	# Chuỗi vừa đứt + ngày phát hiện (migration 0020): khôi phục được bằng quiz trong đúng ngày đó.
+	lost_streak: Mapped[int] = mapped_column(Integer, server_default=text("0"))
+	lost_on: Mapped[date] = mapped_column(Date, nullable=True)
+	freezes_available: Mapped[int] = mapped_column(Integer, server_default=text("0"))
 
 
 class SkillProgress(Base):

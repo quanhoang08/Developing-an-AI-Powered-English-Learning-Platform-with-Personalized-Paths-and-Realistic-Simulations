@@ -80,6 +80,8 @@ class ReadingAnswer(Base):
 	correct_option_index: Mapped[int] = mapped_column(SmallInteger)
 	selected_option_index: Mapped[int] = mapped_column(SmallInteger, nullable=True)
 	is_correct: Mapped[bool] = mapped_column(Boolean, nullable=True)
+	# Chỉ câu True/False/Not Given có; chỉ trả cho client sau khi nộp bài.
+	explanation: Mapped[str] = mapped_column(Text, nullable=True)
 	source_chunk_id: Mapped[uuid.UUID] = mapped_column(
 		UUID(as_uuid=True), ForeignKey("document_chunks.id", ondelete="SET NULL"), nullable=True
 	)

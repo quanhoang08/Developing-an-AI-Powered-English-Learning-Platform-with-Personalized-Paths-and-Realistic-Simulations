@@ -2,7 +2,8 @@
 // Mặc định dùng 127.0.0.1, KHÔNG dùng "localhost": trên Windows + Docker Desktop, localhost phân giải ra ::1
 // (IPv6) trước, nơi wslrelay.exe giữ cổng nhưng không chuyển tiếp được vào container → request treo/reset
 // lúc được lúc không ("Can't reach the Lumina server"). Có test chặn việc đổi lại (api.test.ts).
-const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || "http://127.0.0.1:8000";
+// VITE_BACKEND_URL="/" = cùng origin với trang web (khi Caddy phục vụ cả frontend lẫn /api, xem docker-compose.public.yml).
+const BACKEND_URL = (import.meta.env.VITE_BACKEND_URL || "http://127.0.0.1:8000").replace(/\/$/, "");
 const ACCESS_TOKEN_KEY = "lumina_access_token";
 
 export interface AuthUser {
@@ -278,6 +279,10 @@ export interface StreakSummary {
   xp_into_level: number;
   xp_for_next_level: number;
   recent_active_dates: string[];
+  // >0: chuỗi vừa đứt, làm quiz >=10 câu đạt >=70% trong ngày để lấy lại.
+  restorable_streak: number;
+  // Freeze còn lại: mỗi 7 ngày liên tiếp được tặng 1 (tối đa 2), tự dùng khi bỏ lỡ ngày.
+  freezes_available: number;
 }
 
 export function getStreaks() {
@@ -328,6 +333,7 @@ export interface AdaptiveQuizResult {
   attempt_id: string;
   score: number;
   results: { is_correct: boolean; correct_option_index: number; explanation: string }[];
+  streak_restored: boolean;
 }
 
 export function listAdaptiveErrors(limit = 50) {
@@ -468,7 +474,7 @@ export function submitClassicAnswers(
 ) {
   return request<{
     score: number;
-    results: Array<{ question_id: string; correct_option_index: number; source_chunk_id: string | null }>;
+    results: Array<{ question_id: string; correct_option_index: number; source_chunk_id: string | null; explanation?: string | null }>;
   }>(`/api/reading/sessions/${sessionId}/submit`, {
     method: "POST",
     body: JSON.stringify({ answers, duration_seconds: durationSeconds }),
@@ -491,7 +497,7 @@ export function sendChatMessage(documentId: string, message: string, provider: C
 }
 
 // Tạo phiên Skim & Scan mới — truyền documentId (passage thật từ tài liệu) hoặc topic (AI tự sinh).
-export function createSkimScanSession(input: { level: string; documentId?: string; topic?: string; timeLimitSeconds?: number }) {
+export function createSkimScanSession(input: { level: string; documentId?: string; topic?: string; timeLimitSeconds?: number; questionType?: "multiple_choice" | "tfng" }) {
   return request<SkimScanSession>("/api/reading/skim-scan/sessions", {
     method: "POST",
     body: JSON.stringify({
@@ -499,6 +505,7 @@ export function createSkimScanSession(input: { level: string; documentId?: strin
       document_id: input.documentId,
       topic: input.topic,
       time_limit_seconds: input.timeLimitSeconds,
+      question_type: input.questionType,
     }),
   });
 }
@@ -506,6 +513,11 @@ export function createSkimScanSession(input: { level: string; documentId?: strin
 // Lấy danh sách từ vựng đến hạn ôn tập (next_review_at <= hiện tại) theo lịch SM-2.
 export function listDueVocabulary() {
   return request<DueVocabulary[]>("/api/vocab/due");
+}
+
+// Thêm các từ nghe sai ở Dictation vào lịch ôn SM-2 (backend tra nghĩa bằng Ollama, tối đa limit từ/lần).
+export function importVocabularyFromErrors(limit = 5) {
+  return request<DueVocabulary[]>(`/api/vocab/from-errors?limit=${limit}`, { method: "POST" });
 }
 
 // Ghi nhận 1 lượt ôn từ (quality 0-5) — backend tính lại ease_factor/next_review_at bằng SM-2.
@@ -664,6 +676,9 @@ export interface SpeakingTurn {
   politeness_feedback: string | null;
   suggested_phrases: SuggestedPhrase[];
   stt_provider_used: string | null;
+  // Lưu theo từng lượt (migration 0020) nên xem lại phiên cũ vẫn có; lượt cũ trước migration thì trống.
+  natural_rephrase: string | null;
+  literal_translation: { original: string; natural: string; explanation: string }[];
 }
 
 export interface SlangPhrase {
@@ -791,6 +806,21 @@ export function submitGuessContext(attemptId: string, selectedOptionIndex: numbe
     `/api/reading/guess-context/${attemptId}/submit`,
     { method: "POST", body: JSON.stringify({ selected_option_index: selectedOptionIndex }) },
   );
+}
+
+export interface SentenceVerdict {
+  meaning_fits: boolean;
+  grammar_ok: boolean;
+  corrected_sentence: string;
+  feedback_vi: string;
+}
+
+// Chấm câu người học tự đặt với 1 từ đã lưu (câu sai ngữ pháp được backend ghi vào sổ lỗi).
+export function checkVocabSentence(vocabItemId: string, sentence: string) {
+  return request<SentenceVerdict>(`/api/vocab/${vocabItemId}/check-sentence`, {
+    method: "POST",
+    body: JSON.stringify({ sentence }),
+  });
 }
 
 export function createStory(vocabItemIds: string[], theme?: string, length: "short" | "medium" | "long" = "medium") {

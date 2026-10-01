@@ -1,5 +1,5 @@
 import React from "react";
-import { Search, Flame, Trophy, Bell, Command, Menu } from "lucide-react";
+import { Search, Flame, Trophy, Bell, Command, Menu, Snowflake } from "lucide-react";
 import { ActiveTab } from "../types";
 import { useLearningStats } from "../stats";
 import { AuthPanel } from "./AuthPanel";
@@ -96,6 +96,21 @@ export const Header: React.FC<HeaderProps> = ({
             {stats.currentStreak} {stats.currentStreak === 1 ? "day" : "days"}
           </span>
         </button>
+
+        {/* Freeze: tặng mỗi 7 ngày liên tiếp (tối đa 2), tự lấp ngày bỏ lỡ. Streak vừa đứt thì báo có thể khôi phục. */}
+        <div
+          className={`hidden sm:flex items-center gap-1 px-2.5 py-1.5 rounded-full ${
+            stats.restorableStreak > 0 ? "bg-amber-50 text-amber-800" : "bg-sky-50 text-sky-800"
+          }`}
+          title={
+            stats.restorableStreak > 0
+              ? `Your ${stats.restorableStreak}-day streak broke - pass a 10-question quiz today to restore it`
+              : `${stats.freezesAvailable} streak freeze(s): each covers a missed day`
+          }
+        >
+          <Snowflake className="w-4 h-4" />
+          <span className="num text-xs font-bold">{stats.restorableStreak > 0 ? "Restore" : stats.freezesAvailable}</span>
+        </div>
 
         {/* XP Level */}
         <div

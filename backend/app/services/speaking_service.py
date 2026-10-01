@@ -21,7 +21,9 @@ from app.models.speaking import (
 	Scenario,
 	SlangPhrase,
 )
+from app.models.adaptive import UserError
 from app.services import llm_service, speech_service
+from app.services.adaptive_service import record_error
 from app.services.gamification_service import award_activity
 
 logger = logging.getLogger(__name__)
@@ -29,6 +31,8 @@ logger = logging.getLogger(__name__)
 SESSION_IDLE_MINUTES = 30
 _ALLOWED_AUDIO_EXTENSIONS = {".wav", ".mp3", ".m4a", ".webm", ".ogg"}
 _MAX_ADVICE_WORDS = 5
+_MEMORY_ERRORS = 5
+_MAX_LITERAL_TRANSLATION = 3
 
 
 def _audio_dir() -> Path:
@@ -104,8 +108,30 @@ async def _assess_pronunciation(audio_path: str) -> speech_service.Pronunciation
 		return None
 
 
+async def _recent_error_notes(db: AsyncSession, user_id: uuid.UUID) -> list[str]:
+	# Bộ nhớ hội thoại: vài lỗi gần nhất có câu gốc/bản sửa để AI cho học viên dùng lại.
+	errors = await db.scalars(
+		select(UserError)
+		.where(UserError.user_id == user_id, UserError.detail["original_text"].astext.is_not(None))
+		.order_by(UserError.created_at.desc())
+		.limit(_MEMORY_ERRORS)
+	)
+	notes = []
+	for error in errors:
+		detail = error.detail
+		note = f"{error.error_type}: \"{detail['original_text']}\""
+		if detail.get("corrected_text"):
+			note += f" -> \"{detail['corrected_text']}\""
+		notes.append(note)
+	return notes
+
+
 async def _transcribe_and_reply(
-	audio_path: str, scenario: Scenario, history: list[dict], provider: str | None
+	audio_path: str,
+	scenario: Scenario,
+	history: list[dict],
+	provider: str | None,
+	past_errors: list[str],
 ) -> tuple[str, str, dict]:
 	# Nhánh A: STT (Azure -> Gemini dự phòng) -> LLM. Cả 2 STT lỗi -> stt_service_unavailable,
 	# rỗng -> empty_transcription.
@@ -123,7 +149,9 @@ async def _transcribe_and_reply(
 		"goal": scenario.goal,
 		"formality_level": scenario.formality_level,
 	}
-	reply = await llm_service.generate_conversation_turn(scenario_payload, history, text, provider)
+	reply = await llm_service.generate_conversation_turn(
+		scenario_payload, history, text, provider, past_errors
+	)
 	return text, stt_provider, reply
 
 
@@ -183,9 +211,10 @@ async def submit_turn(
 		history.append({"role": "learner", "content": turn.user_transcript or ""})
 		history.append({"role": "partner", "content": turn.ai_response_text or ""})
 
+	past_errors = await _recent_error_notes(db, user_id)
 	# Hai nhánh độc lập dữ liệu vào: B luôn nhận audio gốc, không nhận text đã qua STT.
 	(transcript_text, stt_provider, reply), pronunciation = await asyncio.gather(
-		_transcribe_and_reply(str(audio_path), scenario, history, provider),
+		_transcribe_and_reply(str(audio_path), scenario, history, provider, past_errors),
 		_assess_pronunciation(str(audio_path)),
 	)
 
@@ -210,6 +239,21 @@ async def submit_turn(
 		stt_provider_used=stt_provider,
 	)
 	db.add(turn)
+	# literal_translation -> user_errors (loại vocabulary, detail đủ để Adaptive Engine sinh bài luyện).
+	literal_translation = [
+		{"original": item["original"], "natural": item["natural"], "explanation": item.get("explanation") or ""}
+		for item in (reply.get("literal_translation") or [])[:_MAX_LITERAL_TRANSLATION]
+		if isinstance(item, dict) and item.get("original") and item.get("natural")
+	]
+	turn.natural_rephrase = (reply.get("natural_rephrase") or "").strip() or None
+	turn.literal_translation = literal_translation
+	for item in literal_translation:
+		record_error(db, user_id, "vocabulary", {
+			"source": "speaking_literal_translation",
+			"original_text": item["original"],
+			"corrected_text": item["natural"],
+			"explanation": item["explanation"],
+		})
 	# Chỉ lượt hợp lệ (đã qua STT + phản hồi AI) mới tới đây, lượt lỗi đã raise ở trên.
 	await award_activity(
 		db, user_id, "speaking_turn",

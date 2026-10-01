@@ -1,3 +1,5 @@
+from typing import Literal
+
 from pydantic import BaseModel, Field, model_validator
 
 
@@ -71,6 +73,7 @@ class ReadingResult(BaseModel):
 	question_id: str
 	correct_option_index: int
 	source_chunk_id: str | None
+	explanation: str | None = None
 
 
 class ReadingSubmitResponse(BaseModel):
@@ -85,6 +88,7 @@ class SkimScanSessionCreate(BaseModel):
 	document_id: str | None = None
 	topic: str | None = Field(default=None, min_length=1, max_length=100)
 	time_limit_seconds: int = Field(default=90, ge=30, le=600)
+	question_type: Literal["multiple_choice", "tfng"] = "multiple_choice"
 
 	@model_validator(mode="after")
 	def check_exactly_one_source(self) -> "SkimScanSessionCreate":

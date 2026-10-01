@@ -1,6 +1,7 @@
 from fastapi.testclient import TestClient
 from datetime import timedelta
 
+from app.core.config import get_settings
 from app.main import app
 from app.core.security import (
 	create_access_token,
@@ -23,7 +24,8 @@ def test_health_check() -> None:
 	assert response.status_code == 200
 	assert response.json() == {
 		"status": "ok",
-		"environment": "development",
+		# Môi trường do biến ENV quyết định (container chạy production), không cố định "development".
+		"environment": get_settings().environment,
 	}
 
 

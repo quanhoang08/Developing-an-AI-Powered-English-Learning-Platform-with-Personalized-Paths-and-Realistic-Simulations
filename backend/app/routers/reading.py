@@ -112,6 +112,7 @@ async def create_skim_scan_reading_session(
 			request.level,
 			request.topic,
 			UUID(request.document_id) if request.document_id else None,
+			question_type=request.question_type,
 		)
 	except ValueError as error:
 		code = str(error)
@@ -120,6 +121,8 @@ async def create_skim_scan_reading_session(
 		else:
 			status_code = 400
 		raise HTTPException(status_code=status_code, detail=code) from error
+	except AIServiceError as error:
+		raise ai_http_error(error) from error
 
 	answers = await get_session_answers(db, session.id)
 	return SkimScanSessionResponse(
@@ -164,6 +167,7 @@ async def submit_reading_session(
 				question_id=str(answer.id),
 				correct_option_index=answer.correct_option_index,
 				source_chunk_id=str(answer.source_chunk_id) if answer.source_chunk_id else None,
+				explanation=answer.explanation,
 			)
 			for answer in answers
 		],

@@ -25,6 +25,12 @@ class SuggestedPhrase(BaseModel):
 	source_note: str = ""
 
 
+class LiteralTranslationNote(BaseModel):
+	original: str
+	natural: str
+	explanation: str = ""
+
+
 class TurnResponse(BaseModel):
 	turn_id: str
 	user_transcript: str | None = None
@@ -39,6 +45,8 @@ class TurnResponse(BaseModel):
 	politeness_feedback: str | None = None
 	suggested_phrases: list[SuggestedPhrase] = []
 	stt_provider_used: str | None = None
+	natural_rephrase: str | None = None
+	literal_translation: list[LiteralTranslationNote] = []
 
 
 class SlangPhraseResponse(BaseModel):

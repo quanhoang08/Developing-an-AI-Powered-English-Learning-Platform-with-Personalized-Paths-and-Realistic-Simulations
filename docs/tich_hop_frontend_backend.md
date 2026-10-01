@@ -1,6 +1,6 @@
 # Tích hợp Frontend ↔ Backend và cấu hình dịch vụ AI (tư liệu cho báo cáo khóa luận)
 
-> Cập nhật: 2026-09-30. Phạm vi: môi trường phát triển (chạy trên máy cá nhân). Việc triển khai online (Render/Vercel) nằm ngoài phạm vi báo cáo này.
+> Cập nhật: 2026-09-30. Phạm vi: môi trường phát triển (chạy trên máy cá nhân). Việc triển khai online nằm ngoài phạm vi báo cáo này.
 
 ## 1. Bối cảnh
 

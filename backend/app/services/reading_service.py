@@ -198,6 +198,7 @@ async def create_skim_scan_session(
 	topic: str | None,
 	document_id: uuid.UUID | None,
 	num_questions: int = 3,
+	question_type: str = "multiple_choice",
 ) -> tuple[ReadingSession, GeneratedPassage]:
 	"""Tạo Skim & Scan session. `document_id` set → passage là excerpt THẬT từ tài liệu
 	user đã upload (không AI-sinh); `topic` set → passage do LLM sinh tự do.
@@ -247,7 +248,23 @@ async def create_skim_scan_session(
 	db.add(passage)
 	await db.flush()
 
-	questions = await llm_service.generate_skim_scan_questions(passage.content, level, num_questions)
+	# True/False/Not Given: 3 lựa chọn cố định, đáp án + giải thích do LLM sinh (xem generate_tfng_questions).
+	if question_type == "tfng":
+		generated = await llm_service.generate_tfng_questions(passage.content, level, num_questions)
+		questions = [
+			{
+				"question_text": item["statement"],
+				"options": llm_service.TFNG_OPTIONS,
+				"correct_option_index": llm_service.TFNG_OPTIONS.index(item["answer"]),
+				"explanation": item["explanation"],
+			}
+			for item in generated
+			if item.get("answer") in llm_service.TFNG_OPTIONS
+		]
+		if not questions:
+			raise llm_service.AIServiceError("tfng_empty", "ai_bad_output")
+	else:
+		questions = await llm_service.generate_skim_scan_questions(passage.content, level, num_questions)
 
 	session = ReadingSession(
 		user_id=user_id,
@@ -264,6 +281,7 @@ async def create_skim_scan_session(
 				question=question["question_text"],
 				options=question["options"],
 				correct_option_index=question["correct_option_index"],
+				explanation=question.get("explanation"),
 			)
 		)
 

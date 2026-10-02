@@ -9,6 +9,11 @@ from app.core.dependencies import get_current_user
 from app.database import get_db
 from app.models.user import User
 from app.schemas.listening import (
+	ComprehensionRequest,
+	ComprehensionResponse,
+	QuizHistoryItem,
+	QuizSubmitRequest,
+	QuizSubmitResponse,
 	DictationCreateRequest,
 	DictationCreateResponse,
 	DictationErrorItem,
@@ -48,6 +53,7 @@ _BUSINESS_ERROR_STATUS = {
 	"document_not_ready": status.HTTP_400_BAD_REQUEST,
 	"dictation_attempt_not_found": status.HTTP_404_NOT_FOUND,
 	"podcast_not_ready": status.HTTP_400_BAD_REQUEST,
+	"quiz_not_found": status.HTTP_404_NOT_FOUND,
 	"podcast_has_no_transcript": status.HTTP_400_BAD_REQUEST,
 	"segment_range_has_no_words": status.HTTP_400_BAD_REQUEST,
 }
@@ -223,3 +229,62 @@ async def get_podcast_transcript(
 			for w in words
 		]
 	)
+
+
+@router.post("/podcasts/{podcast_id}/comprehension", response_model=ComprehensionResponse)
+async def create_comprehension(
+	podcast_id: UUID,
+	request: ComprehensionRequest,
+	current_user: User = Depends(get_current_user),
+	db: AsyncSession = Depends(get_db),
+) -> ComprehensionResponse:
+	try:
+		attempt, questions = await podcast_service.generate_comprehension(
+			db, current_user.id, podcast_id, request.num_questions
+		)
+	except ValueError as error:
+		_raise_business_error(error)
+	except AIServiceError as error:
+		raise HTTPException(
+			status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(error)
+		) from error
+	return ComprehensionResponse(attempt_id=str(attempt.id), questions=questions)
+
+
+@router.post("/quizzes/{attempt_id}/submit", response_model=QuizSubmitResponse)
+async def submit_quiz(
+	attempt_id: UUID,
+	request: QuizSubmitRequest,
+	current_user: User = Depends(get_current_user),
+	db: AsyncSession = Depends(get_db),
+) -> QuizSubmitResponse:
+	try:
+		attempt = await podcast_service.submit_quiz(
+			db, current_user.id, attempt_id, request.picks, request.duration_seconds
+		)
+	except ValueError as error:
+		_raise_business_error(error)
+	return QuizSubmitResponse(
+		score=float(attempt.score),
+		correct_count=attempt.correct_count,
+		total=len(attempt.questions),
+		correct=[pick == q["correct_index"] for q, pick in zip(attempt.questions, attempt.picks)],
+	)
+
+
+@router.get("/quizzes", response_model=list[QuizHistoryItem])
+async def list_quizzes(
+	current_user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)
+) -> list[QuizHistoryItem]:
+	return [
+		QuizHistoryItem(
+			id=str(a.id),
+			podcast_id=str(a.podcast_id),
+			podcast_title=title,
+			created_at=a.created_at.isoformat(),
+			score=float(a.score),
+			correct_count=a.correct_count,
+			total=len(a.questions),
+		)
+		for a, title in await podcast_service.list_quizzes(db, current_user.id)
+	]

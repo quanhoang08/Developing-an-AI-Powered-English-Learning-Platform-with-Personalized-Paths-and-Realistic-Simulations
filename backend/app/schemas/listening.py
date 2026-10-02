@@ -70,3 +70,46 @@ class TranscriptWordItem(BaseModel):
 
 class TranscriptResponse(BaseModel):
 	segments: list[TranscriptWordItem]
+
+
+class ComprehensionRequest(BaseModel):
+	num_questions: int = Field(default=4, ge=1, le=8)
+
+
+class ComprehensionQuestion(BaseModel):
+	question: str
+	options: list[str]
+	correct_index: int
+	trap_note: str
+	# Đoạn transcript chứa đáp án; mốc ms là None nếu không định vị được trong transcript.
+	evidence_text: str
+	evidence_start_ms: int | None = None
+	evidence_end_ms: int | None = None
+
+
+class ComprehensionResponse(BaseModel):
+	attempt_id: str
+	questions: list[ComprehensionQuestion]
+
+
+class QuizSubmitRequest(BaseModel):
+	# Một phần tử mỗi câu: chỉ số lựa chọn 0-3, hoặc null nếu bỏ trống.
+	picks: list[int | None] = Field(max_length=8)
+	duration_seconds: int | None = Field(default=None, gt=0)
+
+
+class QuizSubmitResponse(BaseModel):
+	score: float
+	correct_count: int
+	total: int
+	correct: list[bool]
+
+
+class QuizHistoryItem(BaseModel):
+	id: str
+	podcast_id: str
+	podcast_title: str
+	created_at: str
+	score: float
+	correct_count: int
+	total: int

@@ -24,6 +24,7 @@ XP_BY_ACTIVITY: dict[str, int] = {
 	"reading_completed": 20,
 	"writing_submitted": 30,
 	"dictation_completed": 15,
+	"listening_quiz_completed": 15,
 	"speaking_turn": 10,
 	"quiz_completed": 25,
 }
@@ -33,6 +34,7 @@ XP_BY_ACTIVITY: dict[str, int] = {
 SKILL_BY_ACTIVITY: dict[str, str] = {
 	"reading_completed": "reading",
 	"dictation_completed": "listening",
+	"listening_quiz_completed": "listening",
 	"writing_submitted": "writing",
 	"speaking_turn": "speaking",
 }

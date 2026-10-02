@@ -1,9 +1,11 @@
 // Podcast thật từ tài liệu Notebook: tạo podcast, phát audio, transcript đồng bộ theo từ (click
 // tra nghĩa) và Dictation (feature-listening.md mục 1-3). Gọi backend FastAPI thật.
 import React, { useCallback, useEffect, useRef, useState } from "react";
-import { CheckCircle2, Headphones, Loader2, PenLine, Plus, XCircle } from "lucide-react";
+import { CheckCircle2, Headphones, ListChecks, Loader2, PenLine, Plus, XCircle } from "lucide-react";
 import { useStudyTimer } from "../useStudyTimer";
 import {
+  ComprehensionQuestion,
+  createComprehension,
   createDictation,
   createPodcast,
   DictationResult,
@@ -11,10 +13,14 @@ import {
   getPodcastTranscript,
   listDocuments,
   listPodcasts,
+  listQuizzes,
   lookupWord,
   LookupResult,
   NotebookDocument,
   PodcastItem,
+  QuizHistoryItem,
+  QuizResult,
+  submitQuiz,
   submitDictation,
   TranscriptWord,
 } from "../api";
@@ -44,6 +50,19 @@ export const PodcastPanel: React.FC = () => {
   const [dictationResult, setDictationResult] = useState<DictationResult | null>(null);
   const [isDictationBusy, setIsDictationBusy] = useState(false);
 
+  // Quiz nghe hiểu (backlog 2.2): chọn đáp án -> hiện đáp án đúng, bẫy và tô đoạn căn cứ trong transcript.
+  const [quiz, setQuiz] = useState<ComprehensionQuestion[]>([]);
+  const [picked, setPicked] = useState<Record<number, number>>({});
+  const [evidence, setEvidence] = useState<{ start: number; end: number } | null>(null);
+  const [isQuizBusy, setIsQuizBusy] = useState(false);
+  const [quizAttemptId, setQuizAttemptId] = useState<string | null>(null);
+  const [quizResult, setQuizResult] = useState<QuizResult | null>(null);
+  const [quizHistory, setQuizHistory] = useState<QuizHistoryItem[]>([]);
+  const loadQuizHistory = useCallback(() => {
+    listQuizzes().then(setQuizHistory).catch(() => undefined);
+  }, []);
+  useEffect(loadQuizHistory, [loadQuizHistory]);
+
   const refresh = useCallback(async () => {
     try {
       const [items, docs] = await Promise.all([listPodcasts(), listDocuments()]);
@@ -72,6 +91,10 @@ export const PodcastPanel: React.FC = () => {
     setDictationAudio(null);
     setDictationResult(null);
     setDictationText("");
+    setQuiz([]);
+    setPicked({});
+    setQuizResult(null);
+    setEvidence(null);
     try {
       const [url, transcript] = await Promise.all([
         fetchAudioObjectUrl(`/api/listening/podcasts/${podcastId}/audio`),
@@ -117,6 +140,50 @@ export const PodcastPanel: React.FC = () => {
     } catch {
       setLookup({ term, result: null, loading: false });
     }
+  };
+
+  const startQuiz = async () => {
+    if (!activeId) return;
+    setIsQuizBusy(true);
+    setError(null);
+    setPicked({});
+    setQuizResult(null);
+    setEvidence(null);
+    try {
+      const created = await createComprehension(activeId);
+      setQuizAttemptId(created.attempt_id);
+      setQuiz(created.questions);
+      studyTimer.start();
+    } catch (quizError) {
+      setError(quizError instanceof Error ? quizError.message : "Could not create questions.");
+    } finally {
+      setIsQuizBusy(false);
+    }
+  };
+
+  const pickAnswer = async (questionIndex: number, optionIndex: number) => {
+    if (picked[questionIndex] !== undefined) return;
+    const nextPicked = { ...picked, [questionIndex]: optionIndex };
+    setPicked(nextPicked);
+    // Trả lời đủ mọi câu -> tự nộp để server chấm, ghi lỗi và lưu lịch sử.
+    if (quizAttemptId && Object.keys(nextPicked).length === quiz.length) {
+      try {
+        setQuizResult(await submitQuiz(quizAttemptId, quiz.map((_, index) => nextPicked[index] ?? null), studyTimer.lap()));
+        loadQuizHistory();
+      } catch (submitError) {
+        setError(submitError instanceof Error ? submitError.message : "Could not submit the quiz.");
+      }
+    }
+    const item = quiz[questionIndex];
+    if (item.evidence_start_ms !== null && item.evidence_end_ms !== null) {
+      setEvidence({ start: item.evidence_start_ms, end: item.evidence_end_ms });
+    }
+  };
+
+  const playEvidence = (startMs: number) => {
+    if (!audioRef.current) return;
+    audioRef.current.currentTime = startMs / 1000;
+    void audioRef.current.play();
   };
 
   const startDictation = async () => {
@@ -246,7 +313,9 @@ export const PodcastPanel: React.FC = () => {
                     key={`${word.start_ms}-${index}`}
                     onClick={() => handleWordClick(index)}
                     className={`cursor-pointer rounded px-0.5 ${
-                      index === activeIndex ? "bg-amber-300 text-slate-900 shadow-[0_2px_0_0_rgba(217,119,6,0.9)]" : "hover:bg-purple-100"
+                      evidence && word.start_ms >= evidence.start && word.end_ms <= evidence.end
+                        ? "bg-emerald-200 text-slate-900"
+                        : index === activeIndex ? "bg-amber-300 text-slate-900 shadow-[0_2px_0_0_rgba(217,119,6,0.9)]" : "hover:bg-purple-100"
                     }`}
                   >
                     {word.text}{" "}
@@ -267,6 +336,81 @@ export const PodcastPanel: React.FC = () => {
                   )}
                   {!lookup.loading && !lookup.result && <p className="text-red-600">Could not look this word up.</p>}
                 </div>
+              )}
+            </div>
+
+            <div className="surface p-7 space-y-4">
+              <div className="flex items-center justify-between">
+                <h3 className="font-display text-xl font-bold text-slate-900 flex items-center gap-2">
+                  <ListChecks className="w-5 h-5 text-emerald-600" /> Comprehension quiz
+                </h3>
+                <button
+                  onClick={startQuiz}
+                  disabled={isQuizBusy}
+                  className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold rounded-xl disabled:opacity-50 transition-all active:scale-95 flex items-center gap-1.5"
+                >
+                  {isQuizBusy && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                  {quiz.length ? "New questions" : "Generate questions"}
+                </button>
+              </div>
+              {quiz.map((item, questionIndex) => {
+                const chosen = picked[questionIndex];
+                return (
+                  <div key={questionIndex} className="space-y-2">
+                    <p className="text-sm font-bold text-slate-900">{questionIndex + 1}. {item.question}</p>
+                    {item.options.map((option, optionIndex) => {
+                      const reveal = chosen !== undefined;
+                      const tone = !reveal
+                        ? "bg-paper-deep/70 hover:bg-paper-deep"
+                        : optionIndex === item.correct_index
+                          ? "bg-emerald-100 text-emerald-900"
+                          : optionIndex === chosen
+                            ? "bg-red-100 text-red-800"
+                            : "bg-paper-deep/40 text-slate-500";
+                      return (
+                        <button
+                          key={optionIndex}
+                          onClick={() => pickAnswer(questionIndex, optionIndex)}
+                          className={`w-full text-left px-3.5 py-2 rounded-xl text-sm transition-colors ${tone}`}
+                        >
+                          {option}
+                        </button>
+                      );
+                    })}
+                    {chosen !== undefined && (
+                      <div className="p-3 rounded-xl bg-emerald-50 border-l-4 border-emerald-400 text-xs space-y-1 animate-rise">
+                        <p className="italic text-slate-700">“{item.evidence_text}”</p>
+                        <p className="text-slate-600"><span className="font-bold">Trap:</span> {item.trap_note}</p>
+                        {item.evidence_start_ms !== null && (
+                          <button
+                            onClick={() => playEvidence(item.evidence_start_ms as number)}
+                            className="font-bold text-emerald-700 hover:underline"
+                          >
+                            ▶ Play this part
+                          </button>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+              {quizResult && (
+                <p className="text-sm font-bold text-slate-900 animate-rise">
+                  Score: {quizResult.correct_count}/{quizResult.total} ({Math.round(quizResult.score)}%) — wrong answers were added to your mistake notebook.
+                </p>
+              )}
+              {quizHistory.length > 0 && (
+                <details className="text-xs text-slate-600">
+                  <summary className="cursor-pointer italic text-slate-500">Past quizzes</summary>
+                  <ul className="mt-2 space-y-1">
+                    {quizHistory.map((item) => (
+                      <li key={item.id} className="flex justify-between gap-3">
+                        <span className="truncate">{new Date(item.created_at).toLocaleDateString()} · {item.podcast_title}</span>
+                        <span className="num font-bold">{item.correct_count}/{item.total}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </details>
               )}
             </div>
 

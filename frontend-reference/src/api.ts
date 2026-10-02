@@ -593,6 +593,51 @@ export function submitDictation(attemptId: string, transcribedText: string, dura
   });
 }
 
+export interface ComprehensionQuestion {
+  question: string;
+  options: string[];
+  correct_index: number;
+  trap_note: string;
+  evidence_text: string;
+  evidence_start_ms: number | null;
+  evidence_end_ms: number | null;
+}
+
+export interface QuizResult {
+  score: number;
+  correct_count: number;
+  total: number;
+  correct: boolean[];
+}
+
+export interface QuizHistoryItem {
+  id: string;
+  podcast_id: string;
+  podcast_title: string;
+  created_at: string;
+  score: number;
+  correct_count: number;
+  total: number;
+}
+
+export function submitQuiz(attemptId: string, picks: Array<number | null>, durationSeconds?: number) {
+  return request<QuizResult>(`/api/listening/quizzes/${attemptId}/submit`, {
+    method: "POST",
+    body: JSON.stringify({ picks, duration_seconds: durationSeconds }),
+  });
+}
+
+export function listQuizzes() {
+  return request<QuizHistoryItem[]>("/api/listening/quizzes");
+}
+
+export function createComprehension(podcastId: string, numQuestions = 4) {
+  return request<{ attempt_id: string; questions: ComprehensionQuestion[] }>(
+    `/api/listening/podcasts/${podcastId}/comprehension`,
+    { method: "POST", body: JSON.stringify({ num_questions: numQuestions }) },
+  );
+}
+
 // Audio nằm sau JWT nên <audio src> không tự gắn được Bearer: tải về dạng blob rồi phát.
 export async function fetchAudioObjectUrl(path: string): Promise<string> {
   const token = getAccessToken();
@@ -720,6 +765,81 @@ export function sendSpeakingTurn(sessionId: string, audio: Blob, provider: ChatP
   return request<SpeakingTurn>(`/api/speaking/sessions/${sessionId}/turns?provider=${provider}${query}`, {
     method: "POST",
     body,
+  });
+}
+
+// IELTS Speaking giả lập (backlog 2.3).
+export interface IeltsExam {
+  part1_questions: string[];
+  cue_card: { topic: string; bullets: string[] };
+  part3_questions: string[];
+  part2_prep_seconds: number;
+  part2_speak_seconds: number;
+}
+
+export interface IeltsAnswer {
+  transcript: string;
+  pronunciation_score: number | null;
+  words_per_minute: number | null;
+}
+
+export interface IeltsEstimate {
+  fluency_coherence: number;
+  lexical_resource: number;
+  grammatical_range: number;
+  pronunciation: number | null;
+  overall: number;
+  feedback_vi: string;
+  attempt_id: string;
+  previous_overall: number | null;
+}
+
+export interface IeltsAttempt {
+  id: string;
+  created_at: string;
+  topic: string | null;
+  overall: number;
+  fluency_coherence: number;
+  lexical_resource: number;
+  grammatical_range: number;
+  pronunciation: number | null;
+  words_per_minute: number | null;
+  feedback_vi: string;
+}
+
+export function listIeltsAttempts() {
+  return request<IeltsAttempt[]>("/api/speaking/ielts/attempts");
+}
+
+export function createIeltsExam(topic?: string) {
+  return request<IeltsExam>("/api/speaking/ielts/exam", {
+    method: "POST",
+    body: JSON.stringify({ topic: topic || null }),
+  });
+}
+
+export function sendIeltsAnswer(audio: Blob, durationSeconds: number) {
+  const body = new FormData();
+  body.append("audio", audio, "ielts.wav");
+  return request<IeltsAnswer>(`/api/speaking/ielts/answer?duration_seconds=${Math.max(1, durationSeconds)}`, {
+    method: "POST",
+    body,
+  });
+}
+
+export function estimateIelts(
+  answers: Array<{
+    part: number;
+    question: string;
+    transcript: string;
+    pronunciation_score: number | null;
+    words_per_minute: number | null;
+  }>,
+  topic?: string,
+) {
+  return request<IeltsEstimate>("/api/speaking/ielts/estimate", {
+    method: "POST",
+    body: JSON.stringify({ answers, topic: topic || null }),
   });
 }
 

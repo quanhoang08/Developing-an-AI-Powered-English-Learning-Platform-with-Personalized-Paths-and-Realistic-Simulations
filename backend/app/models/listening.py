@@ -114,3 +114,24 @@ class DictationAttempt(Base):
 	diff_result: Mapped[list[dict]] = mapped_column(JSONB, nullable=True)
 	accuracy_score: Mapped[float] = mapped_column(Numeric(5, 2), nullable=True)
 	created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=True, server_default=text("now()"))
+
+
+class ListeningQuizAttempt(Base):
+	"""1 quiz nghe hiểu sinh từ transcript podcast (migration 20261002_0024). `questions` giữ cả
+	correct_index/trap_note/mốc căn cứ lúc sinh; `picks` + điểm chỉ có sau khi nộp."""
+
+	__tablename__ = "listening_quiz_attempts"
+
+	id: Mapped[uuid.UUID] = mapped_column(
+		UUID(as_uuid=True), primary_key=True, server_default=text("uuid_generate_v4()")
+	)
+	user_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"))
+	podcast_id: Mapped[uuid.UUID] = mapped_column(
+		UUID(as_uuid=True), ForeignKey("podcasts.id", ondelete="CASCADE")
+	)
+	questions: Mapped[list] = mapped_column(JSONB)
+	picks: Mapped[list | None] = mapped_column(JSONB, nullable=True)
+	correct_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
+	score: Mapped[float | None] = mapped_column(Numeric(5, 2), nullable=True)
+	submitted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+	created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=text("now()"))

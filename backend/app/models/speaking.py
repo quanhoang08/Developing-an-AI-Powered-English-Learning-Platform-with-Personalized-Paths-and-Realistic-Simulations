@@ -120,3 +120,24 @@ class PhrasebookEntry(Base):
 	example_sentence: Mapped[str] = mapped_column(Text, nullable=True)
 	formality_level: Mapped[str] = mapped_column(String(20), nullable=True)
 	created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=True, server_default=text("now()"))
+
+
+class IeltsAttempt(Base):
+	"""1 bài IELTS Speaking giả lập đã ước lượng band (migration 20261001_0023)."""
+
+	__tablename__ = "ielts_attempts"
+
+	id: Mapped[uuid.UUID] = mapped_column(
+		UUID(as_uuid=True), primary_key=True, server_default=text("uuid_generate_v4()")
+	)
+	user_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"))
+	topic: Mapped[str | None] = mapped_column(String(80), nullable=True)
+	overall: Mapped[float] = mapped_column(Numeric(2, 1))
+	fluency_coherence: Mapped[float] = mapped_column(Numeric(2, 1))
+	lexical_resource: Mapped[float] = mapped_column(Numeric(2, 1))
+	grammatical_range: Mapped[float] = mapped_column(Numeric(2, 1))
+	pronunciation: Mapped[float | None] = mapped_column(Numeric(2, 1), nullable=True)
+	words_per_minute: Mapped[int | None] = mapped_column(Integer, nullable=True)
+	feedback_vi: Mapped[str] = mapped_column(Text)
+	answers: Mapped[list] = mapped_column(JSONB)
+	created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=text("now()"))

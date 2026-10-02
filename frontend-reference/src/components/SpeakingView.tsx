@@ -17,6 +17,7 @@ import { startWavRecording, WavRecording } from "../wavRecorder";
 import { useStudyTimer } from "../useStudyTimer";
 import { CatMascot, CatMood } from "./CatMascot";
 import { CountdownTimer } from "./CountdownTimer";
+import { IeltsPanel } from "./IeltsPanel";
 import { PhrasebookPanel } from "./PhrasebookPanel";
 
 type Phase = "idle" | "recording" | "processing" | "speaking";
@@ -55,6 +56,7 @@ export const SpeakingView: React.FC = () => {
   });
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [turns, setTurns] = useState<SpeakingTurn[]>([]);
+  const [tab, setTab] = useState<"chat" | "ielts">("chat");
   const [phase, setPhase] = useState<Phase>("idle");
   const [mouthOpen, setMouthOpen] = useState(0);
   const [bubble, setBubble] = useState("Hi! Pick a scene and start a session, then tap the mic and talk to me.");
@@ -263,7 +265,22 @@ export const SpeakingView: React.FC = () => {
         <CountdownTimer skill="speaking" />
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+      <div className="flex gap-2" role="tablist">
+        {([["chat", "Conversation practice"], ["ielts", "IELTS mock test"]] as const).map(([id, label]) => (
+          <button
+            key={id}
+            role="tab"
+            aria-selected={tab === id}
+            onClick={() => setTab(id)}
+            className={`px-4 py-2 rounded-full text-sm font-bold transition-colors ${tab === id ? "bg-slate-900 text-white" : "bg-paper-deep text-slate-600 hover:bg-indigo-100"}`}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+
+      {/* Hai tab đều giữ mounted (chỉ ẩn) để không mất phiên hội thoại / bài thi đang làm dở. */}
+      <div className={`grid grid-cols-1 lg:grid-cols-12 gap-6 ${tab === "chat" ? "" : "hidden"}`}>
         {/* Sân khấu con mèo */}
         <div className="lg:col-span-5 space-y-4">
           <div className="relative overflow-hidden bg-[radial-gradient(ellipse_at_50%_35%,var(--color-purple-100),var(--color-indigo-100)_70%)] rounded-[2rem] p-6 shadow-[0_30px_50px_-30px_rgba(31,87,73,0.6)]">
@@ -453,6 +470,9 @@ export const SpeakingView: React.FC = () => {
 
           <PhrasebookPanel refreshKey={phrasebookRefresh} />
         </div>
+      </div>
+      <div className={tab === "ielts" ? "" : "hidden"}>
+        <IeltsPanel />
       </div>
     </div>
   );

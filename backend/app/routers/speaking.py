@@ -9,6 +9,12 @@ from app.database import get_db
 from app.models.speaking import ConversationTurn
 from app.models.user import User
 from app.schemas.speaking import (
+	IeltsAnswerResponse,
+	IeltsAttemptItem,
+	IeltsEstimateRequest,
+	IeltsEstimateResponse,
+	IeltsExamRequest,
+	IeltsExamResponse,
 	PhrasebookEntryResponse,
 	PhrasebookSaveRequest,
 	ScenarioResponse,
@@ -20,7 +26,7 @@ from app.schemas.speaking import (
 	TurnResponse,
 	LiteralTranslationNote,
 )
-from app.services import speaking_service
+from app.services import ielts_service, llm_service, speaking_service
 
 # Router chỉ gọi speaking_service, không gọi thẳng speech_service/llm_service (mục 6 spec).
 router = APIRouter(prefix="/speaking", tags=["speaking"])
@@ -227,3 +233,63 @@ async def list_phrasebook(
 ) -> list[PhrasebookEntryResponse]:
 	rows = await speaking_service.list_phrasebook(db, current_user.id, formality_level)
 	return [_entry_response(entry, source) for entry, source in rows]
+
+
+# --- IELTS Speaking giả lập (backlog 2.3) ---
+@router.post("/ielts/exam", response_model=IeltsExamResponse)
+async def create_ielts_exam(
+	request: IeltsExamRequest, current_user: User = Depends(get_current_user)
+) -> IeltsExamResponse:
+	try:
+		return IeltsExamResponse(**await llm_service.generate_ielts_exam(request.topic))
+	except llm_service.AIServiceError as error:
+		raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(error)) from error
+
+
+@router.post("/ielts/answer", response_model=IeltsAnswerResponse)
+async def submit_ielts_answer(
+	audio: UploadFile = File(...),
+	duration_seconds: int | None = Query(default=None, gt=0),
+	current_user: User = Depends(get_current_user),
+) -> IeltsAnswerResponse:
+	try:
+		return IeltsAnswerResponse(**await ielts_service.transcribe_answer(audio, duration_seconds))
+	except ValueError as error:
+		_raise_business_error(error)
+
+
+@router.post("/ielts/estimate", response_model=IeltsEstimateResponse)
+async def estimate_ielts_band(
+	request: IeltsEstimateRequest,
+	current_user: User = Depends(get_current_user),
+	db: AsyncSession = Depends(get_db),
+) -> IeltsEstimateResponse:
+	try:
+		return IeltsEstimateResponse(
+			**await ielts_service.estimate(
+				db, current_user.id, [a.model_dump() for a in request.answers], request.topic
+			)
+		)
+	except llm_service.AIServiceError as error:
+		raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(error)) from error
+
+
+@router.get("/ielts/attempts", response_model=list[IeltsAttemptItem])
+async def list_ielts_attempts(
+	current_user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)
+) -> list[IeltsAttemptItem]:
+	return [
+		IeltsAttemptItem(
+			id=str(a.id),
+			created_at=a.created_at.isoformat(),
+			topic=a.topic,
+			overall=float(a.overall),
+			fluency_coherence=float(a.fluency_coherence),
+			lexical_resource=float(a.lexical_resource),
+			grammatical_range=float(a.grammatical_range),
+			pronunciation=float(a.pronunciation) if a.pronunciation is not None else None,
+			words_per_minute=a.words_per_minute,
+			feedback_vi=a.feedback_vi,
+		)
+		for a in await ielts_service.list_attempts(db, current_user.id)
+	]

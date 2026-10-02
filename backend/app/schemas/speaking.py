@@ -1,4 +1,4 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class ScenarioResponse(BaseModel):
@@ -84,3 +84,66 @@ class SessionDetailResponse(BaseModel):
 	scenario_id: str | None = None
 	status: str
 	turns: list[TurnResponse]
+
+
+class IeltsExamRequest(BaseModel):
+	topic: str | None = None
+
+
+class IeltsCueCard(BaseModel):
+	topic: str
+	bullets: list[str]
+
+
+class IeltsExamResponse(BaseModel):
+	part1_questions: list[str]
+	cue_card: IeltsCueCard
+	part3_questions: list[str]
+	# Thời gian chuẩn của đề thật (giây) để client chạy đồng hồ.
+	part2_prep_seconds: int = 60
+	part2_speak_seconds: int = 120
+
+
+class IeltsAnswerResponse(BaseModel):
+	transcript: str
+	pronunciation_score: float | None = None
+	# Từ/phút từ transcript và thời lượng client gửi; None nếu thiếu thời lượng.
+	words_per_minute: int | None = None
+
+
+class IeltsAnswerItem(BaseModel):
+	part: int = Field(ge=1, le=3)
+	question: str
+	transcript: str
+	pronunciation_score: float | None = None
+	words_per_minute: int | None = None
+
+
+class IeltsEstimateRequest(BaseModel):
+	answers: list[IeltsAnswerItem] = Field(min_length=1, max_length=12)
+	topic: str | None = Field(default=None, max_length=80)
+
+
+class IeltsEstimateResponse(BaseModel):
+	fluency_coherence: float
+	lexical_resource: float
+	grammatical_range: float
+	pronunciation: float | None = None
+	overall: float
+	feedback_vi: str
+	attempt_id: str
+	# Overall của bài gần nhất trước đó (None nếu đây là bài đầu) để hiện tăng/giảm.
+	previous_overall: float | None = None
+
+
+class IeltsAttemptItem(BaseModel):
+	id: str
+	created_at: str
+	topic: str | None = None
+	overall: float
+	fluency_coherence: float
+	lexical_resource: float
+	grammatical_range: float
+	pronunciation: float | None = None
+	words_per_minute: int | None = None
+	feedback_vi: str

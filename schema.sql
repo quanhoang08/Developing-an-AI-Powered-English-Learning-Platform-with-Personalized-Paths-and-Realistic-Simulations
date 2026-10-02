@@ -31,9 +31,8 @@
 -- dùng để khởi tạo DB (2 file có thể tạm lệch nhau về câu chữ/tổ chức, nhưng
 -- file .sql ở đây luôn là nguồn đúng về mặt DDL thực thi được).
 --
--- Sinh lần cuối: 2026-09-30, khớp Alembic revision 20260930_0019 (thêm users.email_verified_at + bảng auth_tokens cho xác minh email/đặt lại mật khẩu bằng OTP).
+-- Sinh lần cuối: 2026-10-02, khớp Alembic revision 20261002_0024 (thêm bảng listening_quiz_attempts cho quiz nghe hiểu; trước đó 0023 ielts_attempts).
 -- ============================================================================
-
 --
 -- PostgreSQL database dump
 --
@@ -163,7 +162,9 @@ CREATE TABLE public.conversation_turns (
     pronunciation_assessment_failed boolean DEFAULT false NOT NULL,
     intent_feedback text,
     politeness_feedback text,
-    suggested_phrases jsonb
+    suggested_phrases jsonb,
+    natural_rephrase text,
+    literal_translation jsonb
 );
 
 
@@ -255,6 +256,43 @@ CREATE TABLE public.generated_passages (
     target_vocab_words text[],
     created_at timestamp with time zone DEFAULT now(),
     source_document_id uuid
+);
+
+
+--
+-- Name: ielts_attempts; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.ielts_attempts (
+    id uuid DEFAULT public.uuid_generate_v4() NOT NULL,
+    user_id uuid NOT NULL,
+    topic character varying(80),
+    overall numeric(2,1) NOT NULL,
+    fluency_coherence numeric(2,1) NOT NULL,
+    lexical_resource numeric(2,1) NOT NULL,
+    grammatical_range numeric(2,1) NOT NULL,
+    pronunciation numeric(2,1),
+    words_per_minute integer,
+    feedback_vi text NOT NULL,
+    answers jsonb NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+
+--
+-- Name: listening_quiz_attempts; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.listening_quiz_attempts (
+    id uuid DEFAULT public.uuid_generate_v4() NOT NULL,
+    user_id uuid NOT NULL,
+    podcast_id uuid NOT NULL,
+    questions jsonb NOT NULL,
+    picks jsonb,
+    correct_count integer,
+    score numeric(5,2),
+    submitted_at timestamp with time zone,
+    created_at timestamp with time zone DEFAULT now() NOT NULL
 );
 
 
@@ -531,7 +569,10 @@ CREATE TABLE public.streaks (
     current_streak integer DEFAULT 0,
     longest_streak integer DEFAULT 0,
     last_active_date date,
-    total_xp integer DEFAULT 0
+    total_xp integer DEFAULT 0,
+    lost_streak integer DEFAULT 0 NOT NULL,
+    lost_on date,
+    freezes_available integer DEFAULT 0 NOT NULL
 );
 
 
@@ -795,6 +836,22 @@ ALTER TABLE ONLY public.documents
 
 ALTER TABLE ONLY public.generated_passages
     ADD CONSTRAINT generated_passages_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: ielts_attempts ielts_attempts_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.ielts_attempts
+    ADD CONSTRAINT ielts_attempts_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: listening_quiz_attempts listening_quiz_attempts_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.listening_quiz_attempts
+    ADD CONSTRAINT listening_quiz_attempts_pkey PRIMARY KEY (id);
 
 
 --
@@ -1378,6 +1435,20 @@ CREATE INDEX ix_auth_tokens_user_purpose ON public.auth_tokens USING btree (user
 
 
 --
+-- Name: ix_ielts_attempts_user_created; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_ielts_attempts_user_created ON public.ielts_attempts USING btree (user_id, created_at DESC);
+
+
+--
+-- Name: ix_listening_quiz_user_created; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_listening_quiz_user_created ON public.listening_quiz_attempts USING btree (user_id, created_at DESC);
+
+
+--
 -- Name: uq_conversation_turns_session_turn; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -1530,6 +1601,30 @@ ALTER TABLE ONLY public.generated_passages
 
 ALTER TABLE ONLY public.generated_passages
     ADD CONSTRAINT generated_passages_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id) ON DELETE CASCADE;
+
+
+--
+-- Name: ielts_attempts ielts_attempts_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.ielts_attempts
+    ADD CONSTRAINT ielts_attempts_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id) ON DELETE CASCADE;
+
+
+--
+-- Name: listening_quiz_attempts listening_quiz_attempts_podcast_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.listening_quiz_attempts
+    ADD CONSTRAINT listening_quiz_attempts_podcast_id_fkey FOREIGN KEY (podcast_id) REFERENCES public.podcasts(id) ON DELETE CASCADE;
+
+
+--
+-- Name: listening_quiz_attempts listening_quiz_attempts_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.listening_quiz_attempts
+    ADD CONSTRAINT listening_quiz_attempts_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id) ON DELETE CASCADE;
 
 
 --

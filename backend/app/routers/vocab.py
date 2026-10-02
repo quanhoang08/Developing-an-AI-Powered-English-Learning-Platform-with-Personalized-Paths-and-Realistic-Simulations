@@ -14,8 +14,16 @@ from app.schemas.vocab import (
 	VocabReviewResponse,
 	VocabSentenceRequest,
 	VocabSentenceResponse,
+	WordFamilyResponse,
 )
-from app.services.vocab_service import check_vocab_sentence, create_vocab_item, import_from_errors, list_due_vocab, review_vocab
+from app.services.vocab_service import (
+	check_vocab_sentence,
+	create_vocab_item,
+	get_word_family,
+	import_from_errors,
+	list_due_vocab,
+	review_vocab,
+)
 
 
 router = APIRouter(prefix="/vocab", tags=["vocabulary"])
@@ -105,6 +113,18 @@ async def review_vocab_item(
 		next_review_at=review.next_review_at,
 		ease_factor=float(review.ease_factor),
 	)
+
+
+@router.get("/{vocab_item_id}/word-family", response_model=WordFamilyResponse)
+async def word_family(
+	vocab_item_id: UUID,
+	current_user: User = Depends(get_current_user),
+	db: AsyncSession = Depends(get_db),
+) -> WordFamilyResponse:
+	try:
+		return WordFamilyResponse(**await get_word_family(db, current_user.id, vocab_item_id))
+	except ValueError as error:
+		raise HTTPException(status_code=404, detail=str(error)) from error
 
 
 @router.post("/{vocab_item_id}/check-sentence", response_model=VocabSentenceResponse)

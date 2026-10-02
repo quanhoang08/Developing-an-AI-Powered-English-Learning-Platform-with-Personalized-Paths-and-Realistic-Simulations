@@ -7,6 +7,15 @@ SourceType = Literal["document_summary", "extended_topic", "free_topic"]
 CertificateStyle = Literal["toeic", "ielts", "cambridge"]
 
 
+class StructureReport(BaseModel):
+	"""Đếm cấu trúc câu của bài đã nộp (Grammatical Range), chấm bằng luật nên không tốn lượt LLM."""
+
+	sentence_count: int
+	types: dict[str, int]
+	features: dict[str, int]
+	distinct_structures: int
+
+
 class SubmissionCreate(BaseModel):
 	"""Payload tạo writing_submissions; ràng buộc document_id theo source_type."""
 

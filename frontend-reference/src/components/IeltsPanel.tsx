@@ -159,6 +159,8 @@ export const IeltsPanel: React.FC = () => {
   const pace = measured.length
     ? Math.round(measured.reduce((sum, item) => sum + (item.words_per_minute ?? 0), 0) / measured.length)
     : null;
+  const fillers = answers.reduce((sum, item) => sum + item.filler_count, 0);
+  const diversity = answers.length ? answers.reduce((sum, item) => sum + item.lexical_diversity, 0) / answers.length : null;
 
   return (
     <div className="surface p-7 space-y-5">
@@ -242,7 +244,20 @@ export const IeltsPanel: React.FC = () => {
             ))}
           </div>
           <p className="text-sm text-slate-700 leading-relaxed">{estimate.feedback_vi}</p>
-          {pace !== null && <p className="text-xs text-slate-500">Speaking pace: {pace} words/min</p>}
+          <div className="grid grid-cols-3 gap-3">
+            <div className="p-3 rounded-2xl bg-paper-deep/70">
+              <p className="text-xs text-slate-500">Speaking pace</p>
+              <p className="num text-xl font-bold text-slate-900">{pace === null ? "—" : `${pace} wpm`}</p>
+            </div>
+            <div className="p-3 rounded-2xl bg-paper-deep/70">
+              <p className="text-xs text-slate-500">Hesitations (um, uh…)</p>
+              <p className="num text-xl font-bold text-slate-900">{fillers}</p>
+            </div>
+            <div className="p-3 rounded-2xl bg-paper-deep/70">
+              <p className="text-xs text-slate-500">Word variety</p>
+              <p className="num text-xl font-bold text-slate-900">{diversity === null ? "—" : `${Math.round(diversity * 100)}%`}</p>
+            </div>
+          </div>
         </div>
       )}
 

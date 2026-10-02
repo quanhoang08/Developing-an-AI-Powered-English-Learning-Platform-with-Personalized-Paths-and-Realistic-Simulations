@@ -145,6 +145,15 @@ async def import_from_errors(db: AsyncSession, user_id: uuid.UUID, limit: int) -
 	return created
 
 
+async def get_word_family(db: AsyncSession, user_id: uuid.UUID, vocab_item_id: uuid.UUID) -> dict:
+	item = await db.scalar(
+		select(VocabItem).where(VocabItem.id == vocab_item_id, VocabItem.user_id == user_id)
+	)
+	if item is None:
+		raise ValueError("vocab_not_found")
+	return await llm_service.generate_word_family(item.term)
+
+
 async def check_vocab_sentence(
 	db: AsyncSession, user_id: uuid.UUID, vocab_item_id: uuid.UUID, sentence: str
 ) -> dict:

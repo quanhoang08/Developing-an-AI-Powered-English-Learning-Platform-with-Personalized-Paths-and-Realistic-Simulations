@@ -3,7 +3,15 @@
 // (mất ~25 s với Ollama local), trước đó panel phản hồi ở trạng thái trống.
 import React, { useEffect, useState } from "react";
 import { WritingInsight } from "../types";
-import { checkGrammarPreview, createWritingSubmission, rephraseSentence, submitWritingEssay, suggestWritingPrompt } from "../api";
+import {
+  StructureReport,
+  checkGrammarPreview,
+  createWritingSubmission,
+  getWritingStructures,
+  rephraseSentence,
+  submitWritingEssay,
+  suggestWritingPrompt,
+} from "../api";
 import { useStudyTimer } from "../useStudyTimer";
 import { CountdownTimer } from "./CountdownTimer";
 import { AiWait } from "./AiWait";
@@ -59,6 +67,8 @@ export const WritingView: React.FC = () => {
   const [submissionId, setSubmissionId] = useState<string | null>(null);
   const [rephrased, setRephrased] = useState<Awaited<ReturnType<typeof rephraseSentence>> | null>(null);
   const [isRephrasing, setIsRephrasing] = useState(false);
+  // Cấu trúc câu của bài vừa nộp (GET /structures, chấm bằng luật nên trả ngay).
+  const [structures, setStructures] = useState<StructureReport | null>(null);
 
   const handleSuggestPrompt = async () => {
     setAnalyzeError(null);
@@ -120,6 +130,9 @@ export const WritingView: React.FC = () => {
       const result = await submitWritingEssay(submission.submission_id, essayText, studyTimer.lap());
       setSubmissionId(submission.submission_id);
       setRephrased(null);
+      setStructures(null);
+      // Báo cáo phụ: lỗi ở đây không được làm hỏng kết quả chấm điểm đã có.
+      getWritingStructures(submission.submission_id).then(setStructures).catch(() => undefined);
       setOverallScore(Math.round(result.score));
       setCefrLevel(result.cefr_level);
       setIeltsScore(`${result.ielts_band} IELTS`);
@@ -353,6 +366,31 @@ export const WritingView: React.FC = () => {
                       </p>
                     ))}
                   </div>
+                )}
+              </div>
+            )}
+
+            {structures && structures.sentence_count > 0 && (
+              <div className="p-4 rounded-2xl bg-white ring-1 ring-slate-900/10 space-y-3 text-sm">
+                <p className="font-bold text-slate-900">
+                  Sentence structures · {structures.distinct_structures} of 8 kinds used
+                </p>
+                <div className="grid grid-cols-4 gap-2 text-center">
+                  {([["simple", "Simple"], ["compound", "Compound"], ["complex", "Complex"], ["compound_complex", "Comp-complex"]] as const).map(
+                    ([key, label]) => (
+                      <div key={key} className="p-2 rounded-xl bg-slate-50">
+                        <p className="num text-lg font-bold text-slate-900">{structures.types[key]}</p>
+                        <p className="text-[11px] text-slate-500">{label}</p>
+                      </div>
+                    ),
+                  )}
+                </div>
+                <p className="text-xs text-slate-600">
+                  Conditional {structures.features.conditional} · Passive {structures.features.passive} · Relative clause{" "}
+                  {structures.features.relative_clause} · Question {structures.features.question}
+                </p>
+                {structures.types.simple === structures.sentence_count && (
+                  <p className="text-xs text-amber-800">Every sentence is simple — try joining ideas with because, although or which.</p>
                 )}
               </div>
             )}

@@ -246,6 +246,10 @@ def assess_pronunciation(audio_path: str, locale: str = "en-US") -> Pronunciatio
 	if payload.get("RecognitionStatus") != "Success" or not payload.get("NBest"):
 		raise SpeechServiceError("azure_pronunciation_no_speech")
 	best = payload["NBest"][0]
+	# Azure có thể nhận dạng được lời nói nhưng không trả điểm (quan sát với clip dài): coi như lỗi
+	# chấm phát âm để caller bỏ điểm này thay vì 500 cả lượt nói.
+	if not all(key in best for key in ("PronScore", "AccuracyScore", "FluencyScore", "CompletenessScore")):
+		raise SpeechServiceError("azure_pronunciation_no_scores")
 	weak_words = [
 		word["Word"] for word in best.get("Words", []) if word.get("AccuracyScore", 100) < 70
 	]

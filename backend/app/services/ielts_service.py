@@ -11,6 +11,7 @@ from starlette.concurrency import run_in_threadpool
 
 from app.models.speaking import IeltsAttempt
 from app.services import llm_service, speaking_service, speech_service
+from app.utils.text_metrics import speech_metrics
 
 _ALLOWED_EXTENSIONS = {".wav", ".mp3", ".m4a", ".webm", ".ogg"}
 
@@ -63,6 +64,7 @@ async def transcribe_answer(audio: UploadFile, duration_seconds: int | None) -> 
 		"transcript": text,
 		"pronunciation_score": pronunciation.score if pronunciation else None,
 		"words_per_minute": wpm,
+		**speech_metrics(text),
 	}
 
 

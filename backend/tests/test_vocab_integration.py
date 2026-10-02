@@ -261,3 +261,32 @@ def test_check_sentence_validates_term_records_grammar_error_and_scopes_owner(
     # User khác không chấm được từ của người này.
     other = login(vocab_client)
     assert vocab_client.post(url, headers=other, json={"sentence": "A tenacious cat."}).status_code == 404
+
+
+def test_word_family_returns_forms_and_scopes_owner(vocab_client: TestClient, monkeypatch) -> None:
+    from app.services import llm_service
+
+    monkeypatch.setattr(llm_service, "_judge_json", lambda prompt, schema: {
+        "word_family": [
+            {"word": "decide", "part_of_speech": "Verb"},
+            {"word": "Decision", "part_of_speech": "noun"},
+            {"word": "decision", "part_of_speech": "noun"},
+            {"word": "deciding", "part_of_speech": "present participle"},
+        ],
+        "collocations": ["make a decision", "make a decision", " "],
+    })
+    headers = login(vocab_client)
+    item_id = vocab_client.post(
+        "/api/vocab", headers=headers, json={"term": "decide", "definition": "quyết định", "source_url": "https://e.com"}
+    ).json()["id"]
+    url = f"/api/vocab/{item_id}/word-family"
+
+    body = vocab_client.get(url, headers=headers).json()
+    # Trùng (không phân biệt hoa/thường) bị gộp, loại cụm rỗng, part_of_speech chuẩn hoá về chữ thường.
+    assert body["word_family"] == [
+        {"word": "decide", "part_of_speech": "verb"},
+        {"word": "Decision", "part_of_speech": "noun"},
+        {"word": "deciding", "part_of_speech": "verb"},  # "present participle" gộp về verb
+    ]
+    assert body["collocations"] == ["make a decision"]
+    assert vocab_client.get(url, headers=login(vocab_client)).status_code == 404

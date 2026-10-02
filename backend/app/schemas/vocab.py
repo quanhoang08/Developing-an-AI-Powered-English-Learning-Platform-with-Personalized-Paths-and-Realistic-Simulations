@@ -55,6 +55,16 @@ class VocabSentenceRequest(BaseModel):
 	sentence: str = Field(min_length=3, max_length=300)
 
 
+class WordFamilyEntry(BaseModel):
+	word: str
+	part_of_speech: str
+
+
+class WordFamilyResponse(BaseModel):
+	word_family: list[WordFamilyEntry]
+	collocations: list[str]
+
+
 class VocabSentenceResponse(BaseModel):
 	meaning_fits: bool
 	grammar_ok: bool

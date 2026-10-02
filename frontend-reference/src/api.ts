@@ -544,6 +544,18 @@ export function submitWritingEssay(submissionId: string, submittedText: string, 
   });
 }
 
+export interface StructureReport {
+  sentence_count: number;
+  types: Record<"simple" | "compound" | "complex" | "compound_complex", number>;
+  features: Record<"conditional" | "passive" | "relative_clause" | "question", number>;
+  distinct_structures: number;
+}
+
+// Đếm cấu trúc câu của bài đã nộp (Grammatical Range, backlog 2.6) — chấm bằng luật, không tốn lượt LLM.
+export function getWritingStructures(submissionId: string) {
+  return request<StructureReport>(`/api/writing/submissions/${submissionId}/structures`);
+}
+
 // ---------------------------------------------------------------- Listening (Podcast/Dictation)
 
 export interface PodcastItem {
@@ -781,6 +793,9 @@ export interface IeltsAnswer {
   transcript: string;
   pronunciation_score: number | null;
   words_per_minute: number | null;
+  // Báo cáo trôi chảy (backlog 2.4).
+  filler_count: number;
+  lexical_diversity: number;
 }
 
 export interface IeltsEstimate {
@@ -941,6 +956,16 @@ export function checkVocabSentence(vocabItemId: string, sentence: string) {
     method: "POST",
     body: JSON.stringify({ sentence }),
   });
+}
+
+export interface WordFamily {
+  word_family: Array<{ word: string; part_of_speech: string }>;
+  collocations: string[];
+}
+
+// Các dạng từ cùng gốc + collocation của 1 từ đã lưu (backlog 3.1).
+export function getWordFamily(vocabItemId: string) {
+  return request<WordFamily>(`/api/vocab/${vocabItemId}/word-family`);
 }
 
 export function createStory(vocabItemIds: string[], theme?: string, length: "short" | "medium" | "long" = "medium") {

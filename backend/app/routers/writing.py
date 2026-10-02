@@ -19,6 +19,7 @@ from app.schemas.writing import (
 	RephraseResponse,
 	RephraseSuggestion,
 	RubricScores,
+	StructureReport,
 	SubmissionCreate,
 	SubmissionResponse,
 	SubmitEssayRequest,
@@ -28,6 +29,7 @@ from app.schemas.writing import (
 from app.schemas.rearrange import RearrangeBlock, RearrangeResponse, RearrangeSubmit, RearrangeSubmitResponse
 from app.services import rearrange_service
 from app.services.llm_service import AIServiceError
+from app.utils.text_metrics import sentence_structures
 from app.services.writing_service import (
 	check_grammar,
 	create_submission,
@@ -121,6 +123,21 @@ async def get_writing_submission(
 		created_at=submission.created_at,
 		completed_at=submission.completed_at,
 	)
+
+
+@router.get("/submissions/{submission_id}/structures", response_model=StructureReport)
+async def get_submission_structures(
+	submission_id: UUID,
+	current_user: User = Depends(get_current_user),
+	db: AsyncSession = Depends(get_db),
+) -> StructureReport:
+	try:
+		submission = await get_owned_submission(db, current_user.id, submission_id)
+	except ValueError as error:
+		_raise_business_error(error)
+	if not submission.submitted_text.strip():
+		raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="submission_not_submitted_yet")
+	return StructureReport(**sentence_structures(submission.submitted_text))
 
 
 @router.post("/submissions/{submission_id}/submit", response_model=SubmitEssayResponse)

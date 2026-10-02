@@ -6,9 +6,11 @@ import {
   DueVocabulary,
   GuessContextAttempt,
   SentenceVerdict,
+  WordFamily,
   checkVocabSentence,
   createGuessContext,
   createStory,
+  getWordFamily,
   listDueVocabulary,
   submitGuessContext,
 } from "../api";
@@ -28,7 +30,9 @@ export const ReadingExtrasPanel: React.FC = () => {
   const [sentence, setSentence] = useState("");
   const [verdict, setVerdict] = useState<SentenceVerdict | null>(null);
 
-  const [busy, setBusy] = useState<"guess" | "answer" | "vocab" | "story" | "sentence" | null>(null);
+  const [family, setFamily] = useState<WordFamily | null>(null);
+
+  const [busy, setBusy] = useState<"guess" | "answer" | "vocab" | "story" | "sentence" | "family" | null>(null);
   const [error, setError] = useState<{ cause: unknown; retry: () => void } | null>(null);
 
   // Bọc mọi thao tác: bật busy, xóa lỗi cũ, và gắn nút "Try again" chạy lại đúng thao tác vừa lỗi.
@@ -76,6 +80,12 @@ export const ReadingExtrasPanel: React.FC = () => {
     run("sentence", async () => {
       setVerdict(null);
       setVerdict(await checkVocabSentence(sentenceWordId!, sentence.trim()));
+    });
+
+  const loadFamily = () =>
+    run("family", async () => {
+      setFamily(null);
+      setFamily(await getWordFamily(sentenceWordId!));
     });
 
   const toggle = (id: string) =>
@@ -208,6 +218,7 @@ export const ReadingExtrasPanel: React.FC = () => {
                   onClick={() => {
                     setSentenceWordId(item.id);
                     setVerdict(null);
+                    setFamily(null);
                   }}
                   aria-pressed={sentenceWordId === item.id}
                   className={`px-3 py-1.5 rounded-full text-xs font-bold cursor-pointer ${
@@ -220,6 +231,27 @@ export const ReadingExtrasPanel: React.FC = () => {
             </div>
             {sentenceWordId && (
               <div className="space-y-3">
+                <button
+                  onClick={loadFamily}
+                  disabled={busy !== null}
+                  className="px-4 py-2 bg-slate-900 hover:bg-slate-800 disabled:opacity-50 text-white font-bold text-xs rounded-2xl flex items-center gap-2 cursor-pointer"
+                >
+                  {busy === "family" && <Loader2 className="w-4 h-4 animate-spin" />} Word family &amp; collocations
+                </button>
+                {family && (
+                  <div className="rounded-2xl bg-slate-50 p-4 space-y-3 text-sm" role="status">
+                    <div className="flex flex-wrap gap-2">
+                      {family.word_family.map((entry) => (
+                        <span key={entry.word} className="px-3 py-1 rounded-full bg-white ring-1 ring-slate-900/10 text-xs">
+                          <b>{entry.word}</b> <span className="text-slate-500">{entry.part_of_speech}</span>
+                        </span>
+                      ))}
+                    </div>
+                    <ul className="list-disc ml-5 text-slate-700 font-serif">
+                      {family.collocations.map((phrase) => <li key={phrase}>{phrase}</li>)}
+                    </ul>
+                  </div>
+                )}
                 <textarea
                   value={sentence}
                   onChange={(e) => setSentence(e.target.value)}

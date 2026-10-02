@@ -109,6 +109,9 @@ class IeltsAnswerResponse(BaseModel):
 	pronunciation_score: float | None = None
 	# Từ/phút từ transcript và thời lượng client gửi; None nếu thiếu thời lượng.
 	words_per_minute: int | None = None
+	# Báo cáo trôi chảy (backlog 2.4): số từ đệm (um, uh, you know...) và từ khác nhau / tổng từ.
+	filler_count: int = 0
+	lexical_diversity: float = 0.0
 
 
 class IeltsAnswerItem(BaseModel):

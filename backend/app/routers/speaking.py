@@ -289,6 +289,7 @@ async def list_ielts_attempts(
 			grammatical_range=float(a.grammatical_range),
 			pronunciation=float(a.pronunciation) if a.pronunciation is not None else None,
 			words_per_minute=a.words_per_minute,
+			**ielts_service.speech_summary(a.answers or []),
 			feedback_vi=a.feedback_vi,
 		)
 		for a in await ielts_service.list_attempts(db, current_user.id)

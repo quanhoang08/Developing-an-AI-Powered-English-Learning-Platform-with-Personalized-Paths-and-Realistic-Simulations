@@ -7,6 +7,9 @@ import React, { useState } from "react";
 import { motion } from "motion/react";
 import { ActiveTab } from "../types";
 import { CatMascot } from "./CatMascot";
+import { CommunityCard } from "./CommunityCard";
+import { ExamGoalCard } from "./ExamGoalCard";
+import { GrammarDailyCard } from "./GrammarDailyCard";
 import { useLearningStats } from "../stats";
 import { setTimerMode } from "../api";
 import {
@@ -434,6 +437,9 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           </div>
         )}
       </motion.section>
+      {userEmail && <GrammarDailyCard setActiveTab={setActiveTab} />}
+      {userEmail && <ExamGoalCard />}
+      {userEmail && <CommunityCard />}
     </motion.div>
   );
 };

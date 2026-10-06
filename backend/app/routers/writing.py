@@ -9,6 +9,9 @@ from app.database import get_db
 from app.models.user import User
 from app.models.writing import WritingSubmission
 from app.schemas.writing import (
+	ParaphraseAttempt,
+	ParaphraseCheckResponse,
+	ParaphraseItem,
 	GrammarCheckRequest,
 	GrammarCheckResponse,
 	GrammarInsight,
@@ -27,7 +30,7 @@ from app.schemas.writing import (
 	WritingSubmissionDetail,
 )
 from app.schemas.rearrange import RearrangeBlock, RearrangeResponse, RearrangeSubmit, RearrangeSubmitResponse
-from app.services import rearrange_service
+from app.services import paraphrase_service, rearrange_service
 from app.services.llm_service import AIServiceError
 from app.utils.text_metrics import sentence_structures
 from app.services.writing_service import (
@@ -285,3 +288,21 @@ async def submit_writing_rearrange(
 		code = str(error)
 		raise HTTPException(status_code=404 if code == "attempt_not_found" else 400, detail=code) from error
 	return RearrangeSubmitResponse(**result._asdict())
+
+
+@router.get("/paraphrase-bank", response_model=list[ParaphraseItem])
+async def paraphrase_bank(technique: str | None = None, current_user: User = Depends(get_current_user)) -> list[dict]:
+	try:
+		return paraphrase_service.list_bank(technique)
+	except ValueError as error:
+		raise HTTPException(status_code=422, detail=str(error)) from error
+
+
+@router.post("/paraphrase-bank/{bank_id}/check", response_model=ParaphraseCheckResponse)
+async def paraphrase_check(
+	bank_id: int, request: ParaphraseAttempt, current_user: User = Depends(get_current_user)
+) -> dict:
+	try:
+		return paraphrase_service.check_attempt(bank_id, request.text)
+	except ValueError as error:
+		raise HTTPException(status_code=404, detail=str(error)) from error

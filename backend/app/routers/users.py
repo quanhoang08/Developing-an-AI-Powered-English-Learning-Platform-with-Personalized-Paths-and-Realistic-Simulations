@@ -4,7 +4,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.dependencies import get_current_user
 from app.database import get_db
 from app.models.user import User
-from app.schemas.auth import UpdateMeRequest, UserResponse
+
+from app.schemas.auth import StudyPlanResponse, UpdateMeRequest, UserResponse
+from app.services import study_plan_service
 
 
 # Nhóm endpoint đọc/sửa thông tin user hiện tại.
@@ -17,6 +19,8 @@ def _user_response(user: User) -> UserResponse:
 		email=user.email,
 		target_level=user.target_level,
 		timer_mode_enabled=user.timer_mode_enabled,
+		target_band=float(user.target_band) if user.target_band is not None else None,
+		exam_date=user.exam_date,
 		created_at=user.created_at.isoformat(),
 	)
 
@@ -41,7 +45,18 @@ async def update_me(
 	if "timer_mode_enabled" in request.model_fields_set and request.timer_mode_enabled is not None:
 		current_user.timer_mode_enabled = request.timer_mode_enabled
 		changed = True
+	for field in ("target_band", "exam_date"):
+		if field in request.model_fields_set:
+			setattr(current_user, field, getattr(request, field))
+			changed = True
 	if changed:
 		await db.commit()
 		await db.refresh(current_user)
 	return _user_response(current_user)
+
+
+@router.get("/me/study-plan", response_model=StudyPlanResponse)
+async def get_study_plan(
+	current_user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)
+) -> dict:
+	return await study_plan_service.build_plan(db, current_user)

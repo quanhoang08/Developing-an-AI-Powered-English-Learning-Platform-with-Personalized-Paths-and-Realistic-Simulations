@@ -18,6 +18,7 @@ import { useStudyTimer } from "../useStudyTimer";
 import { CatMascot, CatMood } from "./CatMascot";
 import { CountdownTimer } from "./CountdownTimer";
 import { IeltsPanel } from "./IeltsPanel";
+import { PronunciationPanel } from "./PronunciationPanel";
 import { PhrasebookPanel } from "./PhrasebookPanel";
 
 type Phase = "idle" | "recording" | "processing" | "speaking";
@@ -56,7 +57,7 @@ export const SpeakingView: React.FC = () => {
   });
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [turns, setTurns] = useState<SpeakingTurn[]>([]);
-  const [tab, setTab] = useState<"chat" | "ielts">("chat");
+  const [tab, setTab] = useState<"chat" | "ielts" | "pron">("chat");
   const [phase, setPhase] = useState<Phase>("idle");
   const [mouthOpen, setMouthOpen] = useState(0);
   const [bubble, setBubble] = useState("Hi! Pick a scene and start a session, then tap the mic and talk to me.");
@@ -266,7 +267,7 @@ export const SpeakingView: React.FC = () => {
       </div>
 
       <div className="flex gap-2" role="tablist">
-        {([["chat", "Conversation practice"], ["ielts", "IELTS mock test"]] as const).map(([id, label]) => (
+        {([["chat", "Conversation practice"], ["ielts", "IELTS mock test"], ["pron", "Pronunciation lab"]] as const).map(([id, label]) => (
           <button
             key={id}
             role="tab"
@@ -473,6 +474,9 @@ export const SpeakingView: React.FC = () => {
       </div>
       <div className={tab === "ielts" ? "" : "hidden"}>
         <IeltsPanel />
+      </div>
+      <div className={tab === "pron" ? "" : "hidden"}>
+        <PronunciationPanel />
       </div>
     </div>
   );

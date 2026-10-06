@@ -17,7 +17,19 @@ _COORDINATE_RE = re.compile(
 	rf"|\b(?:and|but|or|so|yet)\s+{_SUBJECT_PRONOUNS}\b"
 	rf"|\b(?:and|but|or|so|yet)\s+(?:the|a|an|my|your|his|her|our|their)\s+\w+\s+{_AUX_VERBS}\b"
 )
-_CONDITIONAL_RE = re.compile(r"\b(if|unless)\b")
+# Chủ ngữ là tên riêng viết hoa ("... and Tom left"): chạy trên câu gốc (còn chữ hoa); cần >= 3 từ trước
+# liên từ để "Tom and Mary went home" (chủ ngữ ghép, câu đơn) không bị tính là câu ghép.
+_PROPER_SUBJECT_RE = re.compile(
+	rf"\b(?:and|but|or|so|yet)\s+[A-Z][a-z]+\s+(?:{_AUX_VERBS}|\w+ed|went|came|left|ran|saw|took|made|got|gave|said|told|felt|knew|thought|began|wrote|ate|drank|won|lost|stayed)\b"
+)
+
+
+def _has_proper_subject_clause(sentence: str) -> bool:
+	match = _PROPER_SUBJECT_RE.search(sentence)
+	return bool(match) and len(_WORD_RE.findall(sentence[: match.start()])) >= 3
+
+
+_CONDITIONAL_RE =re.compile(r"\b(if|unless)\b")
 _PASSIVE_RE = re.compile(r"\b(is|are|was|were|be|been|being)\s+(\w+ed|\w+en|made|done|built|known|seen|found|given)\b")
 
 # Từ đệm; "like" không có ở đây vì dùng đúng nghĩa rất thường gặp.
@@ -28,8 +40,8 @@ _FILLER_PHRASES = ("you know", "i mean", "sort of", "kind of")
 def sentence_structures(text: str) -> dict:
 	"""Đếm câu đơn/ghép/phức/ghép-phức và vài cấu trúc nâng cao (Grammatical Range).
 
-	ponytail: nhận diện bằng regex nên vẫn bỏ sót câu ghép có chủ ngữ là danh từ riêng/cụm dài sau liên từ
-	("... and Tom left"); nâng cấp bằng parser (spaCy) nếu cần chính xác.
+	ponytail: nhận diện bằng regex nên vẫn bỏ sót câu ghép có chủ ngữ là cụm dài sau liên từ
+	("... and the old man from next door left"); nâng cấp bằng parser (spaCy) nếu cần chính xác.
 	"""
 	types = {"simple": 0, "compound": 0, "complex": 0, "compound_complex": 0}
 	features = {"conditional": 0, "passive": 0, "relative_clause": 0, "question": 0}
@@ -37,7 +49,7 @@ def sentence_structures(text: str) -> dict:
 	for sentence in sentences:
 		lower = sentence.lower()
 		is_complex = bool(_SUBORDINATE_RE.search(lower) or _RELATIVE_RE.search(lower))
-		is_compound = bool(_COORDINATE_RE.search(lower))
+		is_compound = bool(_COORDINATE_RE.search(lower)) or _has_proper_subject_clause(sentence)
 		key = (
 			"compound_complex" if is_complex and is_compound
 			else "complex" if is_complex

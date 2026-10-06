@@ -120,6 +120,9 @@ class IeltsAnswerItem(BaseModel):
 	transcript: str
 	pronunciation_score: float | None = None
 	words_per_minute: int | None = None
+	# Chỉ số báo cáo Speaking (backlog 2.4) từ /ielts/answer; lưu cùng bài trong ielts_attempts.answers.
+	filler_count: int | None = Field(default=None, ge=0)
+	lexical_diversity: float | None = Field(default=None, ge=0, le=1)
 
 
 class IeltsEstimateRequest(BaseModel):
@@ -149,4 +152,7 @@ class IeltsAttemptItem(BaseModel):
 	grammatical_range: float
 	pronunciation: float | None = None
 	words_per_minute: int | None = None
+	# Tổng số từ đệm và độ đa dạng từ trung bình của cả bài; None với bài cũ lưu trước khi có chỉ số này.
+	filler_count: int | None = None
+	lexical_diversity: float | None = None
 	feedback_vi: str

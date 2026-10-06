@@ -208,9 +208,10 @@ class PronunciationResult:
 	fluency: float
 	completeness: float
 	weak_words: list[str] = field(default_factory=list)
+	words: list[tuple[str, float]] = field(default_factory=list)  # (từ, điểm 0-100) khi chấm theo câu mẫu
 
 
-def assess_pronunciation(audio_path: str, locale: str = "en-US") -> PronunciationResult:
+def assess_pronunciation(audio_path: str, locale: str = "en-US", reference_text: str = "") -> PronunciationResult:
 	"""Azure Pronunciation Assessment trên CHÍNH audio gốc (feature-speaking.md mục 1.3 nhánh B).
 
 	Chấm không kịch bản (ReferenceText rỗng) nên chạy song song được với STT. Không có
@@ -219,7 +220,7 @@ def assess_pronunciation(audio_path: str, locale: str = "en-US") -> Pronunciatio
 	region, key = _azure_region_and_key()
 	wav_path = ensure_wav(audio_path)
 	assessment = {
-		"ReferenceText": "",
+		"ReferenceText": reference_text,
 		"GradingSystem": "HundredMark",
 		"Granularity": "Word",
 		"Dimension": "Comprehensive",
@@ -259,6 +260,7 @@ def assess_pronunciation(audio_path: str, locale: str = "en-US") -> Pronunciatio
 		fluency=float(best["FluencyScore"]),
 		completeness=float(best["CompletenessScore"]),
 		weak_words=weak_words,
+		words=[(w["Word"], float(w.get("AccuracyScore", 0))) for w in best.get("Words", [])],
 	)
 
 

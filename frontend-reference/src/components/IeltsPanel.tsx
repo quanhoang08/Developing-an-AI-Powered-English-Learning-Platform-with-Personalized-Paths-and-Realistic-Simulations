@@ -104,12 +104,14 @@ export const IeltsPanel: React.FC = () => {
     try {
       setEstimate(
         await estimateIelts(
-          all.map(({ part, question, transcript, pronunciation_score, words_per_minute }) => ({
+          all.map(({ part, question, transcript, pronunciation_score, words_per_minute, filler_count, lexical_diversity }) => ({
             part,
             question,
             transcript,
             pronunciation_score,
             words_per_minute,
+            filler_count,
+            lexical_diversity,
           })),
           topic.trim(),
         ),
@@ -277,6 +279,8 @@ export const IeltsPanel: React.FC = () => {
                 {item.grammatical_range.toFixed(1)}
                 {item.pronunciation !== null ? ` · Pronunciation ${item.pronunciation.toFixed(1)}` : ""}
                 {item.words_per_minute ? ` · ${item.words_per_minute} words/min` : ""}
+                {item.filler_count !== null ? ` · ${item.filler_count} fillers` : ""}
+                {item.lexical_diversity !== null ? ` · ${Math.round(item.lexical_diversity * 100)}% distinct words` : ""}
               </p>
               <p className="text-slate-700 mt-2 leading-relaxed">{item.feedback_vi}</p>
             </details>

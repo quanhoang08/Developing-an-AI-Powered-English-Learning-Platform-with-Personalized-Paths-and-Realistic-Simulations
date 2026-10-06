@@ -153,7 +153,10 @@ export const AdaptiveQuizPanel: React.FC<AdaptiveQuizPanelProps> = ({ onComplete
                     ) : (
                       <XCircle className="w-4 h-4 shrink-0" />
                     )}
-                    {graded.explanation}
+                    <span>
+                      {graded.explanation}
+                      {graded.contrast_vi && <span className="block text-indigo-700">Tiếng Việt vs English: {graded.contrast_vi}</span>}
+                    </span>
                   </p>
                 )}
               </fieldset>

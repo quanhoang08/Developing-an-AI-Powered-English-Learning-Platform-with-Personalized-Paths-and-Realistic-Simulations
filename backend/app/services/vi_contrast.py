@@ -1,0 +1,27 @@
+# Backlog 3.9: ghi chú đối chiếu tiếng Việt vs English khi người học trả lời sai. Cố định, không LLM.
+# Khóa: chủ điểm ngữ pháp, "confusable", "toeic_partN", hoặc loại lỗi của quiz adaptive.
+CONTRAST: dict[str, str] = {
+	"tenses": "Tiếng Việt không chia động từ theo thì (đã/đang/sẽ chỉ là từ chỉ thời gian); tiếng Anh bắt buộc đổi dạng động từ.",
+	"articles": "Tiếng Việt không có mạo từ a/an/the; hãy tự hỏi: danh từ đã xác định (the), đếm được số ít (a/an) hay nói chung (không mạo từ)?",
+	"prepositions": "Giới từ tiếng Anh đi theo cụm cố định, không dịch từng chữ từ 'ở/trong/vào/với' được; cần học cả cụm (interested in, good at).",
+	"agreement": "Tiếng Việt không chia động từ theo số ít/số nhiều; tiếng Anh phải chia theo chủ ngữ chính (is/are, has/have, thêm -s).",
+	"word_form": "Một từ gốc tiếng Anh có nhiều dạng (danh/động/tính/trạng từ) mà tiếng Việt chỉ dùng một từ; xác định vị trí trong câu để chọn dạng.",
+	"error_correction": "Nhiều lỗi do dịch ý tiếng Việt sang tiếng Anh từng chữ; hãy kiểm tra chủ-vị, thì và dạng từ của câu trước.",
+	"confusable": "Hai từ hay được dịch bằng cùng một nghĩa tiếng Việt nên dễ nhầm; hãy học theo từ loại và ngữ cảnh dùng, không học theo nghĩa dịch.",
+	"toeic_part2": "Câu trả lời Part 2 phải đáp đúng loại câu hỏi (Who/When/Where...); đừng chọn theo từ nghe giống nhau, tiếng Việt hay làm ta bắt từ khóa thay vì ý.",
+	"toeic_part1": "Part 1: chỉ chọn điều THẤY được trong ảnh (hành động, tư thế); đừng chọn câu chỉ vì nhắc tới vật có trong ảnh hay vì từ nghe quen.",
+	"toeic_part3": "Part 3: đọc câu hỏi trước khi nghe để biết cần bắt thông tin nào; đáp án thường là cách diễn đạt khác của điều được nói, không phải từ y hệt.",
+	"toeic_part4": "Part 4: bài nói một chiều, câu đầu thường nêu mục đích; đừng cố dịch từng chữ, hãy nắm ý chính và chi tiết được hỏi.",
+	"toeic_part5": "Part 5 kiểm tra từ loại và cấu trúc, không phải nghĩa: xác định chỗ trống cần danh/động/tính/trạng từ trước khi nhìn nghĩa tiếng Việt.",
+	"toeic_part6": "Part 6 cần đọc cả đoạn để chọn từ nối/thì phù hợp; dịch từng câu sang tiếng Việt dễ làm mất mạch văn bản.",
+	"toeic_part7": "Part 7: đáp án nằm trong bài, hãy tìm chi tiết khớp với câu hỏi thay vì suy diễn theo hiểu biết tiếng Việt của mình.",
+	"grammar": "Tiếng Việt không đánh dấu thì, số và mạo từ trên từ; tiếng Anh đánh dấu bằng dạng từ nên cần kiểm tra từng yếu tố.",
+	"vocabulary": "Nghĩa tiếng Việt chỉ gần đúng; hãy học từ kèm cụm đi cùng (collocation) và ví dụ để không dùng sai ngữ cảnh.",
+	"spelling": "Chính tả tiếng Anh không khớp cách phát âm như tiếng Việt; hãy ghi nhớ cả dạng chữ lẫn âm.",
+	"pronunciation": "Tiếng Việt có thanh điệu và ít âm cuối; tiếng Anh cần phát âm rõ âm cuối và trọng âm.",
+	"listening_comprehension": "Khi nghe, đừng dịch từng từ sang tiếng Việt; nghe ý chính rồi đối chiếu với từ khóa trong câu hỏi.",
+	"reading_comprehension": "Khi đọc, đừng dịch từng từ sang tiếng Việt; tìm câu chứa từ khóa của câu hỏi rồi đọc kỹ ý đó.",
+	"writing_coherence": "Tiếng Việt dùng ít từ nối hơn; tiếng Anh cần từ nối (however, therefore...) để các ý liền mạch.",
+	"communicative_intent": "Cách diễn đạt ý định (xin, từ chối, đề nghị) khác nhau giữa hai ngôn ngữ; học cả cụm câu mẫu.",
+	"politeness": "Tiếng Việt thể hiện lịch sự bằng xưng hô; tiếng Anh dùng could/would/please và giọng điệu.",
+}

@@ -8,6 +8,8 @@ from app.core.errors import ai_http_error
 from app.database import get_db
 from app.models.user import User
 from app.schemas.reading import (
+	AdaptTextRequest,
+	AdaptTextResponse,
 	ClassicSessionCreate,
 	ClassicSessionResponse,
 	GuessContextCreate,
@@ -26,7 +28,7 @@ from app.schemas.reading import (
 	StoryResponse,
 )
 from app.schemas.rearrange import RearrangeBlock, RearrangeResponse, RearrangeSubmit, RearrangeSubmitResponse
-from app.services import rearrange_service
+from app.services import llm_service, rearrange_service
 from app.services.llm_service import AIServiceError
 from app.services.reading_service import (
 	create_classic_session,
@@ -58,6 +60,19 @@ async def lookup(
 		return LookupResponse(**await lookup_term(request.term, request.context_sentence))
 	except ValueError as error:
 		raise HTTPException(status_code=503, detail=str(error)) from error
+
+
+@router.post("/adapt", response_model=AdaptTextResponse)
+async def adapt_text(
+	request: AdaptTextRequest,
+	_current_user: User = Depends(get_current_user),
+) -> AdaptTextResponse:
+	# Bài báo người học tự dán (không lưu DB): viết lại theo level + dịch từng câu sang tiếng Việt.
+	try:
+		sentences = await llm_service.adapt_text_level(request.text.strip(), request.level)
+	except AIServiceError as error:
+		raise ai_http_error(error) from error
+	return AdaptTextResponse(level=request.level, sentences=sentences)
 
 
 @router.post(

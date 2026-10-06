@@ -11,6 +11,8 @@ export interface AuthUser {
   email: string;
   target_level: string | null;
   timer_mode_enabled: boolean;
+  target_band?: number | null;
+  exam_date?: string | null;
   created_at: string;
 }
 
@@ -244,6 +246,30 @@ export function setTimerMode(enabled: boolean) {
   });
 }
 
+export interface StudyPlan {
+  target_band: number | null;
+  exam_date: string | null;
+  days_left: number | null;
+  current_band: number | null;
+  band_gap: number | null;
+  weakest_criterion: string | null;
+  daily_minutes: number;
+  daily_tasks: Array<{ skill: string; task: string; minutes: number }>;
+  notes: string[];
+}
+
+// Đặt (hoặc xóa bằng null) band mục tiêu + ngày thi cho kế hoạch học (backlog 2.5).
+export function setExamGoal(targetBand: number | null, examDate: string | null) {
+  return request<AuthUser>("/api/users/me", {
+    method: "PATCH",
+    body: JSON.stringify({ target_band: targetBand, exam_date: examDate }),
+  });
+}
+
+export function getStudyPlan() {
+  return request<StudyPlan>("/api/users/me/study-plan");
+}
+
 // Phút học 7 ngày gần nhất theo kỹ năng — luôn 0 nếu chưa từng bật chế độ bấm giờ.
 export interface WeeklyActivity {
   timer_mode_enabled: boolean;
@@ -332,7 +358,7 @@ export interface AdaptiveQuiz {
 export interface AdaptiveQuizResult {
   attempt_id: string;
   score: number;
-  results: { is_correct: boolean; correct_option_index: number; explanation: string }[];
+  results: { is_correct: boolean; correct_option_index: number; explanation: string; contrast_vi: string | null }[];
   streak_restored: boolean;
 }
 
@@ -819,6 +845,9 @@ export interface IeltsAttempt {
   grammatical_range: number;
   pronunciation: number | null;
   words_per_minute: number | null;
+  // Chỉ số báo cáo Speaking của cả bài; null với bài cũ lưu trước khi có chỉ số này.
+  filler_count: number | null;
+  lexical_diversity: number | null;
   feedback_vi: string;
 }
 
@@ -849,6 +878,8 @@ export function estimateIelts(
     transcript: string;
     pronunciation_score: number | null;
     words_per_minute: number | null;
+    filler_count: number;
+    lexical_diversity: number;
   }>,
   topic?: string,
 ) {
@@ -968,6 +999,230 @@ export function getWordFamily(vocabItemId: string) {
   return request<WordFamily>(`/api/vocab/${vocabItemId}/word-family`);
 }
 
+export interface Mnemonic {
+  id: string;
+  text: string;
+  votes: number;
+  voted: boolean;
+  is_mine: boolean;
+}
+
+// Mẹo nhớ tiếng Việt do người học tạo/bình chọn theo từ (backlog 3.7).
+export function listMnemonics(term: string) {
+  return request<Mnemonic[]>(`/api/vocab/mnemonics?term=${encodeURIComponent(term)}`);
+}
+
+export function saveMnemonic(term: string, text: string) {
+  return request<void>("/api/vocab/mnemonics", { method: "POST", body: JSON.stringify({ term, text }) });
+}
+
+export function voteMnemonic(id: string) {
+  return request<{ voted: boolean }>(`/api/vocab/mnemonics/${id}/vote`, { method: "POST" });
+}
+
+export function reportMnemonic(id: string) {
+  return request<void>(`/api/vocab/mnemonics/${id}/report`, { method: "POST" });
+}
+
+export interface VocabTopic { id: string; title: string; words: Array<{ term: string; meaning_vi: string; saved: boolean }> }
+export const listVocabTopics = () => request<VocabTopic[]>("/api/vocab/topics");
+export const addVocabTopic = (id: string) => request<unknown[]>(`/api/vocab/topics/${id}/add`, { method: "POST" });
+
+export function deleteMnemonic(id: string) {
+  return request<void>(`/api/vocab/mnemonics/${id}`, { method: "DELETE" });
+}
+
+export type ToeicPart = 1 | 2 | 3 | 4 | 5 | 6 | 7;
+
+export interface ToeicPractice {
+  attempt_id: string;
+  part: ToeicPart | 0; // 0 = đề thi thử nhiều Part
+  time_limit_seconds: number;
+  questions: Array<{ prompt: string; passage: string | null; options: string[]; image: string | null; credit: string | null; part: number | null; group: number | null }>;
+}
+
+export function startToeicMock() {
+  return request<ToeicPractice>("/api/toeic/mock", { method: "POST" });
+}
+
+// Part 1: ảnh cần đăng nhập nên tải thành blob rồi gắn vào <img>.
+export const fetchToeicImage = (name: string) => fetchAudioObjectUrl(`/api/toeic/part1/images/${encodeURIComponent(name)}`);
+
+export interface ToeicSubmitResult {
+  score: number;
+  correct_count: number;
+  total: number;
+  results: Array<{ chosen: number | null; correct_index: number; is_correct: boolean; explanation_vi: string; contrast_vi: string | null }>;
+  // Chỉ đề thi thử.
+  by_part?: Array<{ part: number; correct: number; total: number }> | null;
+  estimate?: { listening: number | null; reading: number | null; total: number | null } | null;
+}
+
+export interface ToeicSummary {
+  parts: Array<{ part: ToeicPart; attempts: number; questions: number; accuracy: number }>;
+  estimate: { listening: number | null; reading: number | null; total: number | null; note: string };
+}
+
+// Luyện TOEIC-style (đề gốc do AI sinh, không phải đề ETS), chấm ở server (backlog 2.7).
+export function startToeicPractice(part: ToeicPart, count = 8) {
+  return request<ToeicPractice>("/api/toeic/practice", { method: "POST", body: JSON.stringify({ part, count }) });
+}
+
+export function submitToeicPractice(attemptId: string, picks: Array<number | null>, durationSeconds?: number) {
+  return request<ToeicSubmitResult>(`/api/toeic/${attemptId}/submit`, {
+    method: "POST",
+    body: JSON.stringify({ picks, duration_seconds: durationSeconds }),
+  });
+}
+
+export function getToeicSummary() {
+  return request<ToeicSummary>("/api/toeic/summary");
+}
+
+export type WordlistName = "nawl" | "tsl";
+
+export interface WordlistCoverage {
+  list: WordlistName;
+  title: string;
+  total: number;
+  known: number;
+  percent: number;
+  suggestions: string[];
+}
+
+// Từ vựng theo chủ đề thi: NAWL (IELTS học thuật) / TSL (TOEIC) + độ phủ (backlog 3.5).
+export function getWordlistCoverage(name: WordlistName) {
+  return request<WordlistCoverage>(`/api/vocab/wordlists/${name}/coverage`);
+}
+
+export function getWordlistTextCoverage(name: WordlistName, text: string) {
+  return request<{ tokens: number; percent: number; words_found: string[] }>(`/api/vocab/wordlists/${name}/text-coverage`, {
+    method: "POST",
+    body: JSON.stringify({ text }),
+  });
+}
+
+export interface UnitImportResult {
+  created: Array<{ id: string; term: string }>;
+  duplicates: string[];
+  skipped_no_definition: string[];
+  invalid: string[];
+}
+
+export function importVocabUnit(lines: string[], unit?: string) {
+  return request<UnitImportResult>("/api/vocab/import-unit", { method: "POST", body: JSON.stringify({ lines, unit: unit || null }) });
+}
+
+export const getVocabUnits = () => request<Array<{ unit: string; count: number }>>("/api/vocab/units");
+export const getVocabUnitWords = (unit: string) =>
+  request<Array<{ id: string; term: string; definition: string | null }>>(`/api/vocab/units/words?unit=${encodeURIComponent(unit)}`);
+
+export function addWordlistWords(name: WordlistName, words: string[]) {
+  return request<Array<{ id: string; term: string }>>(`/api/vocab/wordlists/${name}/add`, {
+    method: "POST",
+    body: JSON.stringify({ words }),
+  });
+}
+
+export interface ConfusableQuestion {
+  question_id: string;
+  sentence: string;
+  options: string[];
+}
+
+export interface ConfusableResult {
+  question_id: string;
+  is_correct: boolean;
+  correct_answer: string;
+  explanation_vi: string;
+  contrast_vi: string | null;
+}
+
+// Cặp từ dễ nhầm (affect/effect...): đề lấy từ ngân hàng cố định, chấm ở server (backlog 3.3).
+export function getConfusableQuiz(count = 8) {
+  return request<ConfusableQuestion[]>(`/api/vocab/confusables/quiz?count=${count}`);
+}
+
+export function submitConfusableQuiz(answers: Array<{ question_id: string; choice: string }>) {
+  return request<{ score: number; total: number; results: ConfusableResult[] }>("/api/vocab/confusables/submit", {
+    method: "POST",
+    body: JSON.stringify({ answers }),
+  });
+}
+
+export interface GrammarQuestion {
+  question_id: string;
+  topic: string;
+  sentence: string;
+  options: string[];
+}
+
+export interface GrammarSubmitResult {
+  score: number;
+  total: number;
+  results: Array<{ question_id: string; topic: string; is_correct: boolean; correct_answer: string; explanation_vi: string; contrast_vi: string | null; why_chosen_vi: string | null }>;
+  by_topic: Record<string, { correct: number; total: number }>;
+  previous_by_topic: Record<string, { correct: number; total: number }> | null;
+}
+
+export interface GrammarDaily {
+  topic: string | null;
+  reason_vi: string;
+  questions: GrammarQuestion[];
+}
+
+// Bản đồ ngữ pháp / bài sửa lỗi / vị trí từ loại: ngân hàng cố định, chấm ở server (backlog 3.8).
+export function getGrammarQuiz(topic: string | null, count = 12) {
+  return request<GrammarQuestion[]>(`/api/grammar/quiz?count=${count}${topic ? `&topic=${topic}` : ""}`);
+}
+
+export function submitGrammarQuiz(answers: Array<{ question_id: string; choice: string }>, topic: string | null) {
+  return request<GrammarSubmitResult>("/api/grammar/submit", { method: "POST", body: JSON.stringify({ answers, topic }) });
+}
+
+export function getGrammarDaily() {
+  return request<GrammarDaily>("/api/grammar/daily");
+}
+
+export function getGrammarAttempts() {
+  return request<Array<{ topic: string | null; score: number; total: number; created_at: string }>>("/api/grammar/attempts");
+}
+
+export interface ParaphraseItem {
+  id: number;
+  technique: "synonyms" | "voice" | "structure" | "nominalisation";
+  original: string;
+}
+
+export interface ParaphraseCheck {
+  similarity: number;
+  too_similar: boolean;
+  model_paraphrases: string[];
+  note_vi: string;
+}
+
+// Ngân hàng paraphrase theo kỹ thuật (backlog 3.4): kho mẫu cố định, không gọi LLM.
+export function listParaphraseBank(technique?: ParaphraseItem["technique"]) {
+  return request<ParaphraseItem[]>(`/api/writing/paraphrase-bank${technique ? `?technique=${technique}` : ""}`);
+}
+
+export function checkParaphrase(id: number, text: string) {
+  return request<ParaphraseCheck>(`/api/writing/paraphrase-bank/${id}/check`, {
+    method: "POST",
+    body: JSON.stringify({ text }),
+  });
+}
+
+// Dán bài báo/đoạn văn → viết lại theo level CEFR + dịch từng câu sang tiếng Việt (backlog 3.10).
+export type AdaptedText = { level: string; sentences: { en: string; vi: string }[] };
+
+export function adaptText(text: string, level: "A2" | "B1" | "B2" | "C1") {
+  return request<AdaptedText>("/api/reading/adapt", {
+    method: "POST",
+    body: JSON.stringify({ text, level }),
+  });
+}
+
 export function createStory(vocabItemIds: string[], theme?: string, length: "short" | "medium" | "long" = "medium") {
   return request<{ id: string; content: string; missing_terms: string[] }>("/api/stories", {
     method: "POST",
@@ -1007,3 +1262,72 @@ export interface ReviewQueueItem {
 export function getReviewQueue() {
   return request<ReviewQueueItem[]>("/api/adaptive/review-queue");
 }
+
+// ---------------------------------------------------------------- Pronunciation lab (backlog 4.1-4.5)
+
+export interface PronSentence { id: string; focus: string; text: string; tip_vi: string }
+export interface PronAssessment {
+  sentence_id: string;
+  score: number;
+  accuracy: number;
+  fluency: number;
+  completeness: number;
+  words: Array<{ word: string; score: number }>;
+  weak_words: Array<{ word: string; score: number; tips_vi: string[] }>;
+}
+export interface PairQuestion { id: string; options: [string, string]; speak: string }
+export interface PairsResult {
+  correct: number;
+  total: number;
+  results: Array<{ id: string; correct_word: string; chosen: string; is_correct: boolean; pair: [string, string]; note_vi: string }>;
+}
+
+export const getPronSentences = () => request<PronSentence[]>("/api/pronunciation/sentences");
+export const fetchPronSentenceAudio = (id: string) => fetchAudioObjectUrl(`/api/pronunciation/sentences/${id}/audio`);
+export function assessPronSentence(id: string, audio: Blob) {
+  const body = new FormData();
+  body.append("audio", audio, "pron.wav");
+  return request<PronAssessment>(`/api/pronunciation/sentences/${id}/assess`, { method: "POST", body });
+}
+export const getPairsQuiz = (count = 8) => request<PairQuestion[]>(`/api/pronunciation/pairs/quiz?count=${count}`);
+export const checkPairs = (answers: Array<{ id: string; choice: string }>) =>
+  request<PairsResult>("/api/pronunciation/pairs/check", { method: "POST", body: JSON.stringify({ answers }) });
+export const getSilentPrompt = () => request<{ id: number; prompt: string }>("/api/pronunciation/silent/prompt");
+export const sendSilentAnswer = (prompt_id: number, text: string) =>
+  request<{ words: number; xp: number }>("/api/pronunciation/silent", { method: "POST", body: JSON.stringify({ prompt_id, text }) });
+
+// ---------------------------------------------------------------- Nhật ký giọng nói, bạn bè, lớp học, phụ huynh
+
+export interface DiaryEntry { id: string; created_at: string; duration_seconds: number; transcript: string | null; words_per_minute: number | null }
+export const getDiary = () => request<DiaryEntry[]>("/api/diary");
+export function addDiaryEntry(audio: Blob, durationSeconds: number) {
+  const body = new FormData();
+  body.append("audio", audio, "diary.wav");
+  return request<DiaryEntry>(`/api/diary?duration_seconds=${durationSeconds}`, { method: "POST", body });
+}
+export const diaryAudioUrl = (id: string) => fetchAudioObjectUrl(`/api/diary/${id}/audio`);
+export const deleteDiaryEntry = (id: string) => request<void>(`/api/diary/${id}`, { method: "DELETE" });
+
+export interface FriendLink { friendship_id: string; user_id: string; name: string }
+export interface FriendsOverview { friends: FriendLink[]; incoming: FriendLink[]; outgoing: FriendLink[] }
+export interface LeaderboardRow { user_id: string; name: string; total_xp: number; weekly_xp: number; streak: number; is_me: boolean; rank: number }
+export const getFriends = () => request<FriendsOverview>("/api/friends");
+export const sendFriendRequest = (email: string) =>
+  request<{ detail: string }>("/api/friends/requests", { method: "POST", body: JSON.stringify({ email }) });
+export const acceptFriend = (id: string) => request<void>(`/api/friends/${id}/accept`, { method: "POST" });
+export const removeFriend = (id: string) => request<void>(`/api/friends/${id}`, { method: "DELETE" });
+export const getLeaderboard = (period: "all" | "week" = "all") => request<LeaderboardRow[]>(`/api/friends/leaderboard?period=${period}`);
+
+// Bài có `skill` tự chấm: học sinh nhận `done`, giáo viên nhận `done_count`/`total_students`.
+export interface ClassAssignment { id: string; title: string; description: string | null; skill: string | null; due_date: string | null; auto_graded: boolean; done?: boolean; done_count?: number; total_students?: number }
+export interface ClassStudent { user_id: string; name: string; streak: number; total_xp: number; minutes: number; mistakes_logged: number; words_saved: number; assignments_done: number; assignments_total: number }
+export interface ClassDetail { id: string; name: string; is_teacher: boolean; join_code: string | null; assignments: ClassAssignment[]; students: ClassStudent[] }
+export interface MyClasses { teaching: Array<{ id: string; name: string; join_code: string; members: number }>; joined: Array<{ id: string; name: string }> }
+export const getMyClasses = () => request<MyClasses>("/api/classes");
+export const createClass = (name: string) => request<{ id: string; join_code: string }>("/api/classes", { method: "POST", body: JSON.stringify({ name }) });
+export const joinClass = (code: string) => request<{ id: string; name: string }>("/api/classes/join", { method: "POST", body: JSON.stringify({ code }) });
+export const getClassDetail = (id: string) => request<ClassDetail>(`/api/classes/${id}`);
+export const addClassAssignment = (id: string, body: { title: string; description?: string; skill?: string; due_date?: string }) =>
+  request<{ id: string }>(`/api/classes/${id}/assignments`, { method: "POST", body: JSON.stringify(body) });
+export const deleteClassAssignment = (id: string, assignmentId: string) => request<void>(`/api/classes/${id}/assignments/${assignmentId}`, { method: "DELETE" });
+export const removeClassMember = (id: string, userId: string) => request<void>(`/api/classes/${id}/members/${userId}`, { method: "DELETE" });

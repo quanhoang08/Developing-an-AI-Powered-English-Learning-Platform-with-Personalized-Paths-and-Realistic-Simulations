@@ -55,6 +55,23 @@ class SkillProgress(Base):
 	)
 
 
+class ActivityLog(Base):
+	"""1 dòng / 1 hoạt động được cộng XP (migration 20261004_0032): nguồn cho XP theo tuần (bảng xếp hạng)
+	và tự chấm bài giao trong lớp. Ghi bởi gamification_service.award_activity cùng transaction với XP."""
+
+	__tablename__ = "activity_log"
+
+	id: Mapped[uuid.UUID] = mapped_column(
+		UUID(as_uuid=True), primary_key=True, server_default=text("uuid_generate_v4()")
+	)
+	user_id: Mapped[uuid.UUID] = mapped_column(
+		UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE")
+	)
+	activity: Mapped[str] = mapped_column(String(40))
+	xp: Mapped[int] = mapped_column(Integer)
+	created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=text("now()"))
+
+
 class StudyTimeLog(Base):
 	"""1 dòng / 1 hoạt động hoàn thành trong lúc user bật timer mode (migration 20260927_0018).
 

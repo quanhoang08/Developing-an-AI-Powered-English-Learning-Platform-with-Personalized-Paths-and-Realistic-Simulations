@@ -110,6 +110,16 @@ async def estimate(db: AsyncSession, user_id: uuid.UUID, answers: list[dict], to
 	}
 
 
+def speech_summary(answers: list[dict]) -> dict:
+	"""Gộp chỉ số báo cáo Speaking của cả bài: tổng từ đệm, đa dạng từ trung bình (None nếu bài cũ không có)."""
+	fillers = [a["filler_count"] for a in answers if a.get("filler_count") is not None]
+	diversity = [a["lexical_diversity"] for a in answers if a.get("lexical_diversity") is not None]
+	return {
+		"filler_count": sum(fillers) if fillers else None,
+		"lexical_diversity": round(sum(diversity) / len(diversity), 2) if diversity else None,
+	}
+
+
 async def list_attempts(db: AsyncSession, user_id: uuid.UUID, limit: int = 20) -> list[IeltsAttempt]:
 	result = await db.scalars(
 		select(IeltsAttempt)

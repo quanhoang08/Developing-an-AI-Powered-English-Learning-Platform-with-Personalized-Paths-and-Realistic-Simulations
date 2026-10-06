@@ -46,6 +46,7 @@ class QuizQuestionResult(BaseModel):
 	is_correct: bool
 	correct_option_index: int
 	explanation: str
+	contrast_vi: str | None = None
 
 
 class QuizAttemptResponse(BaseModel):

@@ -30,6 +30,8 @@ class VocabItem(Base):
 	synonyms: Mapped[list[str]] = mapped_column(ARRAY(String), nullable=True)
 	antonyms: Mapped[list[str]] = mapped_column(ARRAY(String), nullable=True)
 	source_url: Mapped[str] = mapped_column(Text, nullable=True)
+	# Nhãn unit sách giáo khoa khi nhập hàng loạt (migration 20261003_0030); NULL = không thuộc unit nào.
+	unit_label: Mapped[str | None] = mapped_column(String(100), nullable=True)
 	created_at: Mapped[datetime] = mapped_column(
 		DateTime(timezone=True), server_default=text("now()")
 	)
@@ -76,6 +78,51 @@ class CustomStory(Base):
 	created_at: Mapped[datetime] = mapped_column(
 		DateTime(timezone=True), server_default=text("now()")
 	)
+
+
+class Mnemonic(Base):
+	"""Mẹo nhớ tiếng Việt cho một từ, người học tạo và chia sẻ; mỗi user một mẹo cho mỗi từ."""
+
+	__tablename__ = "mnemonics"
+
+	id: Mapped[uuid.UUID] = mapped_column(
+		UUID(as_uuid=True), primary_key=True, server_default=text("uuid_generate_v4()")
+	)
+	user_id: Mapped[uuid.UUID] = mapped_column(
+		UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE")
+	)
+	term_key: Mapped[str] = mapped_column(String(100))
+	body: Mapped[str] = mapped_column("text", String(300))  # tên thuộc tính khác để không che hàm text()
+	created_at: Mapped[datetime] = mapped_column(
+		DateTime(timezone=True), server_default=text("now()")
+	)
+
+
+class MnemonicVote(Base):
+	"""Một phiếu bình chọn (user, mẹo); khóa chính kép nên mỗi user chỉ bầu một lần."""
+
+	__tablename__ = "mnemonic_votes"
+
+	mnemonic_id: Mapped[uuid.UUID] = mapped_column(
+		UUID(as_uuid=True), ForeignKey("mnemonics.id", ondelete="CASCADE"), primary_key=True
+	)
+	user_id: Mapped[uuid.UUID] = mapped_column(
+		UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), primary_key=True
+	)
+
+
+class MnemonicReport(Base):
+	"""Một báo cáo (user, mẹo) — migration 20261004_0032; đủ REPORT_HIDE_THRESHOLD báo cáo thì mẹo bị ẩn."""
+
+	__tablename__ = "mnemonic_reports"
+
+	mnemonic_id: Mapped[uuid.UUID] = mapped_column(
+		UUID(as_uuid=True), ForeignKey("mnemonics.id", ondelete="CASCADE"), primary_key=True
+	)
+	user_id: Mapped[uuid.UUID] = mapped_column(
+		UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), primary_key=True
+	)
+	created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=text("now()"))
 
 
 class VocabReview(Base):

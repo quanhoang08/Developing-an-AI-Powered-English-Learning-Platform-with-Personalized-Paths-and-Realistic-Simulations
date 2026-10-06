@@ -31,8 +31,10 @@
 -- dùng để khởi tạo DB (2 file có thể tạm lệch nhau về câu chữ/tổ chức, nhưng
 -- file .sql ở đây luôn là nguồn đúng về mặt DDL thực thi được).
 --
--- Sinh lần cuối: 2026-10-02, khớp Alembic revision 20261002_0024 (thêm bảng listening_quiz_attempts cho quiz nghe hiểu; trước đó 0023 ielts_attempts).
+-- Sinh lần cuối: 2026-10-04, khớp Alembic revision 20261004_0032 (thêm activity_log: XP theo tuần + tự chấm bài giao; mnemonic_reports: báo cáo mẹo nhớ; trước đó 0031 gỡ cột phụ huynh, 0030 bạn bè/lớp học/nhật ký giọng nói, 0028 toeic_bank).
 -- ============================================================================
+
+
 --
 -- PostgreSQL database dump
 --
@@ -41,6 +43,16 @@
 -- Dumped from database version 16.15 (Debian 16.15-1.pgdg12+2)
 -- Dumped by pg_dump version 16.15 (Debian 16.15-1.pgdg12+2)
 
+SET statement_timeout = 0;
+SET lock_timeout = 0;
+SET idle_in_transaction_session_timeout = 0;
+SET client_encoding = 'UTF8';
+SET standard_conforming_strings = on;
+SELECT pg_catalog.set_config('search_path', '', false);
+SET check_function_bodies = false;
+SET xmloption = content;
+SET client_min_messages = warning;
+SET row_security = off;
 
 --
 -- Name: uuid-ossp; Type: EXTENSION; Schema: -; Owner: -
@@ -84,6 +96,30 @@ END;
 $$;
 
 
+SET default_tablespace = '';
+
+SET default_table_access_method = heap;
+
+--
+-- Name: activity_log; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.activity_log (
+    id uuid DEFAULT public.uuid_generate_v4() NOT NULL,
+    user_id uuid NOT NULL,
+    activity character varying(40) NOT NULL,
+    xp integer NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+
+--
+-- Name: alembic_version; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.alembic_version (
+    version_num character varying(32) NOT NULL
+);
 
 
 --
@@ -100,6 +136,46 @@ CREATE TABLE public.auth_tokens (
     attempts integer DEFAULT 0 NOT NULL,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
     CONSTRAINT auth_tokens_purpose_check CHECK (((purpose)::text = ANY ((ARRAY['verify_email'::character varying, 'reset_password'::character varying])::text[])))
+);
+
+
+--
+-- Name: class_assignments; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.class_assignments (
+    id uuid DEFAULT public.uuid_generate_v4() NOT NULL,
+    class_id uuid NOT NULL,
+    title character varying(150) NOT NULL,
+    description text,
+    skill character varying(20),
+    due_date date,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT class_assignments_skill_check CHECK (((skill)::text = ANY ((ARRAY['reading'::character varying, 'listening'::character varying, 'writing'::character varying, 'speaking'::character varying, 'vocab'::character varying, 'grammar'::character varying])::text[])))
+);
+
+
+--
+-- Name: class_members; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.class_members (
+    class_id uuid NOT NULL,
+    user_id uuid NOT NULL,
+    joined_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+
+--
+-- Name: classes; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.classes (
+    id uuid DEFAULT public.uuid_generate_v4() NOT NULL,
+    teacher_id uuid NOT NULL,
+    name character varying(100) NOT NULL,
+    join_code character varying(8) NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL
 );
 
 
@@ -241,6 +317,21 @@ CREATE TABLE public.documents (
 
 
 --
+-- Name: friendships; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.friendships (
+    id uuid DEFAULT public.uuid_generate_v4() NOT NULL,
+    requester_id uuid NOT NULL,
+    addressee_id uuid NOT NULL,
+    status character varying(10) DEFAULT 'pending'::character varying NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT friendships_check CHECK ((requester_id <> addressee_id)),
+    CONSTRAINT friendships_status_check CHECK (((status)::text = ANY ((ARRAY['pending'::character varying, 'accepted'::character varying])::text[])))
+);
+
+
+--
 -- Name: generated_passages; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -256,6 +347,21 @@ CREATE TABLE public.generated_passages (
     target_vocab_words text[],
     created_at timestamp with time zone DEFAULT now(),
     source_document_id uuid
+);
+
+
+--
+-- Name: grammar_attempts; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.grammar_attempts (
+    id uuid DEFAULT public.uuid_generate_v4() NOT NULL,
+    user_id uuid NOT NULL,
+    topic character varying(30),
+    score integer NOT NULL,
+    total integer NOT NULL,
+    by_topic jsonb NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL
 );
 
 
@@ -292,6 +398,40 @@ CREATE TABLE public.listening_quiz_attempts (
     correct_count integer,
     score numeric(5,2),
     submitted_at timestamp with time zone,
+    created_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+
+--
+-- Name: mnemonic_reports; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.mnemonic_reports (
+    mnemonic_id uuid NOT NULL,
+    user_id uuid NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+
+--
+-- Name: mnemonic_votes; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.mnemonic_votes (
+    mnemonic_id uuid NOT NULL,
+    user_id uuid NOT NULL
+);
+
+
+--
+-- Name: mnemonics; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.mnemonics (
+    id uuid DEFAULT public.uuid_generate_v4() NOT NULL,
+    user_id uuid NOT NULL,
+    term_key character varying(100) NOT NULL,
+    text character varying(300) NOT NULL,
     created_at timestamp with time zone DEFAULT now() NOT NULL
 );
 
@@ -592,6 +732,37 @@ CREATE TABLE public.study_time_log (
 
 
 --
+-- Name: toeic_attempts; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.toeic_attempts (
+    id uuid DEFAULT public.uuid_generate_v4() NOT NULL,
+    user_id uuid NOT NULL,
+    part smallint NOT NULL,
+    questions jsonb NOT NULL,
+    picks jsonb,
+    correct_count integer,
+    score numeric(5,2),
+    submitted_at timestamp with time zone,
+    created_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+
+--
+-- Name: toeic_bank; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.toeic_bank (
+    id uuid DEFAULT public.uuid_generate_v4() NOT NULL,
+    part smallint NOT NULL,
+    unit jsonb NOT NULL,
+    source character varying(20) NOT NULL,
+    disabled boolean DEFAULT false NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+
+--
 -- Name: transcript_segments; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -652,7 +823,9 @@ CREATE TABLE public.users (
     created_at timestamp with time zone DEFAULT now(),
     updated_at timestamp with time zone DEFAULT now(),
     timer_mode_enabled boolean DEFAULT false NOT NULL,
-    email_verified_at timestamp with time zone
+    email_verified_at timestamp with time zone,
+    target_band numeric(2,1),
+    exam_date date
 );
 
 
@@ -699,6 +872,7 @@ CREATE TABLE public.vocab_items (
     antonyms text[],
     created_at timestamp with time zone DEFAULT now(),
     source_url text,
+    unit_label character varying(100),
     CONSTRAINT chk_vocab_source_exactly_one CHECK ((NOT ((document_id IS NOT NULL) AND (source_url IS NOT NULL))))
 );
 
@@ -716,6 +890,22 @@ CREATE TABLE public.vocab_reviews (
     last_grade smallint,
     last_reviewed_at timestamp with time zone,
     next_review_at timestamp with time zone DEFAULT now()
+);
+
+
+--
+-- Name: voice_diary_entries; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.voice_diary_entries (
+    id uuid DEFAULT public.uuid_generate_v4() NOT NULL,
+    user_id uuid NOT NULL,
+    file_name character varying(100) NOT NULL,
+    duration_seconds integer NOT NULL,
+    transcript text,
+    words_per_minute integer,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT voice_diary_entries_duration_seconds_check CHECK (((duration_seconds >= 1) AND (duration_seconds <= 120)))
 );
 
 
@@ -767,11 +957,59 @@ CREATE TABLE public.writing_submissions (
 
 
 --
+-- Name: activity_log activity_log_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.activity_log
+    ADD CONSTRAINT activity_log_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: alembic_version alembic_version_pkc; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.alembic_version
+    ADD CONSTRAINT alembic_version_pkc PRIMARY KEY (version_num);
+
+
+--
 -- Name: auth_tokens auth_tokens_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.auth_tokens
     ADD CONSTRAINT auth_tokens_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: class_assignments class_assignments_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.class_assignments
+    ADD CONSTRAINT class_assignments_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: class_members class_members_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.class_members
+    ADD CONSTRAINT class_members_pkey PRIMARY KEY (class_id, user_id);
+
+
+--
+-- Name: classes classes_join_code_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.classes
+    ADD CONSTRAINT classes_join_code_key UNIQUE (join_code);
+
+
+--
+-- Name: classes classes_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.classes
+    ADD CONSTRAINT classes_pkey PRIMARY KEY (id);
 
 
 --
@@ -831,11 +1069,35 @@ ALTER TABLE ONLY public.documents
 
 
 --
+-- Name: friendships friendships_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.friendships
+    ADD CONSTRAINT friendships_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: friendships friendships_requester_id_addressee_id_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.friendships
+    ADD CONSTRAINT friendships_requester_id_addressee_id_key UNIQUE (requester_id, addressee_id);
+
+
+--
 -- Name: generated_passages generated_passages_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.generated_passages
     ADD CONSTRAINT generated_passages_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: grammar_attempts grammar_attempts_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.grammar_attempts
+    ADD CONSTRAINT grammar_attempts_pkey PRIMARY KEY (id);
 
 
 --
@@ -852,6 +1114,30 @@ ALTER TABLE ONLY public.ielts_attempts
 
 ALTER TABLE ONLY public.listening_quiz_attempts
     ADD CONSTRAINT listening_quiz_attempts_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: mnemonic_reports mnemonic_reports_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.mnemonic_reports
+    ADD CONSTRAINT mnemonic_reports_pkey PRIMARY KEY (mnemonic_id, user_id);
+
+
+--
+-- Name: mnemonic_votes mnemonic_votes_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.mnemonic_votes
+    ADD CONSTRAINT mnemonic_votes_pkey PRIMARY KEY (mnemonic_id, user_id);
+
+
+--
+-- Name: mnemonics mnemonics_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.mnemonics
+    ADD CONSTRAINT mnemonics_pkey PRIMARY KEY (id);
 
 
 --
@@ -1023,6 +1309,22 @@ ALTER TABLE ONLY public.study_time_log
 
 
 --
+-- Name: toeic_attempts toeic_attempts_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.toeic_attempts
+    ADD CONSTRAINT toeic_attempts_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: toeic_bank toeic_bank_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.toeic_bank
+    ADD CONSTRAINT toeic_bank_pkey PRIMARY KEY (id);
+
+
+--
 -- Name: transcript_segments transcript_segments_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -1108,6 +1410,14 @@ ALTER TABLE ONLY public.vocab_reviews
 
 ALTER TABLE ONLY public.vocab_reviews
     ADD CONSTRAINT vocab_reviews_vocab_item_id_key UNIQUE (vocab_item_id);
+
+
+--
+-- Name: voice_diary_entries voice_diary_entries_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.voice_diary_entries
+    ADD CONSTRAINT voice_diary_entries_pkey PRIMARY KEY (id);
 
 
 --
@@ -1428,10 +1738,52 @@ CREATE INDEX idx_writing_submissions_user ON public.writing_submissions USING bt
 
 
 --
+-- Name: ix_activity_log_user_created; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_activity_log_user_created ON public.activity_log USING btree (user_id, created_at DESC);
+
+
+--
 -- Name: ix_auth_tokens_user_purpose; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX ix_auth_tokens_user_purpose ON public.auth_tokens USING btree (user_id, purpose);
+
+
+--
+-- Name: ix_class_assignments_class; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_class_assignments_class ON public.class_assignments USING btree (class_id, created_at DESC);
+
+
+--
+-- Name: ix_class_members_user; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_class_members_user ON public.class_members USING btree (user_id);
+
+
+--
+-- Name: ix_classes_teacher; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_classes_teacher ON public.classes USING btree (teacher_id);
+
+
+--
+-- Name: ix_friendships_addressee; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_friendships_addressee ON public.friendships USING btree (addressee_id, status);
+
+
+--
+-- Name: ix_grammar_attempts_user_created; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_grammar_attempts_user_created ON public.grammar_attempts USING btree (user_id, created_at DESC);
 
 
 --
@@ -1449,10 +1801,52 @@ CREATE INDEX ix_listening_quiz_user_created ON public.listening_quiz_attempts US
 
 
 --
+-- Name: ix_mnemonics_term; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_mnemonics_term ON public.mnemonics USING btree (term_key);
+
+
+--
+-- Name: ix_toeic_attempts_user_created; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_toeic_attempts_user_created ON public.toeic_attempts USING btree (user_id, created_at DESC);
+
+
+--
+-- Name: ix_toeic_bank_part; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_toeic_bank_part ON public.toeic_bank USING btree (part) WHERE (NOT disabled);
+
+
+--
+-- Name: ix_vocab_items_user_unit; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_vocab_items_user_unit ON public.vocab_items USING btree (user_id, unit_label);
+
+
+--
+-- Name: ix_voice_diary_user_created; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_voice_diary_user_created ON public.voice_diary_entries USING btree (user_id, created_at DESC);
+
+
+--
 -- Name: uq_conversation_turns_session_turn; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE UNIQUE INDEX uq_conversation_turns_session_turn ON public.conversation_turns USING btree (conversation_session_id, turn_index);
+
+
+--
+-- Name: uq_mnemonics_user_term; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX uq_mnemonics_user_term ON public.mnemonics USING btree (user_id, term_key);
 
 
 --
@@ -1484,11 +1878,51 @@ CREATE TRIGGER trg_users_updated_at BEFORE UPDATE ON public.users FOR EACH ROW E
 
 
 --
+-- Name: activity_log activity_log_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.activity_log
+    ADD CONSTRAINT activity_log_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id) ON DELETE CASCADE;
+
+
+--
 -- Name: auth_tokens auth_tokens_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.auth_tokens
     ADD CONSTRAINT auth_tokens_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id) ON DELETE CASCADE;
+
+
+--
+-- Name: class_assignments class_assignments_class_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.class_assignments
+    ADD CONSTRAINT class_assignments_class_id_fkey FOREIGN KEY (class_id) REFERENCES public.classes(id) ON DELETE CASCADE;
+
+
+--
+-- Name: class_members class_members_class_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.class_members
+    ADD CONSTRAINT class_members_class_id_fkey FOREIGN KEY (class_id) REFERENCES public.classes(id) ON DELETE CASCADE;
+
+
+--
+-- Name: class_members class_members_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.class_members
+    ADD CONSTRAINT class_members_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id) ON DELETE CASCADE;
+
+
+--
+-- Name: classes classes_teacher_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.classes
+    ADD CONSTRAINT classes_teacher_id_fkey FOREIGN KEY (teacher_id) REFERENCES public.users(id) ON DELETE CASCADE;
 
 
 --
@@ -1588,6 +2022,22 @@ ALTER TABLE ONLY public.documents
 
 
 --
+-- Name: friendships friendships_addressee_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.friendships
+    ADD CONSTRAINT friendships_addressee_id_fkey FOREIGN KEY (addressee_id) REFERENCES public.users(id) ON DELETE CASCADE;
+
+
+--
+-- Name: friendships friendships_requester_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.friendships
+    ADD CONSTRAINT friendships_requester_id_fkey FOREIGN KEY (requester_id) REFERENCES public.users(id) ON DELETE CASCADE;
+
+
+--
 -- Name: generated_passages generated_passages_source_document_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -1601,6 +2051,14 @@ ALTER TABLE ONLY public.generated_passages
 
 ALTER TABLE ONLY public.generated_passages
     ADD CONSTRAINT generated_passages_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id) ON DELETE CASCADE;
+
+
+--
+-- Name: grammar_attempts grammar_attempts_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.grammar_attempts
+    ADD CONSTRAINT grammar_attempts_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id) ON DELETE CASCADE;
 
 
 --
@@ -1625,6 +2083,46 @@ ALTER TABLE ONLY public.listening_quiz_attempts
 
 ALTER TABLE ONLY public.listening_quiz_attempts
     ADD CONSTRAINT listening_quiz_attempts_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id) ON DELETE CASCADE;
+
+
+--
+-- Name: mnemonic_reports mnemonic_reports_mnemonic_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.mnemonic_reports
+    ADD CONSTRAINT mnemonic_reports_mnemonic_id_fkey FOREIGN KEY (mnemonic_id) REFERENCES public.mnemonics(id) ON DELETE CASCADE;
+
+
+--
+-- Name: mnemonic_reports mnemonic_reports_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.mnemonic_reports
+    ADD CONSTRAINT mnemonic_reports_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id) ON DELETE CASCADE;
+
+
+--
+-- Name: mnemonic_votes mnemonic_votes_mnemonic_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.mnemonic_votes
+    ADD CONSTRAINT mnemonic_votes_mnemonic_id_fkey FOREIGN KEY (mnemonic_id) REFERENCES public.mnemonics(id) ON DELETE CASCADE;
+
+
+--
+-- Name: mnemonic_votes mnemonic_votes_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.mnemonic_votes
+    ADD CONSTRAINT mnemonic_votes_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id) ON DELETE CASCADE;
+
+
+--
+-- Name: mnemonics mnemonics_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.mnemonics
+    ADD CONSTRAINT mnemonics_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id) ON DELETE CASCADE;
 
 
 --
@@ -1820,6 +2318,14 @@ ALTER TABLE ONLY public.study_time_log
 
 
 --
+-- Name: toeic_attempts toeic_attempts_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.toeic_attempts
+    ADD CONSTRAINT toeic_attempts_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id) ON DELETE CASCADE;
+
+
+--
 -- Name: transcript_segments transcript_segments_podcast_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -1897,6 +2403,14 @@ ALTER TABLE ONLY public.vocab_items
 
 ALTER TABLE ONLY public.vocab_reviews
     ADD CONSTRAINT vocab_reviews_vocab_item_id_fkey FOREIGN KEY (vocab_item_id) REFERENCES public.vocab_items(id) ON DELETE CASCADE;
+
+
+--
+-- Name: voice_diary_entries voice_diary_entries_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.voice_diary_entries
+    ADD CONSTRAINT voice_diary_entries_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id) ON DELETE CASCADE;
 
 
 --

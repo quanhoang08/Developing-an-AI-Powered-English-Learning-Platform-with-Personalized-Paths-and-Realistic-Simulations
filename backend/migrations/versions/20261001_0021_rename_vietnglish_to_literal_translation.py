@@ -21,7 +21,15 @@ def upgrade() -> None:
                 SELECT 1 FROM information_schema.columns
                 WHERE table_name = 'conversation_turns' AND column_name = 'vietnglish'
             ) THEN
-                ALTER TABLE conversation_turns RENAME COLUMN vietnglish TO literal_translation;
+                -- Khởi tạo từ schema.sql mới: literal_translation đã có sẵn, 0020 chỉ vừa thêm lại cột vietnglish rỗng.
+                IF EXISTS (
+                    SELECT 1 FROM information_schema.columns
+                    WHERE table_name = 'conversation_turns' AND column_name = 'literal_translation'
+                ) THEN
+                    ALTER TABLE conversation_turns DROP COLUMN vietnglish;
+                ELSE
+                    ALTER TABLE conversation_turns RENAME COLUMN vietnglish TO literal_translation;
+                END IF;
             END IF;
         END $$
         """

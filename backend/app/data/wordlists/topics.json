@@ -1,0 +1,149 @@
+{
+  "economy": {
+    "title": "Economy & finance",
+    "words": [
+      ["inflation", "lạm phát"],
+      ["recession", "suy thoái kinh tế"],
+      ["unemployment", "tình trạng thất nghiệp"],
+      ["revenue", "doanh thu"],
+      ["budget", "ngân sách"],
+      ["investment", "khoản đầu tư"],
+      ["interest rate", "lãi suất"],
+      ["tax", "thuế"],
+      ["export", "xuất khẩu"],
+      ["import", "nhập khẩu"],
+      ["subsidy", "trợ cấp"],
+      ["currency", "tiền tệ"],
+      ["deficit", "thâm hụt"],
+      ["consumer", "người tiêu dùng"],
+      ["economic growth", "tăng trưởng kinh tế"],
+      ["income", "thu nhập"]
+    ]
+  },
+  "health": {
+    "title": "Health & medicine",
+    "words": [
+      ["symptom", "triệu chứng"],
+      ["diagnosis", "chẩn đoán"],
+      ["treatment", "điều trị"],
+      ["prescription", "đơn thuốc"],
+      ["vaccine", "vắc-xin"],
+      ["chronic", "mãn tính"],
+      ["infection", "nhiễm trùng"],
+      ["obesity", "béo phì"],
+      ["nutrition", "dinh dưỡng"],
+      ["surgery", "phẫu thuật"],
+      ["immune system", "hệ miễn dịch"],
+      ["balanced diet", "chế độ ăn cân bằng"],
+      ["side effect", "tác dụng phụ"],
+      ["epidemic", "dịch bệnh"],
+      ["recovery", "sự hồi phục"],
+      ["check-up", "khám sức khỏe"]
+    ]
+  },
+  "environment": {
+    "title": "Environment",
+    "words": [
+      ["pollution", "ô nhiễm"],
+      ["climate change", "biến đổi khí hậu"],
+      ["greenhouse gas", "khí nhà kính"],
+      ["renewable energy", "năng lượng tái tạo"],
+      ["deforestation", "nạn phá rừng"],
+      ["biodiversity", "đa dạng sinh học"],
+      ["endangered species", "loài có nguy cơ tuyệt chủng"],
+      ["sustainable", "bền vững"],
+      ["recycling", "tái chế"],
+      ["carbon footprint", "lượng khí thải carbon"],
+      ["drought", "hạn hán"],
+      ["conservation", "bảo tồn"],
+      ["fossil fuel", "nhiên liệu hóa thạch"],
+      ["waste", "rác thải"],
+      ["ecosystem", "hệ sinh thái"],
+      ["global warming", "sự nóng lên toàn cầu"]
+    ]
+  },
+  "technology": {
+    "title": "Technology",
+    "words": [
+      ["artificial intelligence", "trí tuệ nhân tạo"],
+      ["automation", "tự động hóa"],
+      ["innovation", "sự đổi mới"],
+      ["software", "phần mềm"],
+      ["cybersecurity", "an ninh mạng"],
+      ["database", "cơ sở dữ liệu"],
+      ["device", "thiết bị"],
+      ["upgrade", "nâng cấp"],
+      ["breakthrough", "bước đột phá"],
+      ["digital", "kỹ thuật số"],
+      ["network", "mạng lưới"],
+      ["privacy", "quyền riêng tư"],
+      ["obsolete", "lỗi thời"],
+      ["download", "tải xuống"],
+      ["encryption", "mã hóa"],
+      ["user-friendly", "dễ sử dụng"]
+    ]
+  },
+  "education": {
+    "title": "Education",
+    "words": [
+      ["curriculum", "chương trình giảng dạy"],
+      ["tuition fee", "học phí"],
+      ["scholarship", "học bổng"],
+      ["literacy", "khả năng đọc viết"],
+      ["assessment", "đánh giá"],
+      ["compulsory", "bắt buộc"],
+      ["vocational", "thuộc về dạy nghề"],
+      ["graduate", "tốt nghiệp; sinh viên tốt nghiệp"],
+      ["lecture", "bài giảng"],
+      ["academic", "mang tính học thuật"],
+      ["enrol", "đăng ký nhập học"],
+      ["plagiarism", "đạo văn"],
+      ["distance learning", "học từ xa"],
+      ["extracurricular", "ngoại khóa"],
+      ["qualification", "bằng cấp, trình độ"],
+      ["dropout", "người bỏ học"]
+    ]
+  },
+  "travel": {
+    "title": "Travel & tourism",
+    "words": [
+      ["itinerary", "lịch trình"],
+      ["accommodation", "chỗ ở"],
+      ["destination", "điểm đến"],
+      ["luggage", "hành lý"],
+      ["boarding pass", "thẻ lên máy bay"],
+      ["customs", "hải quan"],
+      ["sightseeing", "tham quan"],
+      ["souvenir", "quà lưu niệm"],
+      ["departure", "sự khởi hành"],
+      ["delay", "sự chậm trễ"],
+      ["reservation", "việc đặt chỗ"],
+      ["passport", "hộ chiếu"],
+      ["fare", "giá vé"],
+      ["tour guide", "hướng dẫn viên du lịch"],
+      ["round trip", "chuyến khứ hồi"],
+      ["layover", "thời gian quá cảnh"]
+    ]
+  },
+  "business": {
+    "title": "Business & office (TOEIC)",
+    "words": [
+      ["deadline", "hạn chót"],
+      ["agenda", "chương trình họp"],
+      ["colleague", "đồng nghiệp"],
+      ["negotiate", "đàm phán"],
+      ["invoice", "hóa đơn"],
+      ["merger", "sự sáp nhập"],
+      ["shareholder", "cổ đông"],
+      ["supervisor", "người giám sát"],
+      ["résumé", "sơ yếu lý lịch"],
+      ["candidate", "ứng viên"],
+      ["reimburse", "hoàn tiền"],
+      ["quarterly", "hằng quý"],
+      ["schedule", "lịch trình; lên lịch"],
+      ["client", "khách hàng"],
+      ["contract", "hợp đồng"],
+      ["warranty", "bảo hành"]
+    ]
+  }
+}

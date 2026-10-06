@@ -24,6 +24,11 @@ class VocabCreate(BaseModel):
 		return self
 
 
+class UnitSummary(BaseModel):
+	unit: str
+	count: int
+
+
 class VocabResponse(BaseModel):
 	# DTO trả về sau khi tạo/liệt kê từ vựng.
 	id: UUID
@@ -70,3 +75,81 @@ class VocabSentenceResponse(BaseModel):
 	grammar_ok: bool
 	corrected_sentence: str
 	feedback_vi: str
+
+
+class WordlistCoverage(BaseModel):
+	list: str
+	title: str
+	total: int
+	known: int
+	percent: float
+	suggestions: list[str]
+
+
+class WordlistTextRequest(BaseModel):
+	text: str = Field(min_length=1, max_length=20000)
+
+
+class WordlistTextCoverage(BaseModel):
+	list: str
+	tokens: int
+	percent: float
+	words_found: list[str]
+
+
+class WordlistAddRequest(BaseModel):
+	words: list[str] = Field(min_length=1, max_length=5)
+
+
+class UnitImportRequest(BaseModel):
+	lines: list[str] = Field(min_length=1, max_length=60)
+	unit: str | None = Field(default=None, max_length=100)
+
+
+class UnitImportResponse(BaseModel):
+	created: list[VocabResponse]
+	duplicates: list[str]
+	skipped_no_definition: list[str]
+	invalid: list[str]
+
+
+class MnemonicCreate(BaseModel):
+	term: str = Field(min_length=1, max_length=100)
+	text: str = Field(min_length=5, max_length=300)
+
+
+class MnemonicItem(BaseModel):
+	id: UUID
+	text: str
+	votes: int
+	voted: bool
+	is_mine: bool
+
+
+class ConfusableQuestion(BaseModel):
+	question_id: str
+	sentence: str
+	options: list[str]
+
+
+class ConfusableAnswer(BaseModel):
+	question_id: str = Field(max_length=10)
+	choice: str = Field(max_length=30)
+
+
+class ConfusableSubmitRequest(BaseModel):
+	answers: list[ConfusableAnswer] = Field(min_length=1, max_length=20)
+
+
+class ConfusableResult(BaseModel):
+	question_id: str
+	is_correct: bool
+	correct_answer: str
+	explanation_vi: str
+	contrast_vi: str | None = None
+
+
+class ConfusableSubmitResponse(BaseModel):
+	score: int
+	total: int
+	results: list[ConfusableResult]

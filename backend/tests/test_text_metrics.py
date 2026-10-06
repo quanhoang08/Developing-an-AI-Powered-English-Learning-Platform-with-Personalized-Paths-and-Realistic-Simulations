@@ -36,3 +36,12 @@ def test_compound_without_comma_but_not_noun_coordination() -> None:
         "She is tired but happy."
     )
     assert result["types"] == {"simple": 2, "compound": 2, "complex": 0, "compound_complex": 0}
+
+
+def test_compound_with_proper_name_subject() -> None:
+    result = sentence_structures(
+        "We waited at the station and Tom left early. "  # ghép: chủ ngữ mới là tên riêng
+        "Tom and Mary went home. "  # chủ ngữ ghép: câu đơn
+        "She met Tom and Mary yesterday."  # danh từ ghép: câu đơn
+    )
+    assert result["types"] == {"simple": 2, "compound": 1, "complex": 0, "compound_complex": 0}

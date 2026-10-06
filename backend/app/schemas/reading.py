@@ -143,6 +143,21 @@ class StoryCreate(BaseModel):
 	length: str = Field(default="medium", pattern="^(short|medium|long)$")
 
 
+class AdaptTextRequest(BaseModel):
+	text: str = Field(min_length=20, max_length=1500)
+	level: Literal["A2", "B1", "B2", "C1"] = "B1"
+
+
+class AdaptedSentence(BaseModel):
+	en: str
+	vi: str
+
+
+class AdaptTextResponse(BaseModel):
+	level: str
+	sentences: list[AdaptedSentence]
+
+
 class StoryResponse(BaseModel):
 	# missing_terms: từ user chọn nhưng model không dùng trong truyện — UI báo để user tự xử lý.
 	id: str

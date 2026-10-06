@@ -3,6 +3,7 @@
 import React, { useState } from "react";
 import { BookMarked, CheckCircle2, Loader2, XCircle } from "lucide-react";
 import {
+  ConfusableQuestion,
   DueVocabulary,
   GuessContextAttempt,
   SentenceVerdict,
@@ -10,11 +11,16 @@ import {
   checkVocabSentence,
   createGuessContext,
   createStory,
+  getConfusableQuiz,
   getWordFamily,
   listDueVocabulary,
+  submitConfusableQuiz,
   submitGuessContext,
 } from "../api";
 import { ErrorNotice } from "./ErrorNotice";
+import { MnemonicsPanel } from "./MnemonicsPanel";
+import { WordlistPanel } from "./WordlistPanel";
+import { AdaptTextPanel } from "./AdaptTextPanel";
 
 export const ReadingExtrasPanel: React.FC = () => {
   const [term, setTerm] = useState("");
@@ -32,7 +38,11 @@ export const ReadingExtrasPanel: React.FC = () => {
 
   const [family, setFamily] = useState<WordFamily | null>(null);
 
-  const [busy, setBusy] = useState<"guess" | "answer" | "vocab" | "story" | "sentence" | "family" | null>(null);
+  const [confQuiz, setConfQuiz] = useState<ConfusableQuestion[] | null>(null);
+  const [confPicks, setConfPicks] = useState<Record<string, string>>({});
+  const [confResult, setConfResult] = useState<Awaited<ReturnType<typeof submitConfusableQuiz>> | null>(null);
+
+  const [busy, setBusy] = useState<"guess" | "answer" | "vocab" | "story" | "sentence" | "family" | "confusable" | null>(null);
   const [error, setError] = useState<{ cause: unknown; retry: () => void } | null>(null);
 
   // Bọc mọi thao tác: bật busy, xóa lỗi cũ, và gắn nút "Try again" chạy lại đúng thao tác vừa lỗi.
@@ -87,6 +97,18 @@ export const ReadingExtrasPanel: React.FC = () => {
       setFamily(null);
       setFamily(await getWordFamily(sentenceWordId!));
     });
+
+  const startConfusables = () =>
+    run("confusable", async () => {
+      setConfResult(null);
+      setConfPicks({});
+      setConfQuiz(await getConfusableQuiz(8));
+    });
+
+  const submitConfusables = () =>
+    run("confusable", async () =>
+      setConfResult(await submitConfusableQuiz(Object.entries<string>(confPicks).map(([question_id, choice]) => ({ question_id, choice })))),
+    );
 
   const toggle = (id: string) =>
     setSelected((current) => (current.includes(id) ? current.filter((x) => x !== id) : [...current, id].slice(0, 15)));
@@ -252,6 +274,7 @@ export const ReadingExtrasPanel: React.FC = () => {
                     </ul>
                   </div>
                 )}
+                <MnemonicsPanel term={sentenceTerm} />
                 <textarea
                   value={sentence}
                   onChange={(e) => setSentence(e.target.value)}
@@ -294,6 +317,81 @@ export const ReadingExtrasPanel: React.FC = () => {
           </>
         )}
       </section>
+
+      <section className="space-y-4 border-t border-dashed border-slate-200 pt-6">
+        <h3 className="font-display text-2xl font-bold text-slate-900">Confusing word pairs</h3>
+        {confQuiz === null ? (
+          <button
+            onClick={startConfusables}
+            disabled={busy !== null}
+            className="px-4 py-2 bg-indigo-700 hover:bg-indigo-800 disabled:opacity-50 text-white font-bold text-sm rounded-2xl flex items-center gap-2 cursor-pointer"
+          >
+            {busy === "confusable" && <Loader2 className="w-4 h-4 animate-spin" />} Start 8 questions
+          </button>
+        ) : (
+          <>
+            <ol className="space-y-4">
+              {confQuiz.map((question, index) => {
+                const result = confResult?.results.find((r) => r.question_id === question.question_id);
+                return (
+                  <li key={question.question_id} className="space-y-2">
+                    <p className="font-serif text-lg text-slate-800">{index + 1}. {question.sentence}</p>
+                    <div className="flex gap-2">
+                      {question.options.map((option) => (
+                        <button
+                          key={option}
+                          onClick={() => setConfPicks((c) => ({ ...c, [question.question_id]: option }))}
+                          disabled={confResult !== null}
+                          aria-pressed={confPicks[question.question_id] === option}
+                          className={`px-4 py-1.5 rounded-xl border text-sm cursor-pointer ${
+                            result && option === result.correct_answer
+                              ? "border-emerald-400 bg-emerald-50 text-emerald-900"
+                              : result && confPicks[question.question_id] === option
+                                ? "border-rose-400 bg-rose-50 text-rose-900"
+                                : confPicks[question.question_id] === option
+                                  ? "border-indigo-500 bg-indigo-50"
+                                  : "border-slate-200 bg-white hover:bg-slate-50"
+                          }`}
+                        >
+                          {option}
+                        </button>
+                      ))}
+                    </div>
+                    {result && !result.is_correct && (
+                      <div className="text-sm text-slate-600 space-y-1">
+                        <p>{result.explanation_vi}</p>
+                        {result.contrast_vi && <p className="text-indigo-700">Tiếng Việt vs English: {result.contrast_vi}</p>}
+                      </div>
+                    )}
+                  </li>
+                );
+              })}
+            </ol>
+            {confResult ? (
+              <p className="text-sm font-bold text-slate-900" role="status">
+                Score: {confResult.score}/{confResult.total}
+              </p>
+            ) : (
+              <button
+                onClick={submitConfusables}
+                disabled={busy !== null || Object.keys(confPicks).length < confQuiz.length}
+                className="px-4 py-2 bg-emerald-700 hover:bg-emerald-800 disabled:opacity-50 text-white font-bold text-sm rounded-2xl flex items-center gap-2 cursor-pointer"
+              >
+                {busy === "confusable" && <Loader2 className="w-4 h-4 animate-spin" />} Check answers
+              </button>
+            )}
+            {confResult && (
+              <button onClick={startConfusables} className="text-sm font-bold text-indigo-700 cursor-pointer">
+                Try another set
+              </button>
+            )}
+          </>
+        )}
+      </section>
+
+      <WordlistPanel />
+
+      <AdaptTextPanel />
 
       {error && <ErrorNotice error={error.cause} onRetry={error.retry} retryLabel="Try again" />}
     </div>

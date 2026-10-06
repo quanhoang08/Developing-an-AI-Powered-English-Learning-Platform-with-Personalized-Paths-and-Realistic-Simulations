@@ -2,6 +2,7 @@
 # song với Pronunciation Assessment (nhánh B), gộp thành 1 dòng conversation_turns.
 import asyncio
 import logging
+import re
 import time
 import uuid
 from datetime import datetime, timedelta, timezone
@@ -32,6 +33,7 @@ SESSION_IDLE_MINUTES = 30
 _ALLOWED_AUDIO_EXTENSIONS = {".wav", ".mp3", ".m4a", ".webm", ".ogg"}
 _MAX_ADVICE_WORDS = 5
 _MEMORY_ERRORS = 5
+_NON_SPEECH_ERROR_TYPES = ("listening_comprehension", "reading_comprehension", "pronunciation")
 _MAX_LITERAL_TRANSLATION = 3
 
 
@@ -112,13 +114,23 @@ async def _recent_error_notes(db: AsyncSession, user_id: uuid.UUID) -> list[str]
 	# Bộ nhớ hội thoại: vài lỗi gần nhất có câu gốc/bản sửa để AI cho học viên dùng lại.
 	errors = await db.scalars(
 		select(UserError)
-		.where(UserError.user_id == user_id, UserError.detail["original_text"].astext.is_not(None))
+		.where(
+			UserError.user_id == user_id,
+			UserError.detail["original_text"].astext.is_not(None),
+			# Lỗi nghe/đọc hiểu lưu đáp án trắc nghiệm đã chọn, không phải câu người học tự nói/viết.
+			UserError.error_type.not_in(_NON_SPEECH_ERROR_TYPES),
+		)
 		.order_by(UserError.created_at.desc())
-		.limit(_MEMORY_ERRORS)
+		.limit(_MEMORY_ERRORS * 6)
 	)
 	notes = []
 	for error in errors:
 		detail = error.detail
+		if len(notes) == _MEMORY_ERRORS:
+			break
+		original = str(detail["original_text"])
+		if len(original.split()) < 2 or original == "(no answer)":
+			continue  # một từ (vd. "hired" -> "hire" từ TOEIC Part 5) hoặc câu bỏ trống: không đủ ngữ cảnh để hỏi lại
 		note = f"{error.error_type}: \"{detail['original_text']}\""
 		if detail.get("corrected_text"):
 			note += f" -> \"{detail['corrected_text']}\""
@@ -152,7 +164,27 @@ async def _transcribe_and_reply(
 	reply = await llm_service.generate_conversation_turn(
 		scenario_payload, history, text, provider, past_errors
 	)
+	await _add_practice_question(reply, scenario_payload["description"], text, past_errors)
 	return text, stt_provider, reply
+
+
+async def _add_practice_question(reply: dict, scenario_description: str, learner_text: str, past_errors: list[str]) -> None:
+	"""Bộ nhớ hội thoại (backlog 1.1): thay câu hỏi cuối của AI bằng câu hỏi khiến người học dùng lại đúng dạng từng sai.
+	Chỉ dùng lỗi có bản sửa; lỗi LLM hay không có câu hỏi hợp lý thì giữ nguyên phản hồi gốc."""
+	notes = [note for note in past_errors if "->" in note]
+	if not notes:
+		return
+	try:
+		question = await llm_service.generate_practice_question(scenario_description, learner_text, notes)
+	except llm_service.AIServiceError as error:
+		logger.warning("practice question skipped: %s", error)
+		return
+	if not question:
+		return
+	sentences = re.split(r"(?<=[.!?])\s+", reply["response_text"].strip())
+	if len(sentences) > 1 and sentences[-1].endswith("?"):
+		sentences = sentences[:-1]  # bỏ câu hỏi cuối của AI để không hỏi hai câu liền nhau
+	reply["response_text"] = " ".join([*sentences, question])
 
 
 async def _synthesize_reply(text: str, persona_id: uuid.UUID | None, db: AsyncSession) -> str | None:

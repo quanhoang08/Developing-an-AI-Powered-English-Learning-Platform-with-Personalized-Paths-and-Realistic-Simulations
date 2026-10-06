@@ -13,6 +13,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import get_settings
+from app.services.vi_contrast import CONTRAST
 from app.models.adaptive import ERROR_TYPES, Quiz, QuizAttempt, UserError
 from app.models.listening import DictationAttempt
 from app.models.reading import ReadingSession
@@ -235,6 +236,7 @@ async def submit_quiz_attempt(
 				"is_correct": is_correct,
 				"correct_option_index": question["correct_option_index"],
 				"explanation": question.get("explanation", ""),
+				"contrast_vi": None if is_correct else CONTRAST.get(question["error_type"]),
 			}
 		)
 

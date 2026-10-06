@@ -14,7 +14,7 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import get_settings
-from app.models.gamification import SkillProgress, Streak, StudyTimeLog
+from app.models.gamification import ActivityLog, SkillProgress, Streak, StudyTimeLog
 
 
 # XP mỗi hoạt động hoàn thành. Số điểm là quy ước của đề tài (spec chưa quy định), đặt cao hơn
@@ -25,7 +25,11 @@ XP_BY_ACTIVITY: dict[str, int] = {
 	"writing_submitted": 30,
 	"dictation_completed": 15,
 	"listening_quiz_completed": 15,
+	"toeic_listening_completed": 15,
+	"toeic_reading_completed": 15,
 	"speaking_turn": 10,
+	"pronunciation_practice": 8,
+	"speaking_silent": 3,  # gõ thay nói (backlog 4.5): ít XP hơn nói thật
 	"quiz_completed": 25,
 }
 
@@ -35,8 +39,11 @@ SKILL_BY_ACTIVITY: dict[str, str] = {
 	"reading_completed": "reading",
 	"dictation_completed": "listening",
 	"listening_quiz_completed": "listening",
+	"toeic_listening_completed": "listening",
+	"toeic_reading_completed": "reading",
 	"writing_submitted": "writing",
 	"speaking_turn": "speaking",
+	"pronunciation_practice": "speaking",
 }
 # Trọng số của điểm mới trong trung bình động: 0.3 → mỗi bài mới chiếm 30%, bài cũ phai dần.
 SKILL_SCORE_WEIGHT = 0.3
@@ -55,6 +62,30 @@ def study_today(now: datetime | None = None) -> date:
 	current = now or datetime.now(timezone.utc)
 	offset = timedelta(hours=get_settings().study_utc_offset_hours)
 	return (current.astimezone(timezone.utc) + offset).date()
+
+
+def week_start(now: datetime | None = None) -> datetime:
+	"""0h thứ Hai của tuần học hiện tại (theo múi giờ học), trả về dạng UTC để so với created_at."""
+	today = study_today(now)
+	offset = timedelta(hours=get_settings().study_utc_offset_hours)
+	monday = datetime.combine(today - timedelta(days=today.weekday()), datetime.min.time(), tzinfo=timezone.utc)
+	return monday - offset
+
+
+def day_start(now: datetime | None = None) -> datetime:
+	"""0h hôm nay theo múi giờ học, trả về dạng UTC để so với created_at."""
+	offset = timedelta(hours=get_settings().study_utc_offset_hours)
+	return datetime.combine(study_today(now), datetime.min.time(), tzinfo=timezone.utc) - offset
+
+
+async def weekly_xp(db: AsyncSession, user_ids: list[uuid.UUID], now: datetime | None = None) -> dict[uuid.UUID, int]:
+	"""XP tuần này của từng user, tính từ activity_log (chỉ gồm hoạt động từ khi có bảng này)."""
+	rows = await db.execute(
+		select(ActivityLog.user_id, func.sum(ActivityLog.xp))
+		.where(ActivityLog.user_id.in_(user_ids), ActivityLog.created_at >= week_start(now))
+		.group_by(ActivityLog.user_id)
+	)
+	return {uid: int(xp) for uid, xp in rows.all()}
 
 
 def level_threshold(level: int) -> int:
@@ -130,6 +161,7 @@ async def award_activity(
 	score: float | None = None,
 	cefr_level: str | None = None,
 	duration_seconds: int | None = None,
+	xp: int | None = None,
 ) -> None:
 	"""Cộng XP và cập nhật streak; nếu hoạt động thuộc 1 kỹ năng và có `score` (thang 0-100) thì
 	cập nhật luôn skill_progress. KHÔNG commit — gọi cùng transaction với việc lưu kết quả
@@ -139,7 +171,9 @@ async def award_activity(
 	và tự đo được — không tự suy diễn/mặc định ở đây. Ghi 1 dòng study_time_log khi > 0 để tính
 	"phút học trong tuần" theo kỹ năng (GET /api/activity/weekly-summary).
 	"""
-	xp = XP_BY_ACTIVITY[activity]
+	if xp is None:
+		xp = XP_BY_ACTIVITY[activity]
+	db.add(ActivityLog(user_id=user_id, activity=activity, xp=xp))
 	if score is not None and activity in SKILL_BY_ACTIVITY:
 		await record_skill_score(db, user_id, SKILL_BY_ACTIVITY[activity], score, cefr_level)
 	if duration_seconds and duration_seconds > 0 and activity in SKILL_BY_ACTIVITY:

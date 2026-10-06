@@ -1,6 +1,6 @@
 // Modal flashcard ôn từ SM-2. Dùng dữ liệu due thật từ backend khi đã đăng nhập (listDueVocabulary/
 // reviewVocabulary), fallback về SAMPLE_FLASHCARDS demo khi chưa đăng nhập hoặc chưa có từ đến hạn.
-import React, { useEffect, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { FlashcardItem } from "../types";
 import { getAccessToken, importVocabularyFromErrors, listDueVocabulary, reviewVocabulary } from "../api";
 import { X, RotateCw, CheckCircle2, Zap, ArrowRight, BookOpen, Volume2 } from "lucide-react";
@@ -48,10 +48,117 @@ const SAMPLE_FLASHCARDS: FlashcardItem[] = [
   }
 ];
 
+type ReviewMode = "flip" | "match" | "spell" | "listen";
+const MODES: { id: ReviewMode; label: string }[] = [
+  { id: "flip", label: "Flip" },
+  { id: "match", label: "Match meaning" },
+  { id: "spell", label: "Spell it" },
+  { id: "listen", label: "Listen & type" },
+];
+
+const normalize = (s: string) => s.trim().toLowerCase().replace(/\s+/g, " ");
+const shuffle = <T,>(items: T[]) => [...items].sort(() => Math.random() - 0.5);
+
+// Ba chế độ ôn dạng câu hỏi; đúng -> quality 4, sai -> 0 (cùng thang SM-2 với nút Good/Again).
+const QuizCard: React.FC<{
+  card: FlashcardItem;
+  mode: Exclude<ReviewMode, "flip">;
+  cards: FlashcardItem[];
+  speak: (text: string) => void;
+  onDone: (quality: number) => void;
+}> = ({ card, mode, cards, speak, onDone }) => {
+  const [typed, setTyped] = useState("");
+  const [picked, setPicked] = useState<string | null>(null);
+  const [checked, setChecked] = useState(false);
+
+  const options = useMemo(() => {
+    const others = Array.from(new Set(cards.filter((c) => c.id !== card.id).map((c) => c.back)));
+    return shuffle([card.back, ...shuffle(others).slice(0, 3)]);
+  }, [card, cards]);
+
+  useEffect(() => {
+    if (mode === "listen") speak(card.front);
+  }, [mode, card, speak]);
+
+  const correct = mode === "match" ? picked === card.back : normalize(typed) === normalize(card.front);
+  // Che từ cần đoán trong câu ví dụ để không lộ đáp án.
+  const masked = card.context.replace(new RegExp(card.front.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "gi"), "_____");
+
+  return (
+    <div className="min-h-[280px] rounded-3xl p-8 bg-white shadow-[0_18px_36px_-22px_rgba(95,70,30,0.5)] space-y-4">
+      {mode === "match" && (
+        <>
+          <h2 className="font-display text-4xl font-bold text-slate-900 text-center">{card.front}</h2>
+          <div className="grid gap-2">
+            {options.map((opt) => (
+              <button
+                key={opt}
+                disabled={checked}
+                onClick={() => { setPicked(opt); setChecked(true); }}
+                className={`text-left text-sm p-3 rounded-2xl border cursor-pointer ${
+                  checked && opt === card.back ? "bg-emerald-100 border-emerald-400"
+                  : checked && opt === picked ? "bg-rose-100 border-rose-400"
+                  : "bg-paper-deep border-transparent hover:bg-indigo-50"
+                }`}
+              >
+                {opt}
+              </button>
+            ))}
+          </div>
+        </>
+      )}
+      {mode !== "match" && (
+        <>
+          {mode === "spell" ? (
+            <>
+              <p className="font-serif text-lg font-semibold text-indigo-950">{card.back}</p>
+              <p className="text-sm italic text-slate-500">"{masked}"</p>
+            </>
+          ) : (
+            <button onClick={() => speak(card.front)} className="flex items-center gap-2 mx-auto px-4 py-2 rounded-full bg-paper-deep text-indigo-700 font-semibold cursor-pointer">
+              <Volume2 className="w-4 h-4" /> Play again
+            </button>
+          )}
+          <input
+            value={typed}
+            onChange={(e) => setTyped(e.target.value)}
+            onKeyDown={(e) => { if (e.key === "Enter" && typed.trim()) setChecked(true); }}
+            disabled={checked}
+            placeholder={mode === "spell" ? "Type the word…" : "Type what you hear…"}
+            aria-label="Your answer"
+            autoFocus
+            className="w-full p-3 rounded-2xl border border-slate-200 text-center text-lg"
+          />
+          {!checked && (
+            <button
+              onClick={() => setChecked(true)}
+              disabled={!typed.trim()}
+              className="w-full py-3 bg-slate-900 text-white rounded-2xl font-bold text-sm disabled:opacity-40 cursor-pointer"
+            >
+              Check
+            </button>
+          )}
+        </>
+      )}
+      {checked && (
+        <div className="animate-rise space-y-3 text-center">
+          <p role="status" className={`font-bold ${correct ? "text-emerald-700" : "text-rose-700"}`}>
+            {correct ? "Correct!" : mode === "match" ? "Not quite." : <>Not quite — it's <span className="underline">{card.front}</span></>}
+          </p>
+          <button onClick={() => onDone(correct ? 4 : 0)} className="w-full py-3 bg-indigo-700 text-white rounded-2xl font-bold text-sm cursor-pointer">
+            Next
+          </button>
+        </div>
+      )}
+    </div>
+  );
+};
+
 export const SpacedRepetitionModal: React.FC<SpacedRepetitionModalProps> = ({
   isOpen,
   onClose,
 }) => {
+  const [mode, setMode] = useState<ReviewMode>("flip");
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isFlipped, setIsFlipped] = useState(false);
   const [reviewedCount, setReviewedCount] = useState(0);
@@ -88,7 +195,7 @@ export const SpacedRepetitionModal: React.FC<SpacedRepetitionModalProps> = ({
       const added = await importVocabularyFromErrors();
       setImportMessage(
         added.length
-          ? `Added ${added.length} word${added.length > 1 ? "s" : ""} you missed in Dictation.`
+          ? `Added ${added.length} word${added.length > 1 ? "s" : ""} from your Dictation, Speaking and Writing mistakes.`
           : "No new missed words to add.",
       );
       if (added.length) await loadDue();
@@ -98,6 +205,16 @@ export const SpacedRepetitionModal: React.FC<SpacedRepetitionModalProps> = ({
       setImporting(false);
     }
   };
+
+  // Đọc to bằng Web Speech API trình duyệt.
+  const playTTS = useCallback((text: string) => {
+    if ("speechSynthesis" in window) {
+      window.speechSynthesis.cancel();
+      const utterance = new SpeechSynthesisUtterance(text);
+      utterance.lang = "en-US";
+      window.speechSynthesis.speak(utterance);
+    }
+  }, []);
 
   if (!isOpen) return null;
 
@@ -114,14 +231,8 @@ export const SpacedRepetitionModal: React.FC<SpacedRepetitionModalProps> = ({
     setCurrentIndex((prev) => prev + 1);
   };
 
-  // Đọc to mặt trước của thẻ bằng Web Speech API trình duyệt.
-  const playTTS = (text: string) => {
-    if ("speechSynthesis" in window) {
-      const utterance = new SpeechSynthesisUtterance(text);
-      utterance.lang = "en-US";
-      window.speechSynthesis.speak(utterance);
-    }
-  };
+  // Match cần >=4 thẻ để có đủ đáp án nhiễu; thiếu thì ẩn chế độ đó.
+  const modes = MODES.filter((m) => m.id !== "match" || cards.length >= 4);
 
   return (
     <div className="fixed inset-0 bg-slate-950/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
@@ -149,6 +260,32 @@ export const SpacedRepetitionModal: React.FC<SpacedRepetitionModalProps> = ({
 
         {/* Card Body Container */}
         <div className="p-8">
+          <div role="tablist" className="mb-4 flex flex-wrap gap-2">
+            {modes.map((m) => (
+              <button
+                key={m.id}
+                role="tab"
+                aria-selected={mode === m.id}
+                onClick={() => { setMode(m.id); setIsFlipped(false); }}
+                className={`px-3 py-1.5 rounded-full text-xs font-semibold cursor-pointer ${
+                  mode === m.id ? "bg-indigo-700 text-white" : "bg-paper-deep text-indigo-800 hover:bg-indigo-100"
+                }`}
+              >
+                {m.label}
+              </button>
+            ))}
+          </div>
+          {mode !== "flip" && (
+            <QuizCard
+              key={`${mode}-${currentIndex}`}
+              card={currentCard}
+              mode={mode}
+              cards={cards}
+              speak={playTTS}
+              onDone={(q) => void handleNext(q)}
+            />
+          )}
+          {mode === "flip" && (<>
           <div
             onClick={() => setIsFlipped(!isFlipped)}
             className={`min-h-[280px] rounded-3xl p-8 transition-all duration-300 cursor-pointer flex flex-col justify-between select-none relative group ${
@@ -211,7 +348,7 @@ export const SpacedRepetitionModal: React.FC<SpacedRepetitionModalProps> = ({
                 disabled={importing}
                 className="px-3 py-1.5 rounded-full bg-paper-deep hover:bg-indigo-100 text-indigo-800 font-semibold disabled:opacity-50 cursor-pointer"
               >
-                {importing ? "Adding…" : "Add words I missed in Dictation"}
+                {importing ? "Adding…" : "Add words from my mistakes"}
               </button>
             </div>
           )}
@@ -258,6 +395,7 @@ export const SpacedRepetitionModal: React.FC<SpacedRepetitionModalProps> = ({
               </button>
             </div>
           )}
+          </>)}
         </div>
       </div>
     </div>

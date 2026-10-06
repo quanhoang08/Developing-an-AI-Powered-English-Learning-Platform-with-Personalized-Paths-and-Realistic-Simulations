@@ -1,7 +1,7 @@
 import uuid
-from datetime import datetime
+from datetime import date, datetime
 
-from sqlalchemy import Boolean, DateTime, String, text
+from sqlalchemy import Boolean, Date, DateTime, Numeric, String, text
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -26,6 +26,10 @@ class User(Base):
 	target_level: Mapped[str] = mapped_column(String(10), nullable=True)
 	# "Chế độ bấm giờ" (mục 3.16 lumina_context.md): user tự bật để đo phút học thật; mặc định tắt
 	# nên không có hoạt động nào tự động log thời gian khi chưa bật (migration 20260927_0018).
+	# Mục tiêu band IELTS + ngày thi cho kế hoạch học (migration 20261002_0025); NULL = chưa đặt.
+	target_band: Mapped[float | None] = mapped_column(Numeric(2, 1), nullable=True)
+	exam_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+	# Học sinh dưới 18: năm sinh + email phụ huynh + lúc phụ huynh xác nhận bằng OTP (migration 20261003_0030).
 	timer_mode_enabled: Mapped[bool] = mapped_column(Boolean, server_default=text("false"))
 	# NULL = chưa xác minh email (migration 20260930_0019; user cũ được coi là đã xác minh).
 	email_verified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)

@@ -168,3 +168,23 @@ class RephraseSuggestion(BaseModel):
 class RephraseResponse(BaseModel):
 	original_sentence: str
 	suggested_sentences: list[RephraseSuggestion]
+
+
+
+class ParaphraseItem(BaseModel):
+	id: int
+	technique: str
+	original: str
+
+
+class ParaphraseAttempt(BaseModel):
+	text: str = Field(min_length=3, max_length=500)
+
+
+class ParaphraseCheckResponse(BaseModel):
+	technique: str
+	original: str
+	similarity: float
+	too_similar: bool
+	model_paraphrases: list[str]
+	note_vi: str

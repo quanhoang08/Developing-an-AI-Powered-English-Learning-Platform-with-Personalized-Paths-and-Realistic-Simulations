@@ -200,6 +200,25 @@ body::after {
   animation: pulse-slow 3s infinite ease-in-out;
 }
 
+/* Các khối con của trang hiện lần lượt. `backwards` (không phải `both`): xong là bỏ transform,
+   tránh biến phần tử con position:fixed/sticky thành bám theo khối cha. */
+@keyframes stagger-rise {
+  from { opacity: 0; transform: translateY(16px); }
+}
+/* Thông số khớp DashboardView/AnalyticsView (staggerChildren 0.03, y 16-18, 0.3s, cùng easing). */
+.stagger-in > * { animation: stagger-rise 0.3s cubic-bezier(0.22, 1, 0.36, 1) backwards; }
+.stagger-in > :nth-child(2) { animation-delay: 0.03s; }
+.stagger-in > :nth-child(3) { animation-delay: 0.06s; }
+.stagger-in > :nth-child(4) { animation-delay: 0.09s; }
+.stagger-in > :nth-child(5) { animation-delay: 0.12s; }
+.stagger-in > :nth-child(n + 6) { animation-delay: 0.15s; }
+
+/* Khối hiện sau khi thao tác (kết quả, thẻ tải muộn): cùng thông số, tự chạy khi phần tử được chèn vào. */
+.pop-in { animation: stagger-rise 0.3s cubic-bezier(0.22, 1, 0.36, 1) backwards; }
+
+/* Nút nhấn xuống một chút khi bấm (dùng thuộc tính `scale` riêng, không đè hover:-translate của Tailwind). */
+button:not(:disabled):active { scale: 0.97; }
+
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
     animation-duration: 0.01ms !important;

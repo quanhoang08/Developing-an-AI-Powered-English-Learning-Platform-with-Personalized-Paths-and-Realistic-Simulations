@@ -154,7 +154,7 @@ const Classes: React.FC<{ onError: (m: string) => void }> = ({ onError }) => {
 export const CommunityCard: React.FC = () => {
   const [error, setError] = useState("");
   return (
-    <section className="surface p-7 space-y-6" aria-label="Friends and classes">
+    <section className="pop-in surface p-7 space-y-6" aria-label="Friends and classes">
       <h3 className="font-display text-xl font-bold text-slate-900">Friends &amp; classes</h3>
       <Friends onError={setError} />
       <div className="border-t border-dashed border-slate-200 pt-5"><Classes onError={setError} /></div>

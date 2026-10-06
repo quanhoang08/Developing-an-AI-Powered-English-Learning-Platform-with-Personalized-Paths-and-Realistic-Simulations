@@ -39,7 +39,7 @@ export const ExamGoalCard: React.FC = () => {
   };
 
   return (
-    <section className="surface p-6 space-y-4 mt-6">
+    <section className="pop-in surface p-6 space-y-4 mt-6">
       <h3 className="font-display text-xl font-bold text-slate-900">IELTS goal &amp; daily plan</h3>
       <div className="flex flex-wrap items-end gap-3">
         <label className="text-xs font-bold text-slate-600 space-y-1">

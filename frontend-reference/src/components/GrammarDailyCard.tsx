@@ -60,7 +60,7 @@ export const GrammarDailyCard: React.FC<{ setActiveTab: (tab: ActiveTab) => void
   if (doneToday === null) return null;
 
   return (
-    <section className="surface p-6 space-y-3" aria-label="Daily grammar lesson">
+    <section className="pop-in surface p-6 space-y-3" aria-label="Daily grammar lesson">
       <h3 className="font-display text-xl font-bold text-slate-900">Daily grammar lesson (3 min)</h3>
       <p className="text-sm text-slate-600">{doneToday ? "Done for today. Nice work." : "Not done yet today: 6 questions on your weakest topic."}</p>
       <div className="flex flex-wrap items-center gap-3">

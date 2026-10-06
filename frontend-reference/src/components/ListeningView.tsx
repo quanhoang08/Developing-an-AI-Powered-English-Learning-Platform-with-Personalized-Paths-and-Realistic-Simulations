@@ -1,6 +1,7 @@
 // Trang Listening & Movie Context. Cả 2 tab dùng backend FastAPI thật: Podcast/Dictation (PodcastPanel)
 // và Movie Context nhánh TTS fallback (MovieContextPanel).
 import React, { useState } from "react";
+import { motion } from "motion/react";
 import { CountdownTimer } from "./CountdownTimer";
 import { MovieContextPanel } from "./MovieContextPanel";
 import { PodcastPanel } from "./PodcastPanel";
@@ -70,7 +71,7 @@ export const ListeningView: React.FC = () => {
   };
 
   return (
-    <div className="p-6 md:p-10 max-w-7xl mx-auto space-y-8">
+    <div className="stagger-in p-6 md:p-10 max-w-7xl mx-auto space-y-8">
       {/* View Sub-Toggle Header */}
       <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4">
         <div>
@@ -87,26 +88,31 @@ export const ListeningView: React.FC = () => {
 
         {/* Tab Toggle */}
         <div className="inline-flex p-1 bg-paper-deep rounded-full">
-          <button
-            onClick={() => setSubMode("listening")}
-            className={`px-4 py-2 rounded-full text-xs font-bold transition-all cursor-pointer ${
-              subMode === "listening"
-                ? "bg-indigo-700 text-white shadow-[0_8px_16px_-8px_rgba(31,87,73,0.9)]"
-                : "text-slate-600 hover:text-slate-900"
-            }`}
-          >
-            <Headphones className="w-3.5 h-3.5 inline mr-1.5" /> AI Podcast & Dictation
-          </button>
-          <button
-            onClick={() => setSubMode("movies")}
-            className={`px-4 py-2 rounded-full text-xs font-bold transition-all cursor-pointer ${
-              subMode === "movies"
-                ? "bg-indigo-700 text-white shadow-[0_8px_16px_-8px_rgba(31,87,73,0.9)]"
-                : "text-slate-600 hover:text-slate-900"
-            }`}
-          >
-            <Film className="w-3.5 h-3.5 inline mr-1.5" /> Movie Context Finder
-          </button>
+          {(
+            [
+              ["listening", Headphones, "AI Podcast & Dictation"],
+              ["movies", Film, "Movie Context Finder"],
+            ] as const
+          ).map(([mode, Icon, label]) => (
+            <button
+              key={mode}
+              onClick={() => setSubMode(mode)}
+              className={`relative px-4 py-2 rounded-full text-xs font-bold transition-colors cursor-pointer ${
+                subMode === mode ? "text-white" : "text-slate-600 hover:text-slate-900"
+              }`}
+            >
+              {subMode === mode && (
+                <motion.span
+                  layoutId="listening-mode-pill"
+                  className="absolute inset-0 rounded-full bg-indigo-700 shadow-[0_8px_16px_-8px_rgba(31,87,73,0.9)]"
+                  transition={{ type: "spring", stiffness: 420, damping: 32 }}
+                />
+              )}
+              <span className="relative">
+                <Icon className="w-3.5 h-3.5 inline mr-1.5" /> {label}
+              </span>
+            </button>
+          ))}
         </div>
       </div>
 

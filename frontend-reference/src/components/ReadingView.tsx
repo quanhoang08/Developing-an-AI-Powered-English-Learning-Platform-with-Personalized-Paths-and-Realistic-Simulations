@@ -298,7 +298,7 @@ Furthermore, the ethical implications surrounding data privacy remain deeply con
   };
 
   return (
-    <div className="p-6 md:p-10 max-w-7xl mx-auto space-y-8">
+    <div className="stagger-in p-6 md:p-10 max-w-7xl mx-auto space-y-8">
       {/* Top Header — tiêu đề kiểu tạp chí, không đóng khung thẻ */}
       <div className="flex flex-col lg:flex-row lg:items-end justify-between gap-5">
         <div className="flex items-start gap-4 min-w-0">
@@ -446,7 +446,7 @@ Furthermore, the ethical implications surrounding data privacy remain deeply con
               <AiWait active label={`AI đang tra từ "${selectedWord}"...`} expectedSeconds={12} />
             </div>
           ) : (
-            <div className="space-y-6">
+            <div className="pop-in space-y-6">
               {/* Header Word Title */}
               <div className="flex items-start justify-between pb-5 border-b border-dashed border-slate-200">
                 <div>

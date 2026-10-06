@@ -346,7 +346,7 @@ const VoiceDiary: React.FC = () => {
 };
 
 export const PronunciationPanel: React.FC = () => (
-  <div className="surface p-7 space-y-8">
+  <div className="stagger-in surface p-7 space-y-8">
     <SentenceLab />
     <div className="border-t border-dashed border-slate-200 pt-6"><PairsGame /></div>
     <div className="border-t border-dashed border-slate-200 pt-6"><SilentMode /></div>

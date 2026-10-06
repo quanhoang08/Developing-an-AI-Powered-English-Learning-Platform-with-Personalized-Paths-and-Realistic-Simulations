@@ -6,7 +6,8 @@
 import React, { useState } from "react";
 import { motion } from "motion/react";
 import { ActiveTab } from "../types";
-import { CatMascot } from "./CatMascot";
+import { CatMascot, CatMood } from "./CatMascot";
+import { CountUp } from "./CountUp";
 import { CommunityCard } from "./CommunityCard";
 import { ExamGoalCard } from "./ExamGoalCard";
 import { GrammarDailyCard } from "./GrammarDailyCard";
@@ -50,6 +51,7 @@ const item = {
 
 const STREAK_TARGET = 30;
 
+
 // Ngày local dạng YYYY-MM-DD, khớp định dạng recent_active_dates của backend.
 function toIsoDate(date: Date): string {
   const month = String(date.getMonth() + 1).padStart(2, "0");
@@ -88,6 +90,12 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   const activeDaySet = new Set(stats.recentActiveDates);
   const displayName = userEmail ? userEmail.split("@")[0] : null;
   const [isTogglingTimer, setIsTogglingTimer] = useState(false);
+  // Bấm vào mèo: vẫy tay + nốt nhạc ~1.8s rồi về idle.
+  const [catMood, setCatMood] = useState<CatMood>("idle");
+  function greetCat() {
+    setCatMood("speaking");
+    window.setTimeout(() => setCatMood("idle"), 1800);
+  }
 
   async function handleToggleTimerMode() {
     setIsTogglingTimer(true);
@@ -149,8 +157,8 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         variants={item}
         className="relative rounded-[2rem] bg-indigo-900 text-white overflow-hidden shadow-[0_30px_60px_-30px_rgba(11,33,27,0.9)]"
       >
-        <div className="absolute -top-24 -right-10 w-[28rem] h-[28rem] rounded-full bg-purple-500/25 blur-3xl pointer-events-none" aria-hidden="true" />
-        <div className="absolute -bottom-32 left-1/3 w-[26rem] h-[26rem] rounded-full bg-indigo-400/20 blur-3xl pointer-events-none" aria-hidden="true" />
+        <div className="absolute -top-24 -right-10 w-[28rem] h-[28rem] rounded-full bg-purple-500/25 blur-3xl pointer-events-none animate-float" aria-hidden="true" />
+        <div className="absolute -bottom-32 left-1/3 w-[26rem] h-[26rem] rounded-full bg-indigo-400/20 blur-3xl pointer-events-none animate-float [animation-delay:-3s]" aria-hidden="true" />
         <div
           className="absolute inset-0 opacity-[0.08] pointer-events-none"
           style={{ backgroundImage: "radial-gradient(#fff 1px, transparent 1px)", backgroundSize: "22px 22px" }}
@@ -200,7 +208,9 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           </div>
 
           <div className="hidden md:flex justify-center self-end h-full pr-6">
-            <CatMascot mouthOpen={0} mood="idle" className="h-72 w-auto translate-y-6 drop-shadow-[0_24px_24px_rgba(0,0,0,0.35)]" />
+            <button type="button" onClick={greetCat} aria-label="Say hi to the cat" className="cursor-pointer self-end focus-visible:outline-offset-4">
+              <CatMascot mouthOpen={0} mood={catMood} className="h-72 w-auto translate-y-6 drop-shadow-[0_24px_24px_rgba(0,0,0,0.35)] transition-transform hover:scale-[1.03]" />
+            </button>
           </div>
         </div>
       </motion.section>
@@ -213,7 +223,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             <div>
               <p className="text-sm text-slate-500 italic mb-1">Current streak</p>
               <div className="flex items-baseline gap-2">
-                <span className="num text-5xl font-extrabold text-slate-900">{stats.currentStreak}</span>
+                <span className="num text-5xl font-extrabold text-slate-900"><CountUp value={stats.currentStreak} /></span>
                 <span className="text-sm text-slate-500">{stats.currentStreak === 1 ? "day" : "days"} · goal {STREAK_TARGET}</span>
               </div>
             </div>
@@ -232,9 +242,12 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               const isDone = activeDaySet.has(day);
               const isToday = index === streakDays.length - 1;
               return (
-                <span
+                <motion.span
                   key={day}
                   title={day}
+                  initial={{ opacity: 0, scale: 0.3 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  transition={{ type: "spring", stiffness: 420, damping: 18, delay: 0.25 + index * 0.015 }}
                   className={`aspect-square rounded-md ${
                     isDone && isToday
                       ? "bg-purple-500 ring-4 ring-purple-200 animate-pulse-slow"
@@ -251,7 +264,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           <p className="text-xs text-slate-500 mt-4">
             Longest streak: <span className="num font-bold text-slate-700">{stats.longestStreak}</span> days
             <span className="mx-2">·</span>
-            <span className="num font-bold text-slate-700">{stats.totalXp.toLocaleString("en-US")}</span> XP, level {stats.level}
+            <span className="num font-bold text-slate-700"><CountUp value={stats.totalXp} /></span> XP, level {stats.level}
           </p>
           <p className="text-xs text-slate-500 mt-2">
             Freezes: <span className="num font-bold text-slate-700">{stats.freezesAvailable}</span> (a new one every 7-day streak, max 2)
@@ -272,7 +285,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           <div className="relative">
             <p className="text-sm text-indigo-800/80 italic mb-1">Memory review queue</p>
             <div className="flex items-baseline gap-2">
-              <span className="num text-5xl font-extrabold text-indigo-950">{stats.dueCards}</span>
+              <span className="num text-5xl font-extrabold text-indigo-950"><CountUp value={stats.dueCards} /></span>
               <span className="text-sm text-indigo-900/70">{stats.dueCards === 1 ? "word" : "words"} ready now</span>
             </div>
             <p className="text-xs text-indigo-900/70 mt-2">Vocabulary due by your spaced-repetition schedule</p>
@@ -409,7 +422,8 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                 <button
                   key={`${mat.skill}-${mat.created_at}-${index}`}
                   onClick={() => setActiveTab(mat.skill)}
-                  className="surface surface-lift flex items-start gap-3 p-4 text-left cursor-pointer group"
+                  style={{ animationDelay: `${index * 0.05}s` }}
+                  className="pop-in surface surface-lift flex items-start gap-3 p-4 text-left cursor-pointer group"
                 >
                   <span className="w-10 h-10 rounded-xl flex items-center justify-center bg-indigo-100 text-indigo-700 shrink-0">
                     <Icon className="w-4.5 h-4.5" />

@@ -19,6 +19,7 @@ import { WordHoverLookup } from "./WordHoverLookup";
 import { RearrangePanel } from "./RearrangePanel";
 import { GrammarPanel } from "./GrammarPanel";
 import { ParaphraseBankPanel } from "./ParaphraseBankPanel";
+import { CountUp } from "./CountUp";
 import {
   PenTool,
   Sparkles,
@@ -171,7 +172,7 @@ export const WritingView: React.FC = () => {
   const wordCount = essayText.trim().split(/\s+/).filter(Boolean).length;
 
   return (
-    <div className="p-6 md:p-10 max-w-7xl mx-auto space-y-8">
+    <div className="stagger-in p-6 md:p-10 max-w-7xl mx-auto space-y-8">
       {/* Title Header */}
       <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4">
         <div>
@@ -317,7 +318,7 @@ export const WritingView: React.FC = () => {
                 Writing score
               </span>
               <div className="flex items-baseline gap-2 mt-1">
-                <span className="num text-6xl font-bold">{overallScore ?? "—"}</span>
+                <span className="num text-6xl font-bold">{overallScore === null ? "—" : <CountUp value={overallScore} />}</span>
                 <span className="text-xs text-indigo-200">/ 100</span>
               </div>
               <p className="text-xs text-indigo-100 font-semibold mt-1">
@@ -400,7 +401,8 @@ export const WritingView: React.FC = () => {
             {insights.map((ins, idx) => (
               <div
                 key={idx}
-                className={`p-5 rounded-2xl border-l-4 space-y-2 ${
+                style={{ animationDelay: `${Math.min(idx, 8) * 0.06}s` }}
+                className={`pop-in p-5 rounded-2xl border-l-4 space-y-2 ${
                   ins.type === "grammar"
                     ? "bg-rose-50 border-rose-400"
                     : ins.type === "vocabulary"

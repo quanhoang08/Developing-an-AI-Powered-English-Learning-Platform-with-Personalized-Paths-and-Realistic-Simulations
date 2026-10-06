@@ -3,6 +3,7 @@
 // phản hồi (Web Audio AnalyserNode), không dùng hoạt ảnh giả.
 import React, { useEffect, useRef, useState } from "react";
 import { AlertCircle, Bookmark, Check, Loader2, Mic, Play, Square } from "lucide-react";
+import { motion } from "motion/react";
 import {
   ChatProvider,
   createSpeakingSession,
@@ -254,7 +255,7 @@ export const SpeakingView: React.FC = () => {
   const activeScenario = scenarios.find((item) => item.id === scenarioId);
 
   return (
-    <div className="p-6 md:p-10 max-w-7xl mx-auto space-y-8">
+    <div className="stagger-in p-6 md:p-10 max-w-7xl mx-auto space-y-8">
       <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4">
         <div>
           <p className="text-sm italic text-slate-500 mb-1">Live conversation practice</p>
@@ -273,9 +274,16 @@ export const SpeakingView: React.FC = () => {
             role="tab"
             aria-selected={tab === id}
             onClick={() => setTab(id)}
-            className={`px-4 py-2 rounded-full text-sm font-bold transition-colors ${tab === id ? "bg-slate-900 text-white" : "bg-paper-deep text-slate-600 hover:bg-indigo-100"}`}
+            className={`relative px-4 py-2 rounded-full text-sm font-bold transition-colors ${tab === id ? "text-white" : "bg-paper-deep text-slate-600 hover:bg-indigo-100"}`}
           >
-            {label}
+            {tab === id && (
+              <motion.span
+                layoutId="speaking-tab-pill"
+                className="absolute inset-0 rounded-full bg-slate-900"
+                transition={{ type: "spring", stiffness: 420, damping: 32 }}
+              />
+            )}
+            <span className="relative">{label}</span>
           </button>
         ))}
       </div>
@@ -285,11 +293,17 @@ export const SpeakingView: React.FC = () => {
         {/* Sân khấu con mèo */}
         <div className="lg:col-span-5 space-y-4">
           <div className="relative overflow-hidden bg-[radial-gradient(ellipse_at_50%_35%,var(--color-purple-100),var(--color-indigo-100)_70%)] rounded-[2rem] p-6 shadow-[0_30px_50px_-30px_rgba(31,87,73,0.6)]">
-            <div className="relative bg-[#fffdf8] rounded-3xl px-5 py-4 text-sm text-slate-700 min-h-[64px] shadow-[0_12px_24px_-14px_rgba(95,70,30,0.5)] font-medium">
+            <motion.div
+              key={String(bubble)}
+              initial={{ opacity: 0, y: 10, scale: 0.92 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              transition={{ type: "spring", stiffness: 380, damping: 22 }}
+              className="relative bg-[#fffdf8] rounded-3xl px-5 py-4 text-sm text-slate-700 min-h-[64px] shadow-[0_12px_24px_-14px_rgba(95,70,30,0.5)] font-medium"
+            >
               {phase === "processing" && <Loader2 className="w-4 h-4 animate-spin inline mr-2 text-indigo-500" />}
               {bubble}
               <span className="absolute -bottom-2 left-1/2 -translate-x-1/2 w-4 h-4 bg-[#fffdf8] rotate-45 rounded-sm" />
-            </div>
+            </motion.div>
             <CatMascot mouthOpen={mouthOpen} mood={mood} className="w-64 h-80 mx-auto mt-3" />
 
             <div className="flex flex-col items-center gap-2">

@@ -4,6 +4,7 @@
 # EMBEDDING_PROVIDER=gemini. Không dùng LangChain
 # (xem lumina_context.md mục 3.12 về khoảng hở tài liệu-vs-code liên quan).
 import json
+import re
 import time
 
 import google.api_core.exceptions as google_exceptions
@@ -1048,9 +1049,12 @@ speech that would NOT fit the sentence. Do not include "{term}" among the distra
 		for item in dict.fromkeys(result["distractors"])
 		if item.strip() and item.strip().lower() != term.lower()
 	][:3]
-	if GUESS_BLANK not in result["challenge_sentence"] or len(distractors) < 3:
+	# Model local hay viết chỗ trống 4 hoặc 7 gạch dưới thay vì đúng 5 (khoảng 1/3 lần) — chuẩn hóa
+	# mọi chuỗi >= 3 gạch dưới về GUESS_BLANK thay vì loại cả câu rồi bắt người dùng thử lại.
+	sentence = re.sub(r"_{3,}", GUESS_BLANK, result["challenge_sentence"])
+	if GUESS_BLANK not in sentence or len(distractors) < 3:
 		raise AIServiceError("guess_challenge_malformed", "ai_bad_output")
-	return {"challenge_sentence": result["challenge_sentence"], "distractors": distractors}
+	return {"challenge_sentence": sentence, "distractors": distractors}
 
 
 # Thứ tự thuộc tính có chủ đích: model local sinh theo thứ tự này nên phải sửa câu TRƯỚC rồi mới

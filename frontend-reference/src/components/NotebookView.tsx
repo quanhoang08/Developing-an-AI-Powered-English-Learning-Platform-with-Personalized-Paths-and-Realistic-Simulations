@@ -54,6 +54,8 @@ export const NotebookView: React.FC<NotebookViewProps> = ({ authVersion }) => {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [isBackendConnected, setIsBackendConnected] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
+  // Backend ingest đồng bộ (chunk + embed) nên upload có thể mất vài chục giây: khóa nút và báo "đang xử lý".
+  const [isUploading, setIsUploading] = useState(false);
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const [chatInput, setChatInput] = useState("");
   // Model dùng cho Chat RAG — người dùng chuyển được giữa Gemini (cloud) và Ollama (local).
@@ -257,6 +259,8 @@ Meaning: To make people feel more comfortable in a social setting.`
       setUploadError("Choose an audio or .docx file first.");
       return;
     }
+    if (isUploading) return;
+    setIsUploading(true);
     try {
       setUploadError(null);
       const uploaded = await uploadDocument(
@@ -286,12 +290,16 @@ Meaning: To make people feel more comfortable in a social setting.`
         },
         ...current,
       ]);
+      // Nhãn "All Materials (n)" lấy từ state folders nên phải tăng tay, không thì phải tải lại trang mới đúng.
+      setFolders((current) => current.map((f) => (f.id === "all" ? { ...f, count: f.count + 1 } : f)));
       setIsUploadOpen(false);
       setSelectedFile(null);
       setNewNoteTitle("");
       setNewNoteContent("");
     } catch (error) {
       setUploadError(error instanceof Error ? error.message : "Upload failed");
+    } finally {
+      setIsUploading(false);
     }
   };
 
@@ -320,11 +328,12 @@ Meaning: To make people feel more comfortable in a social setting.`
     if (!isBackendConnected || !activeMaterial || activeMaterial.id === "1") return;
     await deleteDocument(activeMaterial.id);
     setMaterials((current) => current.filter((item) => item.id !== activeMaterial.id));
+    setFolders((current) => current.map((f) => (f.id === "all" ? { ...f, count: Math.max(0, f.count - 1) } : f)));
     setActiveMaterialId("1");
   };
 
   return (
-    <div className="p-6 md:p-10 max-w-7xl mx-auto space-y-8">
+    <div className="stagger-in p-6 md:p-10 max-w-7xl mx-auto space-y-8">
       {/* Title & Action Bar */}
       <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4">
         <div>
@@ -386,20 +395,21 @@ Meaning: To make people feel more comfortable in a social setting.`
                     : "bg-paper-deep text-slate-600 hover:bg-indigo-100 hover:text-indigo-700"
                 }`}
               >
-                {f.name} ({f.count})
+                {f.name} ({f.id === "all" ? f.count : materials.filter((m) => m.folder === f.id).length})
               </button>
             ))}
           </div>
 
           {/* Materials List */}
           <div className="space-y-3">
-            {filteredMaterials.map((item) => {
+            {filteredMaterials.map((item, index) => {
               const isActive = item.id === activeMaterialId;
               return (
                 <div
                   key={item.id}
                   onClick={() => setActiveMaterialId(item.id)}
-                  className={`p-5 rounded-2xl transition-all cursor-pointer ${
+                  style={{ animationDelay: `${Math.min(index, 8) * 0.04}s` }}
+                  className={`pop-in p-5 rounded-2xl transition-all cursor-pointer ${
                     isActive
                       ? "bg-indigo-700 text-white shadow-[0_18px_28px_-16px_rgba(31,87,73,0.9)]"
                       : "surface surface-lift"
@@ -437,7 +447,7 @@ Meaning: To make people feel more comfortable in a social setting.`
 
         {/* Right Main Viewer */}
         <div className="surface lg:col-span-7 p-7 md:p-8 flex flex-col justify-between min-h-[500px] lg:sticky lg:top-24 lg:self-start">
-          <div>
+          <div key={activeMaterial.id} className="pop-in">
             {/* Viewer Header */}
             <div className="flex items-start justify-between pb-5 mb-5 border-b border-dashed border-slate-200">
               <div>
@@ -518,7 +528,7 @@ Meaning: To make people feel more comfortable in a social setting.`
                       {chatMessages.map((message) => (
                         <div
                           key={message.id}
-                          className={`flex ${message.role === "user" ? "justify-end" : "justify-start"}`}
+                          className={`pop-in flex ${message.role === "user" ? "justify-end" : "justify-start"}`}
                         >
                           <div
                             className={`max-w-[85%] rounded-2xl px-4 py-3 text-sm leading-relaxed ${
@@ -616,7 +626,7 @@ Meaning: To make people feel more comfortable in a social setting.`
               <h3 className="font-display font-bold text-2xl text-slate-900 flex items-center gap-2">
                 <UploadCloud className="w-5 h-5 text-indigo-600" /> Create New Material or Note
               </h3>
-              <button onClick={() => setIsUploadOpen(false)} className="text-slate-400 hover:text-slate-600">
+              <button onClick={() => setIsUploadOpen(false)} disabled={isUploading} aria-label="Close" className="text-slate-400 hover:text-slate-600 disabled:opacity-40">
                 <X className="w-5 h-5" />
               </button>
             </div>
@@ -656,18 +666,25 @@ Meaning: To make people feel more comfortable in a social setting.`
             <div className="flex items-center justify-end gap-2 pt-2">
               <button
                 onClick={() => setIsUploadOpen(false)}
-                className="px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-xl"
+                disabled={isUploading}
+                className="px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-xl disabled:opacity-40"
               >
                 Cancel
               </button>
               <button
                 onClick={handleSaveMaterial}
-                disabled={!isBackendConnected}
-                className="px-5 py-2.5 text-xs font-bold bg-indigo-700 hover:bg-indigo-800 text-white rounded-xl transition-all active:scale-95 disabled:opacity-40"
+                disabled={!isBackendConnected || isUploading}
+                className="px-5 py-2.5 text-xs font-bold bg-indigo-700 hover:bg-indigo-800 text-white rounded-xl transition-all active:scale-95 disabled:opacity-40 inline-flex items-center gap-2"
               >
-                Upload to Notebook
+                {isUploading && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                {isUploading ? "Processing..." : "Upload to Notebook"}
               </button>
             </div>
+            {isUploading && (
+              <p className="text-xs text-slate-500" role="status">
+                Reading and indexing your file so you can chat with it. This can take up to a minute; please keep this window open.
+              </p>
+            )}
             {uploadError && <p className="text-xs text-red-600">{uploadError}</p>}
           </div>
         </div>

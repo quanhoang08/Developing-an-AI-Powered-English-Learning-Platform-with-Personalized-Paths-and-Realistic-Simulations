@@ -27,6 +27,21 @@ def test_guess_challenge_filters_term_and_duplicates_from_distractors(monkeypatc
     assert result["distractors"] == ["generous", "lazy", "noisy"]
 
 
+@pytest.mark.parametrize("blank", ["___", "____", "_______", "__________"])
+def test_guess_challenge_normalizes_blank_length(monkeypatch, blank) -> None:
+    # Model local hay viết chỗ trống 4 hoặc 7 gạch dưới thay vì đúng 5: phải chuẩn hóa chứ không loại câu.
+    result = _challenge(
+        monkeypatch,
+        {"challenge_sentence": f"He is very {blank} with his money.", "distractors": ["generous", "lazy", "noisy"]},
+    )
+    assert result["challenge_sentence"] == f"He is very {llm_service.GUESS_BLANK} with his money."
+
+
+def test_guess_challenge_rejects_two_underscores_as_blank(monkeypatch) -> None:
+    with pytest.raises(llm_service.AIServiceError):
+        _challenge(monkeypatch, {"challenge_sentence": "He is very __ with money.", "distractors": ["a", "b", "c"]})
+
+
 def test_guess_challenge_rejects_sentence_without_blank(monkeypatch) -> None:
     with pytest.raises(llm_service.AIServiceError):
         _challenge(

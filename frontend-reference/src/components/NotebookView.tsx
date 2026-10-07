@@ -37,7 +37,7 @@ import {
   updateDocument,
   uploadDocument,
 } from "../api";
-import { BasketballUploadButton, UploadPhase } from "./BasketballUploadButton";
+import { BasketballCourt, BasketballUploadButton, UploadPhase } from "./BasketballUploadButton";
 
 // Notebook chỉ nhận tài liệu văn bản — khớp ALLOWED_EXTENSIONS ở backend/notebook_service.py.
 const ACCEPTED_EXTENSIONS = [".docx", ".doc", ".pdf"];
@@ -63,6 +63,9 @@ export const NotebookView: React.FC<NotebookViewProps> = ({ authVersion }) => {
   const [uploadPhase, setUploadPhase] = useState<UploadPhase>("idle");
   // "success" vẫn tính là đang bận: modal chờ bóng vào rổ rồi mới đóng.
   const isUploading = uploadPhase === "uploading" || uploadPhase === "success";
+  // Extension hợp lệ của file đang chọn (null nếu chưa chọn hoặc sai định dạng).
+  const selectedExtension =
+    ACCEPTED_EXTENSIONS.find((ext) => selectedFile?.name.toLowerCase().endsWith(ext)) ?? null;
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const [chatInput, setChatInput] = useState("");
   // Model dùng cho Chat RAG — người dùng chuyển được giữa Gemini (cloud) và Ollama (local).
@@ -266,7 +269,7 @@ Meaning: To make people feel more comfortable in a social setting.`
       setUploadError("Choose a .docx, .doc or .pdf file first.");
       return;
     }
-    if (!ACCEPTED_EXTENSIONS.some((ext) => selectedFile.name.toLowerCase().endsWith(ext))) {
+    if (!selectedExtension) {
       setUploadError("Only .docx, .doc or .pdf files are supported.");
       return;
     }
@@ -638,7 +641,7 @@ Meaning: To make people feel more comfortable in a social setting.`
       {/* Upload/New Note Modal */}
       {isUploadOpen && (
         <div className="fixed inset-0 bg-slate-950/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-[#fffdf8] rounded-3xl max-w-lg w-full p-7 shadow-[0_40px_80px_-30px_rgba(32,29,24,0.6)] animate-rise space-y-4">
+          <div className="bg-[#fffdf8] rounded-3xl max-w-lg w-full max-h-[calc(100vh-2rem)] overflow-y-auto p-7 shadow-[0_40px_80px_-30px_rgba(32,29,24,0.6)] animate-rise space-y-4">
             <div className="flex items-center justify-between pb-1">
               <h3 className="font-display font-bold text-2xl text-slate-900 flex items-center gap-2">
                 <UploadCloud className="w-5 h-5 text-indigo-600" /> Create New Material or Note
@@ -667,6 +670,17 @@ Meaning: To make people feel more comfortable in a social setting.`
                 onChange={(event) => setSelectedFile(event.target.files?.[0] || null)}
                 className="w-full text-xs text-slate-600"
               />
+              {/* Chọn được file hợp lệ thì file thành quả bóng: ném vào rổ = upload (nút bên dưới vẫn dùng được). */}
+              {selectedExtension && (
+                <div className="mt-3">
+                  <BasketballCourt
+                    key={`${selectedFile!.name}-${selectedFile!.lastModified}`}
+                    fileLabel={selectedExtension.slice(1).toUpperCase()}
+                    disabled={!isBackendConnected || uploadPhase !== "idle"}
+                    onScore={handleSaveMaterial}
+                  />
+                </div>
+              )}
             </div>
 
             <div>

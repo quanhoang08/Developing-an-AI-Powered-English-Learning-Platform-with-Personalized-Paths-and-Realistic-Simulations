@@ -80,6 +80,35 @@ const RIM_HALF = 30;
 const GRAVITY = 0.0022;
 const MAX_SPEED = 2.6;
 const MIN_DRAG_Y = COURT_HEIGHT * 0.5;
+// Touchpad: người dùng thường dừng tay rồi mới nhấc ngón, và "tap-and-drag" của Windows còn thả trễ
+// ~0.5s — nên lấy cú vuốt NHANH NHẤT trong 600ms cuối thay vì vận tốc ngay lúc thả, và khuếch đại lên
+// vì vuốt trên touchpad chậm hơn chuột. Vuốt chậm hơn MIN_FLICK coi như chỉ đặt bóng, không ném.
+const FLICK_WINDOW_MS = 600;
+const FLICK_SEGMENT_MS = 40;
+const THROW_GAIN = 1.6;
+const MIN_FLICK = 0.25;
+
+type Sample = { x: number; y: number; t: number };
+
+// Vận tốc lớn nhất (px/ms) đo trên các đoạn dài >= FLICK_SEGMENT_MS; dưới MIN_FLICK trả về 0.
+export function peakVelocity(samples: Sample[]): { vx: number; vy: number } {
+  let best = { vx: 0, vy: 0 };
+  let bestSpeed = MIN_FLICK;
+  for (let j = 1; j < samples.length; j++) {
+    let i = j - 1;
+    while (i > 0 && samples[j].t - samples[i].t < FLICK_SEGMENT_MS) i--;
+    const dt = samples[j].t - samples[i].t;
+    if (dt <= 0) continue;
+    const vx = (samples[j].x - samples[i].x) / dt;
+    const vy = (samples[j].y - samples[i].y) / dt;
+    const speed = Math.hypot(vx, vy);
+    if (speed > bestSpeed) {
+      bestSpeed = speed;
+      best = { vx, vy };
+    }
+  }
+  return best;
+}
 
 type Hint = "ready" | "miss" | "scored";
 
@@ -230,9 +259,9 @@ export const BasketballCourt: React.FC<BasketballCourtProps> = ({ fileLabel, dis
     const point = localPoint(event);
     s.x = point.x;
     s.y = point.y;
-    s.samples.push({ ...point, t: event.timeStamp });
-    // Chỉ giữ ~100ms cuối để tính lực vuốt lúc thả tay.
-    s.samples = s.samples.filter((sample) => event.timeStamp - sample.t < 100);
+    // Lưu toạ độ con trỏ THẬT (chưa kẹp vào sân) để cú vuốt lên vẫn đo đủ lực khi bóng đã chạm giới hạn kéo.
+    s.samples.push({ x: event.clientX, y: event.clientY, t: event.timeStamp });
+    s.samples = s.samples.filter((sample) => event.timeStamp - sample.t < FLICK_WINDOW_MS);
     draw();
   };
 
@@ -240,11 +269,9 @@ export const BasketballCourt: React.FC<BasketballCourtProps> = ({ fileLabel, dis
     const s = sim.current;
     if (!s.dragging) return;
     s.dragging = false;
-    const first = s.samples[0];
-    const last = s.samples[s.samples.length - 1];
-    const elapsed = first && last ? last.t - first.t : 0;
-    s.vx = elapsed > 0 ? (last.x - first.x) / elapsed : 0;
-    s.vy = elapsed > 0 ? (last.y - first.y) / elapsed : 0;
+    const flick = peakVelocity(s.samples);
+    s.vx = flick.vx * THROW_GAIN;
+    s.vy = flick.vy * THROW_GAIN;
     const speed = Math.hypot(s.vx, s.vy);
     if (speed > MAX_SPEED) {
       s.vx *= MAX_SPEED / speed;

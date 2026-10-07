@@ -406,12 +406,12 @@ export function listDocuments(folderId?: string) {
 }
 
 // Upload file .docx/.doc/.pdf; backend ingest đồng bộ nên response đã có status ready/failed.
-export function uploadDocument(file: File, folderId?: string, tags: string[] = []) {
+export function uploadDocument(file: File, folderId?: string, tags: string[] = [], signal?: AbortSignal) {
   const body = new FormData();
   body.append("file", file);
   if (folderId) body.append("folder_id", folderId);
   tags.forEach((tag) => body.append("tags", tag));
-  return request<NotebookDocument>("/api/documents", { method: "POST", body });
+  return request<NotebookDocument>("/api/documents", { method: "POST", body, signal });
 }
 
 // Đổi folder/tags/starred của 1 document đã upload — không đổi được file gốc.

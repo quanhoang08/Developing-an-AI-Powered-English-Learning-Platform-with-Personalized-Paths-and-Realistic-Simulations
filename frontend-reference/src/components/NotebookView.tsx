@@ -88,6 +88,7 @@ export const NotebookView: React.FC<NotebookViewProps> = ({ authVersion }) => {
   const [isChatSending, setIsChatSending] = useState(false);
   const [chatError, setChatError] = useState<string | null>(null);
   const chatEndRef = useRef<HTMLDivElement>(null);
+  const uploadAbortRef = useRef<AbortController | null>(null);
 
   const demoFolders = [
     { id: "all", name: "All Materials", count: 18 },
@@ -275,12 +276,15 @@ Meaning: To make people feel more comfortable in a social setting.`
     }
     if (uploadPhase !== "idle") return;
     setUploadPhase("uploading");
+    const controller = new AbortController();
+    uploadAbortRef.current = controller;
     try {
       setUploadError(null);
       const uploaded = await uploadDocument(
         selectedFile,
         selectedFolder === "all" ? undefined : selectedFolder,
         newNoteTitle ? [newNoteTitle] : [],
+        controller.signal,
       );
       // Chèn document mới vào đầu danh sách để người dùng thấy kết quả ngay.
       setMaterials((current) => [
@@ -315,12 +319,27 @@ Meaning: To make people feel more comfortable in a social setting.`
       setNewNoteContent("");
       setUploadPhase("idle");
     } catch (error) {
+      // Người dùng bấm Cancel: modal đã đóng và reset trong handleCancelUpload, không báo lỗi.
+      if (controller.signal.aborted) return;
       setUploadError(error instanceof Error ? error.message : "Upload failed");
       // Bóng bật vành rơi ra rồi nút trở lại trạng thái bấm lại được.
       setUploadPhase("error");
       await wait(1100);
       setUploadPhase("idle");
     }
+  };
+
+  // Cancel/X dùng được cả khi đang upload: huỷ request rồi đóng modal và xoá file đã chọn.
+  // ponytail: chỉ huỷ phía trình duyệt — backend có thể vẫn ingest xong và tài liệu hiện ra sau khi tải lại trang.
+  const handleCancelUpload = () => {
+    uploadAbortRef.current?.abort();
+    uploadAbortRef.current = null;
+    setIsUploadOpen(false);
+    setSelectedFile(null);
+    setNewNoteTitle("");
+    setNewNoteContent("");
+    setUploadError(null);
+    setUploadPhase("idle");
   };
 
   // Tạo folder mới qua prompt() đơn giản, chỉ hoạt động khi đã đăng nhập.
@@ -646,7 +665,7 @@ Meaning: To make people feel more comfortable in a social setting.`
               <h3 className="font-display font-bold text-2xl text-slate-900 flex items-center gap-2">
                 <UploadCloud className="w-5 h-5 text-indigo-600" /> Create New Material or Note
               </h3>
-              <button onClick={() => setIsUploadOpen(false)} disabled={isUploading} aria-label="Close" className="text-slate-400 hover:text-slate-600 disabled:opacity-40">
+              <button onClick={handleCancelUpload} aria-label="Close" className="text-slate-400 hover:text-slate-600">
                 <X className="w-5 h-5" />
               </button>
             </div>
@@ -696,9 +715,8 @@ Meaning: To make people feel more comfortable in a social setting.`
 
             <div className="flex items-center justify-end gap-2 pt-2">
               <button
-                onClick={() => setIsUploadOpen(false)}
-                disabled={isUploading}
-                className="px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-xl disabled:opacity-40"
+                onClick={handleCancelUpload}
+                className="px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-xl"
               >
                 Cancel
               </button>

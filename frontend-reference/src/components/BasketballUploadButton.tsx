@@ -87,6 +87,7 @@ const STEP_MS = 16;
 const POWER = 0.011;
 const MAX_PULL = 150;
 const MIN_PULL = 15;
+const PULL_NUDGE = 25;
 const PREVIEW_STEPS = 80;
 const PREVIEW_EVERY = 3;
 
@@ -145,7 +146,10 @@ export const BasketballCourt: React.FC<BasketballCourtProps> = ({ fileLabel, dis
     const s = sim.current;
     const ball = ballRef.current;
     if (!ball) return;
-    ball.style.transform = `translate(${s.x - BALL_R}px, ${s.y - BALL_R}px)`;
+    // Đang ngắm: bóng nhích theo hướng kéo (tối đa PULL_NUDGE px) để thấy rõ là đang cầm bóng.
+    const pull = s.dragging ? Math.hypot(s.pullX, s.pullY) : 0;
+    const nudge = pull > 0 ? Math.min(PULL_NUDGE, pull * 0.25) / pull : 0;
+    ball.style.transform = `translate(${s.x - BALL_R + s.pullX * nudge}px, ${s.y - BALL_R + s.pullY * nudge}px)`;
     // Chỉ xoay hình quả bóng, nhãn định dạng file giữ thẳng để đọc được.
     (ball.firstElementChild as SVGElement).style.transform = `rotate(${s.x * 2}deg)`;
   };
@@ -265,6 +269,7 @@ export const BasketballCourt: React.FC<BasketballCourtProps> = ({ fileLabel, dis
     // Độ kéo đo từ chỗ nhấn xuống, theo con trỏ thật (có thể ra ngoài sân nhờ pointer capture).
     s.pullX = event.clientX - s.startX;
     s.pullY = event.clientY - s.startY;
+    draw();
     if (Math.hypot(s.pullX, s.pullY) < MIN_PULL) {
       setAim(null);
       return;
@@ -278,6 +283,7 @@ export const BasketballCourt: React.FC<BasketballCourtProps> = ({ fileLabel, dis
     if (!s.dragging) return;
     s.dragging = false;
     setAim(null);
+    draw();
     // Kéo quá ngắn = huỷ ngắm, bóng đứng yên.
     if (Math.hypot(s.pullX, s.pullY) < MIN_PULL) return;
     const v = launchVelocity(s.pullX, s.pullY);

@@ -1,19 +1,25 @@
 import { describe, expect, it } from "vitest";
-import { peakVelocity } from "./BasketballUploadButton";
+import { launchVelocity, trajectory } from "./BasketballUploadButton";
 
-// Mẫu con trỏ mỗi 10ms: vuốt lên 2px/ms trong 60ms.
-const flickUp = Array.from({ length: 7 }, (_, i) => ({ x: 100, y: 300 - 20 * i, t: i * 10 }));
-
-describe("peakVelocity", () => {
-  it("keeps the flick speed even if the pointer rests before release (touchpad)", () => {
-    const rest = { x: 100, y: 180, t: 400 };
-    const v = peakVelocity([...flickUp, rest]);
+describe("launchVelocity", () => {
+  it("throws opposite to the pull direction", () => {
+    const v = launchVelocity(0, 100); // kéo xuống -> ném lên
     expect(v.vx).toBeCloseTo(0);
-    expect(v.vy).toBeCloseTo(-2);
+    expect(v.vy).toBeLessThan(0);
   });
 
-  it("treats a slow drag as placing the ball, not throwing", () => {
-    const slow = Array.from({ length: 10 }, (_, i) => ({ x: 100 + i, y: 300, t: i * 50 }));
-    expect(peakVelocity(slow)).toEqual({ vx: 0, vy: 0 });
+  it("caps the power at the maximum pull length", () => {
+    expect(launchVelocity(0, 1000)).toEqual(launchVelocity(0, 150));
+  });
+});
+
+describe("trajectory", () => {
+  it("rises then falls back under gravity and stops at the floor", () => {
+    const v = launchVelocity(0, 120);
+    const dots = trajectory(200, 192, v.vx, v.vy, 400);
+    const highest = Math.min(...dots.map((dot) => dot.y));
+    expect(highest).toBeLessThan(70); // lên cao hơn vành rổ
+    expect(dots[dots.length - 1].y).toBeGreaterThan(highest); // rồi rơi xuống lại
+    expect(dots.every((dot) => dot.y <= 192)).toBe(true);
   });
 });

@@ -1,5 +1,6 @@
 // Upload kiểu "bóng rổ":
-// - BasketballCourt: chọn file xong thì file thành quả bóng, kéo tự do rồi vuốt ném vào rổ để upload.
+// - BasketballCourt: chọn file xong thì file thành quả bóng; nhấn giữ, kéo lùi để ngắm (chấm quỹ đạo),
+//   buông tay là ném — vào rổ thì upload.
 // - BasketballUploadButton: nút dự phòng (bàn phím/trình đọc màn hình); đang tải thì bóng nảy, xong thì
 //   ném vào rổ, lỗi thì bật vành. Chuyển động của nút là CSS keyframes (index.css, nhóm .bb-*).
 import React, { useEffect, useRef, useState } from "react";
@@ -72,49 +73,50 @@ export const BasketballUploadButton: React.FC<BasketballUploadButtonProps> = ({ 
 };
 
 // ---- Sân ném bóng ----
-// Đơn vị: px và ms. Vành rổ nằm giữa sân, cao RIM_Y; bóng chỉ được kéo trong nửa dưới để phải ném thật.
+// Kiểu "ná cao su": nhấn giữ bóng, kéo LÙI ngược hướng muốn ném (chấm đen hiện quỹ đạo), buông tay là ném.
+// Không phụ thuộc tốc độ tay nên chuột và touchpad dùng như nhau. Đơn vị: px và ms.
 const COURT_HEIGHT = 210;
 const BALL_R = 18;
 const RIM_Y = 70;
 const RIM_HALF = 30;
-const GRAVITY = 0.0022;
-const MAX_SPEED = 2.6;
-const MIN_DRAG_Y = COURT_HEIGHT * 0.5;
-// Touchpad: người dùng thường dừng tay rồi mới nhấc ngón, và "tap-and-drag" của Windows còn thả trễ
-// ~0.5s — nên lấy cú vuốt NHANH NHẤT trong 600ms cuối thay vì vận tốc ngay lúc thả, và khuếch đại lên
-// vì vuốt trên touchpad chậm hơn chuột. Vuốt chậm hơn MIN_FLICK coi như chỉ đặt bóng, không ném.
-const FLICK_WINDOW_MS = 600;
-const FLICK_SEGMENT_MS = 40;
-const THROW_GAIN = 1.6;
-const MIN_FLICK = 0.25;
+const GRAVITY = 0.0018;
+// Vật lý chạy theo bước cố định để quỹ đạo chấm xem trước trùng khớp đường bay thật.
+const STEP_MS = 16;
+// Kéo lùi 1px -> 0.011 px/ms (từ sàn kéo ~100px là tới rổ, vừa tầm một lần vuốt touchpad);
+// kéo tối đa MAX_PULL; kéo ngắn hơn MIN_PULL rồi buông = huỷ, không ném.
+const POWER = 0.011;
+const MAX_PULL = 150;
+const MIN_PULL = 15;
+const PREVIEW_STEPS = 80;
+const PREVIEW_EVERY = 3;
 
-type Sample = { x: number; y: number; t: number };
+type Point = { x: number; y: number };
 
-// Vận tốc lớn nhất (px/ms) đo trên các đoạn dài >= FLICK_SEGMENT_MS; dưới MIN_FLICK trả về 0.
-export function peakVelocity(samples: Sample[]): { vx: number; vy: number } {
-  let best = { vx: 0, vy: 0 };
-  let bestSpeed = MIN_FLICK;
-  for (let j = 1; j < samples.length; j++) {
-    let i = j - 1;
-    while (i > 0 && samples[j].t - samples[i].t < FLICK_SEGMENT_MS) i--;
-    const dt = samples[j].t - samples[i].t;
-    if (dt <= 0) continue;
-    const vx = (samples[j].x - samples[i].x) / dt;
-    const vy = (samples[j].y - samples[i].y) / dt;
-    const speed = Math.hypot(vx, vy);
-    if (speed > bestSpeed) {
-      bestSpeed = speed;
-      best = { vx, vy };
-    }
+// Vận tốc ném = ngược hướng kéo, tỉ lệ độ dài kéo (giới hạn MAX_PULL).
+export function launchVelocity(pullX: number, pullY: number): { vx: number; vy: number } {
+  const length = Math.hypot(pullX, pullY);
+  const scale = length > MAX_PULL ? MAX_PULL / length : 1;
+  return { vx: -pullX * scale * POWER, vy: -pullY * scale * POWER };
+}
+
+// Các điểm chấm quỹ đạo (cùng công thức với step() khi bóng bay tự do), dừng khi chạm tường/sàn.
+export function trajectory(x: number, y: number, vx: number, vy: number, width: number): Point[] {
+  const dots: Point[] = [];
+  for (let i = 1; i <= PREVIEW_STEPS; i++) {
+    vy += GRAVITY * STEP_MS;
+    x += vx * STEP_MS;
+    y += vy * STEP_MS;
+    if (x < BALL_R || x > width - BALL_R || y > COURT_HEIGHT - BALL_R) break;
+    if (i % PREVIEW_EVERY === 0) dots.push({ x, y });
   }
-  return best;
+  return dots;
 }
 
 type Hint = "ready" | "miss" | "scored";
 
 const HINT: Record<Hint, string> = {
-  ready: "Drag the ball anywhere, then flick it up into the hoop to upload.",
-  miss: "Missed! Grab the ball and try again.",
+  ready: "Press and hold the ball, pull it back to aim along the dots, then let go to shoot.",
+  miss: "Missed! Pull the ball back and try again.",
   scored: "Swish! Uploading your file…",
 };
 
@@ -130,10 +132,12 @@ export const BasketballCourt: React.FC<BasketballCourtProps> = ({ fileLabel, dis
   const courtRef = useRef<HTMLDivElement>(null);
   const ballRef = useRef<HTMLDivElement>(null);
   // Trạng thái vật lý để trong ref và vẽ thẳng vào style: tránh re-render React mỗi frame.
-  const sim = useRef({ x: 0, y: 0, vx: 0, vy: 0, dragging: false, scored: false, raf: 0, samples: [] as { x: number; y: number; t: number }[] });
+  const sim = useRef({ x: 0, y: 0, vx: 0, vy: 0, dragging: false, flying: false, scored: false, raf: 0, startX: 0, startY: 0, pullX: 0, pullY: 0 });
   const onScoreRef = useRef(onScore);
   onScoreRef.current = onScore;
   const [hint, setHint] = useState<Hint>("ready");
+  // Chấm quỹ đạo khi đang ngắm (null = không ngắm).
+  const [aim, setAim] = useState<Point[] | null>(null);
 
   const courtWidth = () => courtRef.current?.clientWidth ?? 400;
 
@@ -149,8 +153,9 @@ export const BasketballCourt: React.FC<BasketballCourtProps> = ({ fileLabel, dis
   const resetBall = () => {
     const s = sim.current;
     cancelAnimationFrame(s.raf);
-    Object.assign(s, { x: courtWidth() / 2, y: COURT_HEIGHT - BALL_R, vx: 0, vy: 0, dragging: false, scored: false });
+    Object.assign(s, { x: courtWidth() / 2, y: COURT_HEIGHT - BALL_R, vx: 0, vy: 0, dragging: false, flying: false, scored: false });
     setHint("ready");
+    setAim(null);
     draw();
   };
 
@@ -203,10 +208,9 @@ export const BasketballCourt: React.FC<BasketballCourtProps> = ({ fileLabel, dis
       }
     }
 
-    // Tường trái/phải và trần.
+    // Tường trái/phải. Không có trần: ném cao thì bóng bay khỏi khung rồi rơi lại, đúng như đường chấm.
     if (nx < BALL_R) { nx = BALL_R; s.vx = -s.vx * 0.6; }
     if (nx > width - BALL_R) { nx = width - BALL_R; s.vx = -s.vx * 0.6; }
-    if (ny < BALL_R) { ny = BALL_R; s.vy = Math.abs(s.vy) * 0.5; }
 
     // Sàn: nảy rồi lăn chậm dần; dừng hẳn thì kết thúc vòng lặp.
     let resting = false;
@@ -221,62 +225,64 @@ export const BasketballCourt: React.FC<BasketballCourtProps> = ({ fileLabel, dis
     s.x = nx;
     s.y = ny;
     draw();
-    if (resting && !s.scored) setHint("miss");
+    if (resting) {
+      s.flying = false;
+      if (!s.scored) setHint("miss");
+    }
     return !resting;
   };
 
   const launch = () => {
+    const s = sim.current;
+    s.flying = true;
     let last = performance.now();
+    let pending = 0;
     const frame = (now: number) => {
-      const dt = Math.min(32, now - last);
+      // Gom thời gian thực rồi chạy từng bước STEP_MS: tốc độ khung hình không làm lệch quỹ đạo đã ngắm.
+      pending = Math.min(pending + now - last, STEP_MS * 4);
       last = now;
-      if (step(dt)) sim.current.raf = requestAnimationFrame(frame);
+      let alive = true;
+      while (alive && pending >= STEP_MS) {
+        alive = step(STEP_MS);
+        pending -= STEP_MS;
+      }
+      if (alive) s.raf = requestAnimationFrame(frame);
     };
-    sim.current.raf = requestAnimationFrame(frame);
-  };
-
-  const localPoint = (event: React.PointerEvent) => {
-    const rect = courtRef.current!.getBoundingClientRect();
-    return {
-      x: Math.min(rect.width - BALL_R, Math.max(BALL_R, event.clientX - rect.left)),
-      y: Math.min(COURT_HEIGHT - BALL_R, Math.max(MIN_DRAG_Y, event.clientY - rect.top)),
-    };
+    s.raf = requestAnimationFrame(frame);
   };
 
   const handlePointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
     const s = sim.current;
-    if (disabled || s.scored) return;
-    cancelAnimationFrame(s.raf);
+    if (disabled || s.scored || s.flying) return;
     event.currentTarget.setPointerCapture(event.pointerId);
-    s.dragging = true;
-    s.samples = [];
+    Object.assign(s, { dragging: true, startX: event.clientX, startY: event.clientY, pullX: 0, pullY: 0 });
     setHint("ready");
   };
 
   const handlePointerMove = (event: React.PointerEvent<HTMLDivElement>) => {
     const s = sim.current;
     if (!s.dragging) return;
-    const point = localPoint(event);
-    s.x = point.x;
-    s.y = point.y;
-    // Lưu toạ độ con trỏ THẬT (chưa kẹp vào sân) để cú vuốt lên vẫn đo đủ lực khi bóng đã chạm giới hạn kéo.
-    s.samples.push({ x: event.clientX, y: event.clientY, t: event.timeStamp });
-    s.samples = s.samples.filter((sample) => event.timeStamp - sample.t < FLICK_WINDOW_MS);
-    draw();
+    // Độ kéo đo từ chỗ nhấn xuống, theo con trỏ thật (có thể ra ngoài sân nhờ pointer capture).
+    s.pullX = event.clientX - s.startX;
+    s.pullY = event.clientY - s.startY;
+    if (Math.hypot(s.pullX, s.pullY) < MIN_PULL) {
+      setAim(null);
+      return;
+    }
+    const v = launchVelocity(s.pullX, s.pullY);
+    setAim(trajectory(s.x, s.y, v.vx, v.vy, courtWidth()));
   };
 
   const handlePointerUp = () => {
     const s = sim.current;
     if (!s.dragging) return;
     s.dragging = false;
-    const flick = peakVelocity(s.samples);
-    s.vx = flick.vx * THROW_GAIN;
-    s.vy = flick.vy * THROW_GAIN;
-    const speed = Math.hypot(s.vx, s.vy);
-    if (speed > MAX_SPEED) {
-      s.vx *= MAX_SPEED / speed;
-      s.vy *= MAX_SPEED / speed;
-    }
+    setAim(null);
+    // Kéo quá ngắn = huỷ ngắm, bóng đứng yên.
+    if (Math.hypot(s.pullX, s.pullY) < MIN_PULL) return;
+    const v = launchVelocity(s.pullX, s.pullY);
+    s.vx = v.vx;
+    s.vy = v.vy;
     launch();
   };
 
@@ -295,6 +301,15 @@ export const BasketballCourt: React.FC<BasketballCourtProps> = ({ fileLabel, dis
 
         {/* Sàn sân. */}
         <div className="absolute inset-x-0 bottom-0 h-1 bg-amber-900/15" />
+
+        {/* Quỹ đạo dự kiến khi đang kéo ngắm: chấm đen nhỏ dần về cuối. */}
+        {aim && (
+          <svg className="absolute inset-0 w-full h-full pointer-events-none" aria-hidden="true">
+            {aim.map((dot, index) => (
+              <circle key={index} cx={dot.x} cy={dot.y} r={Math.max(1.5, 3.5 - index * 0.08)} fill="#1f1b16" opacity={Math.max(0.25, 0.85 - index * 0.02)} />
+            ))}
+          </svg>
+        )}
 
         <div
           ref={ballRef}

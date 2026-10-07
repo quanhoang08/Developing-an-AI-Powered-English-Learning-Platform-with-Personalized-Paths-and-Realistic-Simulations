@@ -405,7 +405,7 @@ export function listDocuments(folderId?: string) {
   );
 }
 
-// Upload file .docx/audio; backend ingest .docx đồng bộ nên response đã có status ready/failed.
+// Upload file .docx/.doc/.pdf; backend ingest đồng bộ nên response đã có status ready/failed.
 export function uploadDocument(file: File, folderId?: string, tags: string[] = []) {
   const body = new FormData();
   body.append("file", file);

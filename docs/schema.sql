@@ -97,7 +97,7 @@ CREATE TABLE documents (
     language        VARCHAR(10) DEFAULT 'en',   -- thêm ngoài thiết kế gốc
     status          VARCHAR(20) DEFAULT 'processing',
     created_at      TIMESTAMPTZ DEFAULT now(),
-    CONSTRAINT chk_documents_source_type_valid CHECK (source_type IN ('audio', 'docx')),
+    CONSTRAINT chk_documents_source_type_valid CHECK (source_type IN ('audio', 'docx', 'doc', 'pdf')),
     CONSTRAINT chk_documents_status_valid CHECK (status IN ('processing', 'ready', 'failed'))
 );
 

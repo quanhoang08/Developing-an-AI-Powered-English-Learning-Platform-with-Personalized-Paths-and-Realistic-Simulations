@@ -7,10 +7,12 @@ WORKDIR /app
 # gửi lên (webm/mp3) sang PCM WAV 16kHz mono trước khi đưa vào Azure Speech SDK.
 # Thiếu ffmpeg thì pydub sẽ raise lỗi "ffmpeg not found" ngay khi gọi convert,
 # đây là lỗi rất hay bị bỏ sót khi deploy vì máy dev cá nhân thường đã cài sẵn ffmpeg.
+# antiword: trích text file .doc (Word 97-2003) cho Notebook.
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     libpq-dev \
     ffmpeg \
+    antiword \
     && rm -rf /var/lib/apt/lists/*
 
 COPY requirements.txt .

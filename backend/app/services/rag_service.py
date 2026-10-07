@@ -9,14 +9,12 @@ from starlette.concurrency import run_in_threadpool
 
 from app.core.config import get_settings
 from app.models.notebook import Document, DocumentChunk
-from app.services import llm_service, speech_service
+from app.services import llm_service
 from app.utils.chunking import chunk_document
-from app.utils.text_extraction import extract_docx_text
+from app.utils.text_extraction import EXTRACTORS, extract_text
 
-# .docx: trích text trực tiếp; audio: Azure STT ra transcript rồi chunk/embed như .docx.
-DOCX_EXTENSIONS = {".docx"}
-AUDIO_EXTENSIONS = {".mp3", ".wav", ".m4a", ".webm", ".ogg"}
-INGESTIBLE_EXTENSIONS = DOCX_EXTENSIONS | AUDIO_EXTENSIONS
+# Notebook chỉ nhận tài liệu văn bản: .docx, .doc, .pdf — trích text rồi chunk/embed.
+INGESTIBLE_EXTENSIONS = set(EXTRACTORS)
 
 
 def embedding_field() -> str:
@@ -32,17 +30,12 @@ async def ingest_document(db: AsyncSession, document: Document) -> None:
 	"""
 	extension = Path(document.file_path or "").suffix.lower()
 	if extension not in INGESTIBLE_EXTENSIONS:
-		# Audio hoặc định dạng chưa có pipeline: giữ nguyên "processing", không phải lỗi.
+		# Định dạng chưa có pipeline: giữ nguyên "processing", không phải lỗi.
 		return
 
 	try:
-		# extract_docx_text / transcribe_audio đều là I/O-bound đồng bộ (parse XML / HTTP tới
-		# Azure) — đẩy sang threadpool để không chặn event loop khi file lớn.
-		if extension in AUDIO_EXTENSIONS:
-			transcript = await run_in_threadpool(speech_service.transcribe_audio, document.file_path)
-			text = transcript.text
-		else:
-			text = await run_in_threadpool(extract_docx_text, document.file_path)
+		# Parse docx/pdf/antiword là việc đồng bộ — đẩy sang threadpool để không chặn event loop khi file lớn.
+		text = await run_in_threadpool(extract_text, document.file_path)
 		# Chia theo câu + chồng lấp (thay cho cắt cứng theo số từ) — chọn theo experiments/run_retrieval.py.
 		settings = get_settings()
 		chunks = chunk_document(

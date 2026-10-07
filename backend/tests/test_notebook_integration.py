@@ -24,6 +24,29 @@ def make_docx_bytes(paragraph_text: str) -> bytes:
     return buffer.getvalue()
 
 
+def make_pdf_bytes(text: str) -> bytes:
+    # PDF 1 trang tối thiểu có lớp text (Helvetica) — đủ để pypdf trích lại đúng câu.
+    stream = f"BT /F1 12 Tf 72 720 Td ({text}) Tj ET".encode()
+    objects = [
+        b"<< /Type /Catalog /Pages 2 0 R >>",
+        b"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+        b"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] "
+        b"/Resources << /Font << /F1 5 0 R >> >> /Contents 4 0 R >>",
+        b"<< /Length %d >>\nstream\n" % len(stream) + stream + b"\nendstream",
+        b"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
+    ]
+    out = b"%PDF-1.4\n"
+    offsets = []
+    for number, body in enumerate(objects, start=1):
+        offsets.append(len(out))
+        out += b"%d 0 obj\n" % number + body + b"\nendobj\n"
+    xref = len(out)
+    out += b"xref\n0 %d\n0000000000 65535 f \n" % (len(objects) + 1)
+    out += b"".join(b"%010d 00000 n \n" % offset for offset in offsets)
+    out += b"trailer\n<< /Size %d /Root 1 0 R >>\nstartxref\n%d\n%%%%EOF\n" % (len(objects) + 1, xref)
+    return out
+
+
 @pytest.fixture
 def notebook_client() -> Generator[TestClient, None, None]:
     # Dùng PostgreSQL Docker thật để test cả ORM, constraints và upload workflow.
@@ -109,14 +132,26 @@ def test_folder_upload_list_and_reject_unsupported_file(
     assert listed.json()["total"] == 1
     assert listed.json()["items"][0]["id"] == document["id"]
 
-    # PDF không thuộc phạm vi audio/.docx nên bị từ chối trước khi lưu.
+    # Notebook chỉ nhận .docx/.doc/.pdf — audio bị từ chối trước khi lưu.
     rejected = notebook_client.post(
         "/api/documents",
         headers=headers,
-        files={"file": ("lesson.pdf", b"pdf", "application/pdf")},
+        files={"file": ("lecture.wav", b"RIFF", "audio/wav")},
     )
     assert rejected.status_code == 400
     assert rejected.json()["detail"] == "unsupported_file_type"
+
+
+def test_pdf_upload_is_extracted_and_ready(notebook_client: TestClient) -> None:
+    headers = register_and_login(notebook_client)
+    response = notebook_client.post(
+        "/api/documents",
+        headers=headers,
+        files={"file": ("lesson.pdf", make_pdf_bytes("Photosynthesis converts light into energy."), "application/pdf")},
+    )
+    assert response.status_code == 201
+    assert response.json()["source_type"] == "pdf"
+    assert response.json()["status"] == "ready"
 
 
 def test_document_from_another_user_returns_not_found(

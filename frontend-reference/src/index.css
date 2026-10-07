@@ -216,6 +216,52 @@ body::after {
 /* Khối hiện sau khi thao tác (kết quả, thẻ tải muộn): cùng thông số, tự chạy khi phần tử được chèn vào. */
 .pop-in { animation: stagger-rise 0.3s cubic-bezier(0.22, 1, 0.36, 1) backwards; }
 
+/* Nút upload bóng rổ (BasketballUploadButton). Toạ độ khớp nút 224x44: bóng 20px ở (12,12),
+   tâm vành rổ cách bóng ~173px theo X. Trục X/Y tách lớp để mỗi trục có easing riêng -> parabol. */
+.bb-hoop { opacity: 0; transform: scale(0.8) translateY(6px); transform-origin: 80% 100%; transition: opacity 0.3s, transform 0.3s cubic-bezier(0.22, 1, 0.36, 1); }
+.bb-court:not(.bb-idle) .bb-hoop { opacity: 1; transform: none; }
+.bb-net { transform-box: fill-box; transform-origin: 50% 0; }
+
+.bb-uploading .bb-y { animation: bb-bounce 0.6s infinite; }
+.bb-uploading .bb-spin { animation: bb-spin 1.2s linear infinite; }
+@keyframes bb-bounce {
+  0% { transform: translateY(0) scale(1.12, 0.88); animation-timing-function: cubic-bezier(0.2, 0.7, 0.4, 1); }
+  12% { transform: translateY(-2px) scale(1); animation-timing-function: cubic-bezier(0.2, 0.7, 0.4, 1); }
+  50% { transform: translateY(-18px); animation-timing-function: cubic-bezier(0.6, 0, 0.8, 0.3); }
+  100% { transform: translateY(0) scale(1.12, 0.88); }
+}
+@keyframes bb-spin { to { transform: rotate(360deg); } }
+
+.bb-success .bb-x { animation: bb-shot-x 0.9s cubic-bezier(0.3, 0.6, 0.5, 1) forwards; }
+.bb-success .bb-y { animation: bb-shot-y 0.9s forwards; }
+.bb-success .bb-spin { animation: bb-spin 0.45s linear 2; }
+.bb-success .bb-net { animation: bb-swish 0.5s 0.5s ease-out; }
+@keyframes bb-shot-x { 60%, 100% { transform: translateX(173px); } }
+@keyframes bb-shot-y {
+  0% { transform: translateY(0); animation-timing-function: cubic-bezier(0.2, 0.6, 0.4, 1); }
+  32% { transform: translateY(-54px); animation-timing-function: cubic-bezier(0.6, 0, 0.9, 0.5); }
+  62% { transform: translateY(-22px); opacity: 1; }
+  100% { transform: translateY(2px); opacity: 0; }
+}
+@keyframes bb-swish {
+  40% { transform: scale(0.85, 1.25); }
+  70% { transform: scale(1.05, 0.95); }
+}
+
+.bb-error .bb-x { animation: bb-miss-x 1s cubic-bezier(0.3, 0.6, 0.5, 1) forwards; }
+.bb-error .bb-y { animation: bb-miss-y 1s forwards; }
+.bb-error .bb-spin { animation: bb-spin 0.5s linear reverse 2; }
+@keyframes bb-miss-x { 55% { transform: translateX(158px); } 100% { transform: translateX(118px); } }
+@keyframes bb-miss-y {
+  0% { transform: translateY(0); animation-timing-function: cubic-bezier(0.2, 0.6, 0.4, 1); }
+  28% { transform: translateY(-54px); animation-timing-function: cubic-bezier(0.6, 0, 0.9, 0.5); }
+  55% { transform: translateY(-24px); animation-timing-function: cubic-bezier(0.2, 0.6, 0.4, 1); }
+  68% { transform: translateY(-34px); animation-timing-function: cubic-bezier(0.6, 0, 0.9, 0.5); }
+  88% { transform: translateY(0); animation-timing-function: ease-out; }
+  94% { transform: translateY(-5px); animation-timing-function: ease-in; }
+  100% { transform: translateY(0); }
+}
+
 /* Nút nhấn xuống một chút khi bấm (dùng thuộc tính `scale` riêng, không đè hover:-translate của Tailwind). */
 button:not(:disabled):active { scale: 0.97; }
 

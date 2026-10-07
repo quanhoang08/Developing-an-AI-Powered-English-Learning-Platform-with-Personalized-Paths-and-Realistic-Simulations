@@ -29,7 +29,7 @@ class NotebookFolder(Base):
 
 
 class Document(Base):
-	"""Tài liệu audio hoặc DOCX được user upload vào Notebook."""
+	"""Tài liệu DOCX/DOC/PDF được user upload vào Notebook."""
 
 	__tablename__ = "documents"
 
@@ -44,7 +44,7 @@ class Document(Base):
 		UUID(as_uuid=True), ForeignKey("notebook_folders.id", ondelete="SET NULL"), nullable=True
 	)
 	title: Mapped[str] = mapped_column(String(255))
-	# Service chỉ nhận audio/docx dù schema cũ còn chứa các loại nguồn lịch sử.
+	# Service chỉ nhận docx/doc/pdf dù DB cũ còn record audio lịch sử.
 	source_type: Mapped[str] = mapped_column(String(20))
 	source_url: Mapped[str] = mapped_column(Text, nullable=True)
 	file_path: Mapped[str] = mapped_column(Text, nullable=True)

@@ -37,6 +37,11 @@ import {
   updateDocument,
   uploadDocument,
 } from "../api";
+import { BasketballUploadButton, UploadPhase } from "./BasketballUploadButton";
+
+// Notebook chỉ nhận tài liệu văn bản — khớp ALLOWED_EXTENSIONS ở backend/notebook_service.py.
+const ACCEPTED_EXTENSIONS = [".docx", ".doc", ".pdf"];
+const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 interface NotebookViewProps {
   // authVersion thay đổi sau login/logout để buộc view tải lại dữ liệu backend.
@@ -54,8 +59,10 @@ export const NotebookView: React.FC<NotebookViewProps> = ({ authVersion }) => {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [isBackendConnected, setIsBackendConnected] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
-  // Backend ingest đồng bộ (chunk + embed) nên upload có thể mất vài chục giây: khóa nút và báo "đang xử lý".
-  const [isUploading, setIsUploading] = useState(false);
+  // Backend ingest đồng bộ (chunk + embed) nên upload có thể mất vài chục giây: khóa nút và chạy animation bóng rổ.
+  const [uploadPhase, setUploadPhase] = useState<UploadPhase>("idle");
+  // "success" vẫn tính là đang bận: modal chờ bóng vào rổ rồi mới đóng.
+  const isUploading = uploadPhase === "uploading" || uploadPhase === "success";
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const [chatInput, setChatInput] = useState("");
   // Model dùng cho Chat RAG — người dùng chuyển được giữa Gemini (cloud) và Ollama (local).
@@ -187,7 +194,7 @@ Meaning: To make people feel more comfortable in a social setting.`
               document.status === "ready"
                 ? "Content ingested — ask questions about this document in the Chat tab."
                 : document.status === "failed"
-                ? "Ingestion failed for this file. Chat is unavailable until you upload a readable .docx."
+                ? "Ingestion failed for this file. Chat is unavailable until you upload a readable .docx, .doc or .pdf (scanned PDFs have no text)."
                 : "Document status: processing. Content will appear after ingestion.",
           })),
         );
@@ -210,7 +217,7 @@ Meaning: To make people feel more comfortable in a social setting.`
   const emptyMaterial = {
     id: "1", title: "No documents yet", folder: "all", type: "EMPTY", date: "—", size: "—", tags: [] as string[],
     starred: false, isDemo: false, status: "empty",
-    content: "Upload a .docx or audio file with \"Add Note or Document\" to start studying here.",
+    content: "Upload a .docx, .doc or .pdf file with \"Add Note or Document\" to start studying here.",
   };
   const activeMaterial =
     materials.find((m) => m.id === activeMaterialId) || materials[0] || (isBackendConnected ? emptyMaterial : demoMaterials[0]);
@@ -254,13 +261,17 @@ Meaning: To make people feel more comfortable in a social setting.`
   };
 
   const handleSaveMaterial = async () => {
-    // Backend hiện chỉ nhận audio/.docx; text note thuần sẽ được hỗ trợ ở phase sau.
+    // Backend chỉ nhận .docx/.doc/.pdf; text note thuần sẽ được hỗ trợ ở phase sau.
     if (!selectedFile) {
-      setUploadError("Choose an audio or .docx file first.");
+      setUploadError("Choose a .docx, .doc or .pdf file first.");
       return;
     }
-    if (isUploading) return;
-    setIsUploading(true);
+    if (!ACCEPTED_EXTENSIONS.some((ext) => selectedFile.name.toLowerCase().endsWith(ext))) {
+      setUploadError("Only .docx, .doc or .pdf files are supported.");
+      return;
+    }
+    if (uploadPhase !== "idle") return;
+    setUploadPhase("uploading");
     try {
       setUploadError(null);
       const uploaded = await uploadDocument(
@@ -285,21 +296,27 @@ Meaning: To make people feel more comfortable in a social setting.`
             uploaded.status === "ready"
               ? "Content ingested — ask questions about this document in the Chat tab."
               : uploaded.status === "failed"
-              ? "Ingestion failed for this file. Chat is unavailable until you upload a readable .docx."
+              ? "Ingestion failed for this file. Chat is unavailable until you upload a readable .docx, .doc or .pdf (scanned PDFs have no text)."
               : "Document status: processing. Content will appear after ingestion.",
         },
         ...current,
       ]);
+      // Cho bóng bay vào rổ xong (0.9s) rồi mới đóng modal.
+      setUploadPhase("success");
+      await wait(1100);
       // Nhãn "All Materials (n)" lấy từ state folders nên phải tăng tay, không thì phải tải lại trang mới đúng.
       setFolders((current) => current.map((f) => (f.id === "all" ? { ...f, count: f.count + 1 } : f)));
       setIsUploadOpen(false);
       setSelectedFile(null);
       setNewNoteTitle("");
       setNewNoteContent("");
+      setUploadPhase("idle");
     } catch (error) {
       setUploadError(error instanceof Error ? error.message : "Upload failed");
-    } finally {
-      setIsUploading(false);
+      // Bóng bật vành rơi ra rồi nút trở lại trạng thái bấm lại được.
+      setUploadPhase("error");
+      await wait(1100);
+      setUploadPhase("idle");
     }
   };
 
@@ -643,10 +660,10 @@ Meaning: To make people feel more comfortable in a social setting.`
             </div>
 
             <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1">Audio or DOCX file</label>
+              <label className="block text-xs font-bold text-slate-700 mb-1">DOCX, DOC or PDF file</label>
               <input
                 type="file"
-                accept=".docx,audio/*"
+                accept=".docx,.doc,.pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/msword,application/pdf"
                 onChange={(event) => setSelectedFile(event.target.files?.[0] || null)}
                 className="w-full text-xs text-slate-600"
               />
@@ -671,16 +688,9 @@ Meaning: To make people feel more comfortable in a social setting.`
               >
                 Cancel
               </button>
-              <button
-                onClick={handleSaveMaterial}
-                disabled={!isBackendConnected || isUploading}
-                className="px-5 py-2.5 text-xs font-bold bg-indigo-700 hover:bg-indigo-800 text-white rounded-xl transition-all active:scale-95 disabled:opacity-40 inline-flex items-center gap-2"
-              >
-                {isUploading && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
-                {isUploading ? "Processing..." : "Upload to Notebook"}
-              </button>
+              <BasketballUploadButton phase={uploadPhase} disabled={!isBackendConnected} onClick={handleSaveMaterial} />
             </div>
-            {isUploading && (
+            {uploadPhase === "uploading" && (
               <p className="text-xs text-slate-500" role="status">
                 Reading and indexing your file so you can chat with it. This can take up to a minute; please keep this window open.
               </p>

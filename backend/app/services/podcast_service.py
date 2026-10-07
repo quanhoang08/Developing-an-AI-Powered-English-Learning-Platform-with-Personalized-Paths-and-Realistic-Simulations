@@ -14,7 +14,7 @@ from app.models.listening import ListeningQuizAttempt, Persona, Podcast, Transcr
 from app.models.notebook import Document
 from app.services import adaptive_service, llm_service, speech_service
 from app.services.gamification_service import award_activity
-from app.utils.text_extraction import extract_docx_text
+from app.utils.text_extraction import extract_text
 
 
 async def _load_owned_document(db: AsyncSession, user_id: uuid.UUID, document_id: uuid.UUID) -> Document:
@@ -62,10 +62,10 @@ async def create_podcast(
 	podcast_id = uuid.uuid4()
 	try:
 		if document.source_type == "audio":
-			# Audio gốc giữ nguyên giọng thật của người dùng, chỉ bổ sung transcript (mục 1.4).
+			# Record audio lịch sử (Notebook giờ chỉ nhận docx/doc/pdf): giữ giọng gốc, chỉ bổ sung transcript.
 			audio_path = document.file_path
 		else:
-			raw_text = await run_in_threadpool(extract_docx_text, document.file_path)
+			raw_text = await run_in_threadpool(extract_text, document.file_path)
 			script = await llm_service.rewrite_for_speech(raw_text)
 			audio_bytes = await run_in_threadpool(_synthesize, script, persona)
 			dest = _podcast_audio_path(podcast_id)

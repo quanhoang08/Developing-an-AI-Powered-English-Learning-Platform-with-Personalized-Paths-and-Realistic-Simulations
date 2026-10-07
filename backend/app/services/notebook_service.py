@@ -12,7 +12,7 @@ from app.services import rag_service
 
 
 # Chỉ các định dạng đã được chốt trong phạm vi Lumina mới được upload.
-ALLOWED_EXTENSIONS = {".docx", ".mp3", ".wav", ".m4a", ".webm", ".ogg"}
+ALLOWED_EXTENSIONS = {".docx", ".doc", ".pdf"}
 
 
 def document_to_path(document_id: uuid.UUID, filename: str) -> Path:
@@ -82,7 +82,7 @@ async def create_document(
 		user_id=user_id,
 		folder_id=folder_id,
 		title=Path(file.filename or "document").stem,
-		source_type="docx" if extension == ".docx" else "audio",
+		source_type=extension.lstrip("."),
 		file_path=str(path),
 		file_size_kb=max(1, round(len(content) / 1024)),
 		tags=tags or [],
@@ -92,7 +92,7 @@ async def create_document(
 	await db.commit()
 	await db.refresh(document)
 
-	# .docx (extract) và audio (Azure STT) đều ingest thật ngay: chunk + embed -> ready/failed.
+	# .docx/.doc/.pdf đều ingest thật ngay: extract + chunk + embed -> ready/failed.
 	await rag_service.ingest_document(db, document)
 	await db.refresh(document)
 	return document

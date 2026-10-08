@@ -31,6 +31,8 @@ import {
   deleteDocument,
   getAccessToken,
   getChatHistory,
+  getDocumentContent,
+  getDocumentOverview,
   listDocuments,
   listFolders,
   sendChatMessage,
@@ -67,6 +69,13 @@ export const NotebookView: React.FC<NotebookViewProps> = ({ authVersion }) => {
   const selectedExtension =
     ACCEPTED_EXTENSIONS.find((ext) => selectedFile?.name.toLowerCase().endsWith(ext)) ?? null;
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
+  // Đoạn văn thật của tài liệu đang xem (null = chưa tải / không có), hiển thị ở tab Content.
+  const [contentParagraphs, setContentParagraphs] = useState<string[] | null>(null);
+  const [contentSearch, setContentSearch] = useState("");
+  // Tóm tắt AI theo document id: sinh theo yêu cầu rồi giữ trong state để đổi tab/tài liệu không phải gọi lại.
+  const [overviews, setOverviews] = useState<Record<string, { summary: string; questions: string[] }>>({});
+  const [isOverviewLoading, setIsOverviewLoading] = useState(false);
+  const [overviewError, setOverviewError] = useState<string | null>(null);
   const [chatInput, setChatInput] = useState("");
   // Model dùng cho Chat RAG — người dùng chuyển được giữa Gemini (cloud) và Ollama (local).
   const [chatProvider, setChatProvider] = useState<ChatProvider>(() => {
@@ -178,6 +187,10 @@ Meaning: To make people feel more comfortable in a social setting.`
     Promise.all([listFolders(), listDocuments()])
       .then(([backendFolders, backendDocuments]) => {
         setIsBackendConnected(true);
+        // Tóm tắt đã lưu trong DB: nạp sẵn để mở tài liệu là thấy ngay, không cần bấm Generate lại.
+        setOverviews(
+          Object.fromEntries(backendDocuments.items.filter((d) => d.overview).map((d) => [d.id, d.overview!])),
+        );
         setFolders([
           { id: "all", name: "All Materials", count: backendDocuments.total },
           ...backendFolders.map((folder) => ({ id: folder.id, name: folder.name, count: 0 })),
@@ -233,14 +246,19 @@ Meaning: To make people feel more comfortable in a social setting.`
     setViewMode("content");
     setChatMessages([]);
     setChatError(null);
+    setContentParagraphs(null);
+    setContentSearch("");
+    setOverviewError(null);
     if (!isBackendConnected || activeMaterial.isDemo || activeMaterial.status !== "ready") return;
+    // Lỗi tải nội dung thì giữ câu fallback cũ, không chặn chat.
+    getDocumentContent(activeMaterial.id).then(setContentParagraphs).catch(() => {});
     setIsChatLoading(true);
     getChatHistory(activeMaterial.id)
       .then(setChatMessages)
       .catch(() => setChatError("Could not load chat history."))
       .finally(() => setIsChatLoading(false));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeMaterialId]);
+  }, [activeMaterial.id, activeMaterial.status, isBackendConnected]);
 
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -263,6 +281,47 @@ Meaning: To make people feel more comfortable in a social setting.`
       setIsChatSending(false);
     }
   };
+
+  const handleGenerateOverview = async () => {
+    if (isOverviewLoading) return;
+    const documentId = activeMaterial.id;
+    setIsOverviewLoading(true);
+    setOverviewError(null);
+    try {
+      const result = await getDocumentOverview(documentId, chatProvider);
+      setOverviews((current) => ({ ...current, [documentId]: result }));
+    } catch (error) {
+      setOverviewError(error instanceof Error ? error.message : "Could not generate summary");
+    } finally {
+      setIsOverviewLoading(false);
+    }
+  };
+
+  // Chọn câu hỏi gợi ý: điền sẵn vào ô chat và chuyển sang tab Chat để người dùng bấm gửi.
+  const handleAskSuggestion = (question: string) => {
+    setChatInput(question);
+    setViewMode("chat");
+  };
+
+  // Tab Content: lọc đoạn văn chứa từ khoá (không phân biệt hoa thường) và tô sáng chỗ khớp.
+  const searchTerm = contentSearch.trim().toLowerCase();
+  const visibleParagraphs = (contentParagraphs ?? []).filter(
+    (paragraph) => !searchTerm || paragraph.toLowerCase().includes(searchTerm),
+  );
+  const highlight = (paragraph: string) => {
+    if (!searchTerm) return paragraph;
+    const lower = paragraph.toLowerCase();
+    const parts: React.ReactNode[] = [];
+    let cursor = 0;
+    for (let at = lower.indexOf(searchTerm); at !== -1; at = lower.indexOf(searchTerm, cursor)) {
+      parts.push(paragraph.slice(cursor, at));
+      parts.push(<mark key={at} className="bg-amber-200 rounded px-0.5">{paragraph.slice(at, at + searchTerm.length)}</mark>);
+      cursor = at + searchTerm.length;
+    }
+    parts.push(paragraph.slice(cursor));
+    return parts;
+  };
+  const activeOverview = overviews[activeMaterial.id];
 
   const handleSaveMaterial = async () => {
     // Backend chỉ nhận .docx/.doc/.pdf; text note thuần sẽ được hỗ trợ ở phase sau.
@@ -531,8 +590,73 @@ Meaning: To make people feel more comfortable in a social setting.`
 
             {viewMode === "content" ? (
               /* Document Content Body */
-              <div className="max-w-none text-slate-700 text-[17px] leading-[1.85] font-serif bg-paper-deep/50 p-6 rounded-2xl whitespace-pre-line">
-                {activeMaterial.content}
+              <div className="space-y-4">
+                {isChatAvailable && contentParagraphs?.length ? (
+                  <>
+                    {/* AI Summary + câu hỏi gợi ý */}
+                    <div className="rounded-2xl border border-indigo-100 bg-indigo-50/40 p-4">
+                      <div className="flex items-center justify-between gap-3">
+                        <p className="flex items-center gap-1.5 text-xs font-bold text-indigo-700">
+                          <Sparkles className="w-4 h-4" /> AI Summary
+                        </p>
+                        <button
+                          onClick={handleGenerateOverview}
+                          disabled={isOverviewLoading}
+                          className="px-3 py-1 text-xs font-bold rounded-full bg-indigo-700 text-white hover:bg-indigo-800 disabled:opacity-60 cursor-pointer"
+                        >
+                          {isOverviewLoading ? "Generating..." : activeOverview ? "Regenerate" : "Generate"}
+                        </button>
+                      </div>
+                      {overviewError && <p className="mt-2 text-xs text-rose-600">{overviewError}</p>}
+                      {activeOverview ? (
+                        <>
+                          <p className="mt-3 text-sm leading-relaxed text-slate-700">{activeOverview.summary}</p>
+                          <div className="mt-3 flex flex-wrap gap-2">
+                            {activeOverview.questions.map((question) => (
+                              <button
+                                key={question}
+                                onClick={() => handleAskSuggestion(question)}
+                                className="text-left px-3 py-1.5 text-xs font-medium rounded-full bg-white border border-indigo-100 text-indigo-800 hover:bg-indigo-100 cursor-pointer"
+                              >
+                                {question}
+                              </button>
+                            ))}
+                          </div>
+                        </>
+                      ) : (
+                        !isOverviewLoading && (
+                          <p className="mt-2 text-xs text-slate-500">Generate a short summary and suggested questions for this document.</p>
+                        )
+                      )}
+                    </div>
+
+                    {/* Tìm kiếm trong nội dung tài liệu */}
+                    <div className="relative">
+                      <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                      <input
+                        value={contentSearch}
+                        onChange={(e) => setContentSearch(e.target.value)}
+                        placeholder="Search in this document..."
+                        className="w-full pl-9 pr-24 py-2 text-sm rounded-xl border border-slate-200 bg-white focus:outline-none focus:border-indigo-400"
+                      />
+                      {searchTerm && (
+                        <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[11px] text-slate-400">
+                          {visibleParagraphs.length} / {contentParagraphs.length} paragraphs
+                        </span>
+                      )}
+                    </div>
+                  </>
+                ) : null}
+
+                <div className="max-w-none text-slate-700 text-[17px] leading-[1.85] font-serif bg-paper-deep/50 p-6 rounded-2xl whitespace-pre-line break-words">
+                  {contentParagraphs?.length
+                    ? visibleParagraphs.length
+                      ? visibleParagraphs.map((paragraph, index) => (
+                          <p key={index} className="mb-4 last:mb-0">{highlight(paragraph)}</p>
+                        ))
+                      : <p className="text-sm text-slate-400">No paragraph matches "{contentSearch}".</p>
+                    : activeMaterial.content}
+                </div>
               </div>
             ) : (
               /* NotebookLM-style RAG chat: hỏi đáp trực tiếp trên nội dung tài liệu thật */

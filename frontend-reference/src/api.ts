@@ -39,6 +39,8 @@ export interface NotebookDocument {
   status: string;
   folder_id: string | null;
   created_at: string;
+  // Tóm tắt AI đã lưu (null = chưa sinh).
+  overview?: { summary: string; questions: string[] } | null;
 }
 
 export interface DueVocabulary {
@@ -504,6 +506,19 @@ export function submitClassicAnswers(
   }>(`/api/reading/sessions/${sessionId}/submit`, {
     method: "POST",
     body: JSON.stringify({ answers, duration_seconds: durationSeconds }),
+  });
+}
+
+// Nội dung đã ingest của document (danh sách đoạn văn) cho tab Content.
+export function getDocumentContent(documentId: string) {
+  return request<string[]>(`/api/documents/${documentId}/content`);
+}
+
+// Tóm tắt AI + câu hỏi gợi ý cho 1 document (sinh theo yêu cầu, không lưu DB).
+export function getDocumentOverview(documentId: string, provider?: string) {
+  return request<{ summary: string; questions: string[] }>(`/api/documents/${documentId}/overview`, {
+    method: "POST",
+    body: JSON.stringify({ provider }),
   });
 }
 

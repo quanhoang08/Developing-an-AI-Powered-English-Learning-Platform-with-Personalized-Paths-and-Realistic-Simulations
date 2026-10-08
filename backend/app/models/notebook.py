@@ -53,6 +53,8 @@ class Document(Base):
 	starred: Mapped[bool] = mapped_column(Boolean, default=False)
 	language: Mapped[str] = mapped_column(String(10), default="en")
 	status: Mapped[str] = mapped_column(String(20), default="processing")
+	# Tóm tắt AI + câu hỏi gợi ý {"summary", "questions"}; NULL = chưa sinh.
+	overview: Mapped[dict] = mapped_column(JSONB, nullable=True)
 	created_at: Mapped[datetime] = mapped_column(
 		DateTime(timezone=True), server_default=text("now()")
 	)

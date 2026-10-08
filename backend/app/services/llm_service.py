@@ -473,6 +473,46 @@ document does not cover it. Answer in the language of the question, in at most t
 		raise AIServiceError(str(error)) from error
 
 
+_OVERVIEW_SCHEMA = {
+	"type": "object",
+	"properties": {
+		"summary": {"type": "string"},
+		"questions": {"type": "array", "items": {"type": "string"}},
+	},
+	"required": ["summary", "questions"],
+}
+_OVERVIEW_MAX_CHARS = 12000
+
+
+_VIETNAMESE_ONLY_CHARS = frozenset("ăâđêôơưĂÂĐÊÔƠƯạảãấầẩẫậắằẳẵặẹẻẽếềểễệỉịọỏốồổỗộớờởỡợụủứừửữựỳỵỷỹ")
+
+
+def detect_document_language(text: str) -> str:
+	"""'Vietnamese' nếu >=2% chữ cái là ký tự riêng của tiếng Việt, ngược lại 'English'."""
+	sample = text[:5000]
+	letters = [c for c in sample if c.isalpha()]
+	if not letters:
+		return "English"
+	vietnamese = sum(1 for c in letters if c in _VIETNAMESE_ONLY_CHARS)
+	return "Vietnamese" if vietnamese / len(letters) >= 0.02 else "English"
+
+
+async def summarize_document(document_text: str, provider: str | None = None) -> dict:
+	"""Tóm tắt ngắn + vài câu hỏi gợi ý cho tab Content của Notebook, cùng ngôn ngữ với tài liệu."""
+	language = detect_document_language(document_text)
+	prompt = f"""Read the document below and return JSON with:
+- "summary": a clear 3-5 sentence summary.
+- "questions": exactly 3 short questions a student could ask about this document, answerable from its text.
+Use ONLY the document.
+
+DOCUMENT:
+\"\"\"{document_text[:_OVERVIEW_MAX_CHARS]}\"\"\"
+
+IMPORTANT: write the summary and the questions in {language} (the language of the document)."""
+	result = await run_in_threadpool(_generate_json, prompt, _OVERVIEW_SCHEMA, provider)
+	return {"summary": result["summary"].strip(), "questions": [q.strip() for q in result["questions"] if q.strip()][:3]}
+
+
 async def generate_skim_scan_passage(topic: str, level: str) -> dict:
 	"""Sinh đoạn văn mới theo topic tự do (nhánh không gắn tài liệu người dùng)."""
 	prompt = f"""Write a short reading passage for an English learner at CEFR level

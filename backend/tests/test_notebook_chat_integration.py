@@ -103,6 +103,55 @@ def test_chat_answers_grounded_in_uploaded_document(chat_client: TestClient) -> 
     assert history.json()[1]["role"] == "assistant"
 
 
+def test_content_returns_ingested_paragraphs_and_blocks_other_user(chat_client: TestClient) -> None:
+    headers = login(chat_client)
+    document_id = upload_ready_document(chat_client, headers)
+
+    content = chat_client.get(f"/api/documents/{document_id}/content", headers=headers)
+    assert content.status_code == 200
+    assert "Eiffel" in " ".join(content.json())
+
+    hidden = chat_client.get(f"/api/documents/{document_id}/content", headers=login(chat_client))
+    assert hidden.status_code == 404
+
+
+def test_overview_is_generated_persisted_and_listed(
+    chat_client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    seen: dict = {}
+
+    async def fake_overview(text, provider=None):
+        seen["text"], seen["provider"] = text, provider
+        return {"summary": "Two landmarks.", "questions": ["Who designed it?"]}
+
+    # Mock riêng bước LLM để test nhanh và không tốn quota; ingest/DB/ownership vẫn chạy thật.
+    monkeypatch.setattr("app.services.llm_service.summarize_document", fake_overview)
+    headers = login(chat_client)
+    document_id = upload_ready_document(chat_client, headers)
+
+    created = chat_client.post(
+        f"/api/documents/{document_id}/overview", headers=headers, json={"provider": "ollama"}
+    )
+    assert created.status_code == 200
+    assert created.json() == {"summary": "Two landmarks.", "questions": ["Who designed it?"]}
+    assert "Eiffel" in seen["text"] and seen["provider"] == "ollama"
+
+    # Đã lưu DB: GET danh sách (như khi tải lại trang) trả overview kèm document.
+    listed = chat_client.get("/api/documents", headers=headers).json()["items"]
+    assert listed[0]["overview"]["summary"] == "Two landmarks."
+
+    other = chat_client.post(f"/api/documents/{document_id}/overview", headers=login(chat_client), json={})
+    assert other.status_code == 404
+
+
+def test_detect_document_language() -> None:
+    from app.services.llm_service import detect_document_language
+
+    assert detect_document_language("Kiến trúc nguyên khối và vi dịch vụ trong hệ thống LMS") == "Vietnamese"
+    assert detect_document_language("A Comparison of Monolithic and Microservices Architectures") == "English"
+    assert detect_document_language("") == "English"
+
+
 def test_chat_requires_document_ready(chat_client: TestClient) -> None:
     headers = login(chat_client)
     # Upload file .docx hỏng (không parse được) → status thật sẽ là "failed", không "ready".

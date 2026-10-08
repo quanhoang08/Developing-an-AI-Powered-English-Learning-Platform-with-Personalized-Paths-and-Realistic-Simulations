@@ -23,6 +23,16 @@ class DocumentUpdate(BaseModel):
 	starred: bool | None = None
 
 
+class DocumentOverviewRequest(BaseModel):
+	# Cùng quy ước provider như chat: "gemini" | "ollama" | None (mặc định settings).
+	provider: str | None = None
+
+
+class DocumentOverviewResponse(BaseModel):
+	summary: str
+	questions: list[str]
+
+
 class DocumentResponse(BaseModel):
 	# DTO dùng cho list/detail, phản ánh trạng thái xử lý để client polling.
 	id: UUID
@@ -35,6 +45,7 @@ class DocumentResponse(BaseModel):
 	status: str
 	folder_id: UUID | None
 	created_at: datetime
+	overview: DocumentOverviewResponse | None = None
 
 
 class DocumentListResponse(BaseModel):

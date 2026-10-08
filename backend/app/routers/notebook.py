@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Upload
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.dependencies import get_current_user
+from app.core.errors import ai_http_error
 from app.database import get_db
 from app.models.notebook import Document, NotebookChatMessage, NotebookFolder
 from app.models.user import User
@@ -12,12 +13,20 @@ from app.schemas.notebook import (
 	ChatMessageResponse,
 	ChatSendResponse,
 	DocumentListResponse,
+	DocumentOverviewRequest,
+	DocumentOverviewResponse,
 	DocumentResponse,
 	DocumentUpdate,
 	FolderCreate,
 	FolderResponse,
 )
-from app.services.notebook_chat_service import list_messages, send_message
+from app.services.llm_service import AIServiceError
+from app.services.notebook_chat_service import (
+	generate_overview,
+	list_chunk_texts,
+	list_messages,
+	send_message,
+)
 from app.services.notebook_service import (
 	create_document,
 	create_folder,
@@ -51,6 +60,7 @@ def document_response(document: Document) -> DocumentResponse:
 		status=document.status,
 		folder_id=document.folder_id,
 		created_at=document.created_at,
+		overview=document.overview,
 	)
 
 
@@ -191,6 +201,38 @@ def chat_message_response(message: NotebookChatMessage) -> ChatMessageResponse:
 		sources=message.sources,
 		created_at=message.created_at,
 	)
+
+
+@router.get("/documents/{document_id}/content", response_model=list[str])
+async def get_document_content(
+	document_id: UUID,
+	current_user: User = Depends(get_current_user),
+	db: AsyncSession = Depends(get_db),
+) -> list[str]:
+	# Trả các đoạn văn đã ingest để tab Content hiển thị nội dung tài liệu.
+	try:
+		return await list_chunk_texts(db, current_user.id, document_id)
+	except ValueError as error:
+		code = str(error)
+		raise HTTPException(status_code=_CHAT_ERROR_STATUS.get(code, 400), detail=code) from error
+
+
+@router.post("/documents/{document_id}/overview", response_model=DocumentOverviewResponse)
+async def post_document_overview(
+	document_id: UUID,
+	request: DocumentOverviewRequest,
+	current_user: User = Depends(get_current_user),
+	db: AsyncSession = Depends(get_db),
+) -> DocumentOverviewResponse:
+	# Sinh theo yêu cầu (nút "Generate"/"Regenerate") và lưu vào document.
+	try:
+		result = await generate_overview(db, current_user.id, document_id, request.provider)
+	except ValueError as error:
+		code = str(error)
+		raise HTTPException(status_code=_CHAT_ERROR_STATUS.get(code, 400), detail=code) from error
+	except AIServiceError as error:
+		raise ai_http_error(error) from error
+	return DocumentOverviewResponse(**result)
 
 
 @router.get("/documents/{document_id}/chat", response_model=list[ChatMessageResponse])

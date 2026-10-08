@@ -78,7 +78,9 @@ export const BasketballUploadButton: React.FC<BasketballUploadButtonProps> = ({ 
 const COURT_HEIGHT = 210;
 const BALL_R = 18;
 const RIM_Y = 70;
-const RIM_HALF = 30;
+const RIM_HALF = 48;
+// Hình rổ vẽ trong viewBox rộng 80 (vành 62): phóng theo RIM_HALF để hình khớp vùng tính điểm.
+const HOOP_W = (RIM_HALF * 2 * 80) / 62;
 const GRAVITY = 0.0018;
 // Vật lý chạy theo bước cố định để quỹ đạo chấm xem trước trùng khớp đường bay thật.
 const STEP_MS = 16;
@@ -203,7 +205,7 @@ export const BasketballCourt: React.FC<BasketballCourtProps> = ({ fileLabel, dis
         }
       }
       // Vào rổ: tâm bóng đi XUỐNG qua mặt vành, nằm lọt giữa 2 mép.
-      if (s.vy > 0 && s.y < RIM_Y && ny >= RIM_Y && nx > rimLeft + BALL_R * 0.4 && nx < rimRight - BALL_R * 0.4) {
+      if (s.vy > 0 && s.y < RIM_Y && ny >= RIM_Y && nx > rimLeft && nx < rimRight) {
         s.scored = true;
         s.vx = 0;
         nx = width / 2;
@@ -300,7 +302,7 @@ export const BasketballCourt: React.FC<BasketballCourtProps> = ({ fileLabel, dis
         style={{ height: COURT_HEIGHT }}
       >
         {/* Bảng rổ nằm sau bóng. */}
-        <svg viewBox="0 0 80 40" className="absolute w-20 h-10 pointer-events-none" style={{ left: "calc(50% - 40px)", top: RIM_Y - 36 }} aria-hidden="true">
+        <svg viewBox="0 0 80 40" className="absolute pointer-events-none" style={{ width: HOOP_W, left: `calc(50% - ${HOOP_W / 2}px)`, top: RIM_Y - 36 * (HOOP_W / 80) }} aria-hidden="true">
           <rect x="14" y="0" width="52" height="34" rx="3" fill="#fffdf8" stroke="#475569" strokeWidth="2" />
           <rect x="29" y="14" width="22" height="16" fill="none" stroke="#e85d38" strokeWidth="1.6" />
         </svg>
@@ -336,8 +338,8 @@ export const BasketballCourt: React.FC<BasketballCourtProps> = ({ fileLabel, dis
         {/* Vành + lưới vẽ SAU bóng để bóng trông như lọt vào trong rổ. */}
         <svg
           viewBox="0 0 80 34"
-          className="absolute w-20 pointer-events-none"
-          style={{ left: "calc(50% - 40px)", top: RIM_Y - 2, height: 34 }}
+          className="absolute pointer-events-none"
+          style={{ width: HOOP_W, left: `calc(50% - ${HOOP_W / 2}px)`, top: RIM_Y - 2 * (HOOP_W / 80) }}
           aria-hidden="true"
         >
           <rect x="9" y="0.5" width="62" height="3.5" rx="1.7" fill="#e85d38" />

@@ -1,0 +1,16 @@
+2026-10-08T07:56:29 round 1 part 7 have 13 todo 5
+  gemini ->   dß+½ng. Xong Part 7: th+¬m 0 -æ¦ín vß+ï
+  ollama -> WHERE toeic_bank.part = %(part_1)s::SMALLINT   LLM lß+ùi (ollama_timeout) lß¦ºn 1: timed out
+2026-10-08T08:07:56 round 1 part 6 have 3 todo 2
+  gemini ->   dß+½ng. Xong Part 6: th+¬m 0 -æ¦ín vß+ï
+  ollama ->   Part 6: gß+ìi 18, -æ+ú th+¬m 0/2 Xong Part 6: th+¬m 0 -æ¦ín vß+ï
+2026-10-08T08:25:22 round 1 part 5 have 24 todo 16
+  gemini -> FROM toeic_bank  WHERE toeic_bank.part = %(part_1)s::SMALLINT
+  ollama -> WHERE toeic_bank.part = %(part_1)s::SMALLINT   Part 5: gß+ìi 1, -æ+ú th+¬m 1/16
+2026-10-08T08:37:52 round 1 part 3 have 8 todo 5
+  gemini ->   dß+½ng. Xong Part 3: th+¬m 0 -æ¦ín vß+ï
+  ollama ->   Part 3: gß+ìi 19, -æ+ú th+¬m 3/5   LLM lß+ùi (ollama_timeout) lß¦ºn 1: timed out
+2026-10-08T09:10:01 round 1 part 2 have 10 todo 24
+  gemini -> WHERE toeic_bank.part = %(part_1)s::SMALLINT   LLM lß+ùi (ai_quota_exceeded) lß¦ºn 1: 429 You exceeded your current quota, please check your plan and billing details.
+  ollama ->   LLM lß+ùi (ai_bad_output) lß¦ºn 2: Expecting ',' delimiter: line 119 column 23 (char 3433) Xong Part 2: th+¬m 2 -æ¦ín vß+ï
+2026-10-08T09:38:54 round 2 part 7 have 16 todo 2

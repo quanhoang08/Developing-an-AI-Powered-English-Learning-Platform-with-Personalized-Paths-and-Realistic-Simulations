@@ -4,7 +4,7 @@ import uuid
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.notebook import Document, NotebookChatMessage
+from app.models.notebook import Document, DocumentChunk, NotebookChatMessage
 from app.services import llm_service, rag_service
 
 
@@ -20,6 +20,31 @@ async def _get_owned_ready_document(
 	if document.status != "ready":
 		raise ValueError("document_not_ready")
 	return document
+
+
+async def list_chunk_texts(
+	db: AsyncSession, user_id: uuid.UUID, document_id: uuid.UUID
+) -> list[str]:
+	# Nội dung tab Content: các chunk đã ingest theo thứ tự gốc (cùng ownership check với chat).
+	await _get_owned_ready_document(db, user_id, document_id)
+	result = await db.execute(
+		select(DocumentChunk.content)
+		.where(DocumentChunk.document_id == document_id)
+		.order_by(DocumentChunk.chunk_index.asc())
+	)
+	return list(result.scalars().all())
+
+
+async def generate_overview(
+	db: AsyncSession, user_id: uuid.UUID, document_id: uuid.UUID, provider: str | None
+) -> dict:
+	# Sinh tóm tắt rồi lưu vào documents.overview để tải lại trang vẫn còn (Regenerate ghi đè).
+	document = await _get_owned_ready_document(db, user_id, document_id)
+	chunks = await list_chunk_texts(db, user_id, document_id)
+	overview = await llm_service.summarize_document("\n\n".join(chunks), provider)
+	document.overview = overview
+	await db.commit()
+	return overview
 
 
 async def list_messages(

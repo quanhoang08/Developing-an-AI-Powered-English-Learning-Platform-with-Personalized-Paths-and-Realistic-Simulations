@@ -22,6 +22,51 @@ import { MnemonicsPanel } from "./MnemonicsPanel";
 import { WordlistPanel } from "./WordlistPanel";
 import { AdaptTextPanel } from "./AdaptTextPanel";
 
+// Chọn từ khi có hàng trăm từ đến hạn: ô tìm kiếm + danh sách cuộn giới hạn, từ đã chọn hiện thành hàng riêng phía trên.
+const SHOW = 40;
+const WordPicker: React.FC<{
+  items: DueVocabulary[];
+  selected: string[];
+  onToggle: (id: string) => void;
+  multi?: boolean;
+  limit?: number;
+  onRandom?: () => void;
+}> = ({ items, selected, onToggle, multi, limit, onRandom }) => {
+  const [q, setQ] = useState("");
+  const needle = q.trim().toLowerCase();
+  const matches = items.filter((i) => !needle || i.term.toLowerCase().includes(needle) || (i.definition ?? "").toLowerCase().includes(needle));
+  const chosen = items.filter((i) => selected.includes(i.id));
+  return (
+    <div className="space-y-2">
+      <div className="flex gap-2">
+        <input type="search" value={q} onChange={(e) => setQ(e.target.value)} aria-label="Search your words" placeholder={`Search ${items.length} words…`}
+          className="flex-1 px-3 py-2 rounded-xl ring-1 ring-slate-900/10 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/60" />
+        {multi && onRandom && (
+          <button onClick={onRandom} className="px-3 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-xs font-bold text-slate-700 cursor-pointer">Random 8</button>
+        )}
+      </div>
+      {chosen.length > 0 && (
+        <div className="flex flex-wrap items-center gap-1.5">
+          {multi && <span className="text-xs text-slate-500">Selected {chosen.length}{limit ? `/${limit}` : ""}:</span>}
+          {chosen.map((i) => (
+            <button key={i.id} onClick={() => onToggle(i.id)} aria-label={`Remove ${i.term}`} className="px-2.5 py-1 rounded-full bg-indigo-700 text-white text-xs font-bold cursor-pointer">{i.term} ×</button>
+          ))}
+        </div>
+      )}
+      <div className="max-h-48 overflow-y-auto rounded-xl bg-slate-50 p-2 flex flex-wrap gap-1.5">
+        {matches.slice(0, SHOW).map((i) => (
+          <button key={i.id} onClick={() => onToggle(i.id)} aria-pressed={selected.includes(i.id)}
+            className={`px-2.5 py-1 rounded-full text-xs font-bold cursor-pointer ${selected.includes(i.id) ? "bg-indigo-700 text-white" : "bg-white ring-1 ring-slate-900/10 text-slate-700 hover:bg-slate-100"}`}>
+            {i.term}
+          </button>
+        ))}
+        {matches.length === 0 && <p className="text-xs text-slate-500 px-1">No word matches "{q}".</p>}
+        {matches.length > SHOW && <p className="w-full text-xs text-slate-500 px-1 pt-1">Showing {SHOW} of {matches.length} — type to narrow down.</p>}
+      </div>
+    </div>
+  );
+};
+
 export const ReadingExtrasPanel: React.FC = () => {
   const [term, setTerm] = useState("");
   const [attempt, setAttempt] = useState<GuessContextAttempt | null>(null);
@@ -186,20 +231,8 @@ export const ReadingExtrasPanel: React.FC = () => {
           <p className="text-sm text-slate-500">No words due for review — save some words while reading first.</p>
         ) : (
           <>
-            <div className="flex flex-wrap gap-2">
-              {vocab.map((item) => (
-                <button
-                  key={item.id}
-                  onClick={() => toggle(item.id)}
-                  aria-pressed={selected.includes(item.id)}
-                  className={`px-3 py-1.5 rounded-full text-xs font-bold cursor-pointer ${
-                    selected.includes(item.id) ? "bg-indigo-700 text-white" : "bg-slate-100 text-slate-700 hover:bg-slate-200"
-                  }`}
-                >
-                  {item.term}
-                </button>
-              ))}
-            </div>
+            <WordPicker items={vocab} selected={selected} onToggle={toggle} multi limit={15}
+              onRandom={() => setSelected([...vocab].sort(() => Math.random() - 0.5).slice(0, 8).map((x) => x.id))} />
             <button
               onClick={makeStory}
               disabled={busy !== null || selected.length === 0}
@@ -233,24 +266,8 @@ export const ReadingExtrasPanel: React.FC = () => {
           <p className="text-sm text-slate-500">No words due for review — save some words while reading first.</p>
         ) : (
           <>
-            <div className="flex flex-wrap gap-2">
-              {vocab.map((item) => (
-                <button
-                  key={item.id}
-                  onClick={() => {
-                    setSentenceWordId(item.id);
-                    setVerdict(null);
-                    setFamily(null);
-                  }}
-                  aria-pressed={sentenceWordId === item.id}
-                  className={`px-3 py-1.5 rounded-full text-xs font-bold cursor-pointer ${
-                    sentenceWordId === item.id ? "bg-indigo-700 text-white" : "bg-slate-100 text-slate-700 hover:bg-slate-200"
-                  }`}
-                >
-                  {item.term}
-                </button>
-              ))}
-            </div>
+            <WordPicker items={vocab} selected={sentenceWordId ? [sentenceWordId] : []}
+              onToggle={(id) => { setSentenceWordId(id === sentenceWordId ? null : id); setVerdict(null); setFamily(null); }} />
             {sentenceWordId && (
               <div className="space-y-3">
                 <button

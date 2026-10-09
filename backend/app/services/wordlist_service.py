@@ -36,7 +36,7 @@ def _load(name: str) -> tuple[tuple[str, ...], dict[str, str]]:
 
 @lru_cache(maxsize=1)
 def _topics() -> dict[str, dict]:
-	"""Từ vựng theo chủ đề do tác giả đề tài tự soạn (topics.json): {id: {title, words: [[từ, nghĩa tiếng Việt]]}}."""
+	"""Từ vựng theo chủ đề do tác giả đề tài tự soạn (topics.json): {id: {title, words: [[từ, nghĩa tiếng Việt, (tùy chọn) câu ví dụ]]}}."""
 	return json.loads((_DIR / "topics.json").read_text(encoding="utf-8"))
 
 
@@ -47,7 +47,7 @@ async def topic_overview(db: AsyncSession, user_id: uuid.UUID) -> list[dict]:
 		{
 			"id": topic_id,
 			"title": topic["title"],
-			"words": [{"term": term, "meaning_vi": vi, "saved": term.lower() in known} for term, vi in topic["words"]],
+			"words": [{"term": term, "meaning_vi": vi, "saved": term.lower() in known} for term, vi, *_ in topic["words"]],
 		}
 		for topic_id, topic in _topics().items()
 	]
@@ -60,11 +60,11 @@ async def add_topic_words(db: AsyncSession, user_id: uuid.UUID, topic_id: str) -
 		raise ValueError("topic_not_found")
 	known = {t.lower() for t in await db.scalars(select(VocabItem.term).where(VocabItem.user_id == user_id))}
 	created = []
-	for term, meaning_vi in topic["words"]:
+	for term, meaning_vi, *example in topic["words"]:
 		if term.lower() in known:
 			continue
 		try:
-			created.append(await create_vocab_item(db, user_id, term, meaning_vi, None, None, None, None, None, [], [], unit_label=topic["title"]))
+			created.append(await create_vocab_item(db, user_id, term, meaning_vi, None, None, None, None, example[0] if example else None, [], [], unit_label=topic["title"]))
 		except ValueError:
 			continue  # trùng đồng thời: bỏ từ này
 	return created

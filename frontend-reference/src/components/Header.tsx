@@ -1,4 +1,5 @@
 import React from "react";
+import { motion } from "motion/react";
 import { Search, Flame, Trophy, Bell, Command, Menu, Snowflake } from "lucide-react";
 import { ActiveTab } from "../types";
 import { useLearningStats } from "../stats";
@@ -127,8 +128,18 @@ export const Header: React.FC<HeaderProps> = ({
           className="relative p-2 rounded-full text-slate-500 hover:bg-slate-900/5 hover:text-slate-700 transition-colors"
           aria-label="Notifications"
         >
-          <Bell className="w-4 h-4" />
+          {/* Chuông lắc định kỳ + khi rê chuột (ý tưởng BellNova, infiwebcraft.com) */}
+          <motion.span
+            className="block"
+            style={{ transformOrigin: "50% 15%" }}
+            animate={{ rotate: [0, -16, 14, -10, 6, 0] }}
+            whileHover={{ rotate: [0, -16, 14, -10, 6, 0], transition: { duration: 0.7 } }}
+            transition={{ duration: 0.9, repeat: Infinity, repeatDelay: 7 }}
+          >
+            <Bell className="w-4 h-4" />
+          </motion.span>
           <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-purple-500 rounded-full ring-2 ring-paper"></span>
+          <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-purple-400 rounded-full animate-ping" aria-hidden="true"></span>
         </button>
 
         {/* Kết nối phiên đăng nhập của giao diện với FastAPI backend. */}

@@ -14,3 +14,54 @@
   gemini -> WHERE toeic_bank.part = %(part_1)s::SMALLINT   LLM lﬂ+˘i (ai_quota_exceeded) lﬂ¶∫n 1: 429 You exceeded your current quota, please check your plan and billing details.
   ollama ->   LLM lﬂ+˘i (ai_bad_output) lﬂ¶∫n 2: Expecting ',' delimiter: line 119 column 23 (char 3433) Xong Part 2: th+¨m 2 -Ê¶Ìn vﬂ+Ô
 2026-10-08T09:38:54 round 2 part 7 have 16 todo 2
+  gemini -> WHERE toeic_bank.part = %(part_1)s::SMALLINT   LLM lﬂ+˘i (ai_quota_exceeded) lﬂ¶∫n 1: 429 You exceeded your current quota, please check your plan and billing details.
+  ollama ->   dﬂ+Ωng. Xong Part 7: th+¨m 0 -Ê¶Ìn vﬂ+Ô
+2026-10-08T09:50:58 round 2 part 6 have 3 todo 2
+  gemini -> WHERE toeic_bank.part = %(part_1)s::SMALLINT   LLM lﬂ+˘i (ai_quota_exceeded) lﬂ¶∫n 1: 429 You exceeded your current quota, please check your plan and billing details.
+  ollama -> FROM toeic_bank  WHERE toeic_bank.part = %(part_1)s::SMALLINT
+2026-10-08T09:54:01 round 2 part 5 have 25 todo 15
+  gemini ->   dﬂ+Ωng. Xong Part 5: th+¨m 0 -Ê¶Ìn vﬂ+Ô
+  ollama ->   Part 5: gﬂ+Ïi 1, -Ê+˙ th+¨m 2/15 Xong Part 5: th+¨m 2 -Ê¶Ìn vﬂ+Ô
+2026-10-08T10:14:53 round 2 part 3 have 11 todo 2
+  gemini ->   dﬂ+Ωng. Xong Part 3: th+¨m 0 -Ê¶Ìn vﬂ+Ô
+  ollama ->   Part 3: gﬂ+Ïi 18, -Ê+˙ th+¨m 1/2 Xong Part 3: th+¨m 1 -Ê¶Ìn vﬂ+Ô
+2026-10-08T10:36:18 round 2 part 2 have 12 todo 22
+  gemini ->   dﬂ+Ωng. Xong Part 2: th+¨m 0 -Ê¶Ìn vﬂ+Ô
+  ollama ->   Part 2: gﬂ+Ïi 1, -Ê+˙ th+¨m 1/22 Xong Part 2: th+¨m 1 -Ê¶Ìn vﬂ+Ô
+2026-10-08T11:03:13 round 3 part 7 have 16 todo 2
+  gemini ->   dﬂ+Ωng. Xong Part 7: th+¨m 0 -Ê¶Ìn vﬂ+Ô
+  ollama ->   dﬂ+Ωng. Xong Part 7: th+¨m 0 -Ê¶Ìn vﬂ+Ô
+2026-10-08T11:21:38 round 3 part 6 have 3 todo 2
+  gemini ->   dﬂ+Ωng. Xong Part 6: th+¨m 0 -Ê¶Ìn vﬂ+Ô
+  ollama ->   Part 6: gﬂ+Ïi 18, -Ê+˙ th+¨m 1/2 Xong Part 6: th+¨m 1 -Ê¶Ìn vﬂ+Ô
+2026-10-08T11:38:51 round 3 part 5 have 27 todo 13
+  gemini ->   dﬂ+Ωng. Xong Part 5: th+¨m 0 -Ê¶Ìn vﬂ+Ô
+  ollama ->   Part 5: gﬂ+Ïi 1, -Ê+˙ th+¨m 2/13 Xong Part 5: th+¨m 2 -Ê¶Ìn vﬂ+Ô
+2026-10-08T12:00:01 round 3 part 3 have 12 todo 1
+  gemini ->   dﬂ+Ωng. Xong Part 3: th+¨m 0 -Ê¶Ìn vﬂ+Ô
+  ollama ->   Part 3: gﬂ+Ïi 9, -Ê+˙ th+¨m 1/1 Xong Part 3: th+¨m 1 -Ê¶Ìn vﬂ+Ô
+2026-10-08T12:14:18 round 3 part 2 have 13 todo 21
+  gemini ->   dﬂ+Ωng. Xong Part 2: th+¨m 0 -Ê¶Ìn vﬂ+Ô
+  ollama ->   Part 2: gﬂ+Ïi 1, -Ê+˙ th+¨m 2/21 Xong Part 2: th+¨m 2 -Ê¶Ìn vﬂ+Ô
+2026-10-08T12:39:05 round 4 part 7 have 16 todo 2
+  gemini ->   dﬂ+Ωng. Xong Part 7: th+¨m 0 -Ê¶Ìn vﬂ+Ô
+2026-10-09T08:57:17 round 1 part 7 have 16 todo 2
+  gemini ->   dﬂ+Ωng. Xong Part 7: th+¨m 0 -Ê¶Ìn vﬂ+Ô
+  ollama ->   dﬂ+Ωng. Xong Part 7: th+¨m 0 -Ê¶Ìn vﬂ+Ô
+2026-10-09T09:28:30 round 1 part 6 have 4 todo 1
+  gemini ->   dﬂ+Ωng. Xong Part 6: th+¨m 0 -Ê¶Ìn vﬂ+Ô
+  ollama ->   Part 6: gﬂ+Ïi 11, -Ê+˙ th+¨m 0/1 Xong Part 6: th+¨m 0 -Ê¶Ìn vﬂ+Ô
+2026-10-09T09:42:50 round 1 part 5 have 29 todo 11
+  gemini ->   dﬂ+Ωng. Xong Part 5: th+¨m 0 -Ê¶Ìn vﬂ+Ô
+  ollama ->   Part 5: gﬂ+Ïi 5, -Ê+˙ th+¨m 1/11 Xong Part 5: th+¨m 1 -Ê¶Ìn vﬂ+Ô
+2026-10-09T09:58:21 round 1 part 2 have 15 todo 19
+  gemini ->   LLM lﬂ+˘i (ai_quota_exceeded) lﬂ¶∫n 3: 429 You exceeded your current quota, please check your plan and billing details.   LLM lﬂ+˘i (ai_quota_exceeded) lﬂ¶∫n 4: 429 You exceeded your current quota, please check your plan and billing details.
+  ollama ->   Part 2: gﬂ+Ïi 1, -Ê+˙ th+¨m 1/19   LLM lﬂ+˘i (ai_bad_output) lﬂ¶∫n 1: Expecting property name enclosed in double quotes: line 124 column 1 (char 3317)
+2026-10-09T10:14:53 round 2 part 7 have 16 todo 2
+  gemini ->   dﬂ+Ωng. Xong Part 7: th+¨m 0 -Ê¶Ìn vﬂ+Ô
+  ollama ->   dﬂ+Ωng. Xong Part 7: th+¨m 0 -Ê¶Ìn vﬂ+Ô
+2026-10-09T10:41:15 round 2 part 6 have 4 todo 1
+  gemini -> WHERE toeic_bank.part = %(part_1)s::SMALLINT   LLM lﬂ+˘i (ai_quota_exceeded) lﬂ¶∫n 1: 429 You exceeded your current quota, please check your plan and billing details.
+  ollama ->   Part 6: gﬂ+Ïi 12, -Ê+˙ th+¨m 0/1 Xong Part 6: th+¨m 0 -Ê¶Ìn vﬂ+Ô
+2026-10-09T10:51:19 round 2 part 5 have 30 todo 10
+  gemini ->   dﬂ+Ωng. Xong Part 5: th+¨m 0 -Ê¶Ìn vﬂ+Ô

@@ -31,7 +31,7 @@
 -- dùng để khởi tạo DB (2 file có thể tạm lệch nhau về câu chữ/tổ chức, nhưng
 -- file .sql ở đây luôn là nguồn đúng về mặt DDL thực thi được).
 --
--- Sinh lần cuối: 2026-10-04, khớp Alembic revision 20261004_0032 (thêm activity_log: XP theo tuần + tự chấm bài giao; mnemonic_reports: báo cáo mẹo nhớ; trước đó 0031 gỡ cột phụ huynh, 0030 bạn bè/lớp học/nhật ký giọng nói, 0028 toeic_bank).
+-- Sinh lần cuối: 2026-10-08, khớp Alembic revision 20261008_0034 (thêm documents.overview: tóm tắt AI + câu hỏi gợi ý; trước đó 0033 nới source_type thêm doc/pdf, 0032 activity_log + mnemonic_reports, 0031 gỡ cột phụ huynh, 0030 bạn bè/lớp học/nhật ký giọng nói, 0028 toeic_bank).
 -- ============================================================================
 
 
@@ -110,15 +110,6 @@ CREATE TABLE public.activity_log (
     activity character varying(40) NOT NULL,
     xp integer NOT NULL,
     created_at timestamp with time zone DEFAULT now() NOT NULL
-);
-
-
---
--- Name: alembic_version; Type: TABLE; Schema: public; Owner: -
---
-
-CREATE TABLE public.alembic_version (
-    version_num character varying(32) NOT NULL
 );
 
 
@@ -311,7 +302,8 @@ CREATE TABLE public.documents (
     language character varying(10) DEFAULT 'en'::character varying,
     status character varying(20) DEFAULT 'processing'::character varying,
     created_at timestamp with time zone DEFAULT now(),
-    CONSTRAINT chk_documents_source_type_valid CHECK (((source_type)::text = ANY ((ARRAY['audio'::character varying, 'docx'::character varying])::text[]))),
+    overview jsonb,
+    CONSTRAINT chk_documents_source_type_valid CHECK (((source_type)::text = ANY ((ARRAY['audio'::character varying, 'docx'::character varying, 'doc'::character varying, 'pdf'::character varying])::text[]))),
     CONSTRAINT chk_documents_status_valid CHECK (((status)::text = ANY ((ARRAY['processing'::character varying, 'ready'::character varying, 'failed'::character varying])::text[])))
 );
 
@@ -962,14 +954,6 @@ CREATE TABLE public.writing_submissions (
 
 ALTER TABLE ONLY public.activity_log
     ADD CONSTRAINT activity_log_pkey PRIMARY KEY (id);
-
-
---
--- Name: alembic_version alembic_version_pkc; Type: CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.alembic_version
-    ADD CONSTRAINT alembic_version_pkc PRIMARY KEY (version_num);
 
 
 --

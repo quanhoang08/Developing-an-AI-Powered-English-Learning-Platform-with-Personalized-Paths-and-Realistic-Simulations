@@ -91,11 +91,11 @@ def test_reported_mnemonic_hidden_after_threshold(vocab_client: TestClient) -> N
 def test_vocab_topics_add_without_llm(vocab_client: TestClient) -> None:
 	h = login(vocab_client)
 	topics = {t["id"]: t for t in vocab_client.get("/api/vocab/topics", headers=h).json()}
-	assert {"economy", "health", "environment"} <= set(topics) and not any(w["saved"] for w in topics["economy"]["words"])
-	added = vocab_client.post("/api/vocab/topics/economy/add", headers=h)
-	assert added.status_code == 200 and len(added.json()) == len(topics["economy"]["words"])
-	assert vocab_client.post("/api/vocab/topics/economy/add", headers=h).json() == []
-	assert all(w["saved"] for t in vocab_client.get("/api/vocab/topics", headers=h).json() if t["id"] == "economy" for w in t["words"])
+	assert {"ff_economy", "ff_health", "ff_environment"} <= set(topics) and not any(w["saved"] for w in topics["ff_economy"]["words"])
+	added = vocab_client.post("/api/vocab/topics/ff_economy/add", headers=h)
+	assert added.status_code == 200 and len(added.json()) == len(topics["ff_economy"]["words"])
+	assert vocab_client.post("/api/vocab/topics/ff_economy/add", headers=h).json() == []
+	assert all(w["saved"] for t in vocab_client.get("/api/vocab/topics", headers=h).json() if t["id"] == "ff_economy" for w in t["words"])
 	assert vocab_client.post("/api/vocab/topics/nope/add", headers=h).status_code == 404
 
 

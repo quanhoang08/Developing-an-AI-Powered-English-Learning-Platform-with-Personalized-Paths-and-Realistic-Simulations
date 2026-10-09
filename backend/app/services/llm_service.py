@@ -482,6 +482,7 @@ _OVERVIEW_SCHEMA = {
 	"required": ["summary", "questions"],
 }
 _OVERVIEW_MAX_CHARS = 12000
+_OVERVIEW_TEMPERATURE = 0.2
 
 
 _VIETNAMESE_ONLY_CHARS = frozenset("ăâđêôơưĂÂĐÊÔƠƯạảãấầẩẫậắằẳẵặẹẻẽếềểễệỉịọỏốồổỗộớờởỡợụủứừửữựỳỵỷỹ")
@@ -509,7 +510,8 @@ DOCUMENT:
 \"\"\"{document_text[:_OVERVIEW_MAX_CHARS]}\"\"\"
 
 IMPORTANT: write the summary and the questions in {language} (the language of the document)."""
-	result = await run_in_threadpool(_generate_json, prompt, _OVERVIEW_SCHEMA, provider)
+	# Temperature thấp: tóm tắt bám tài liệu, tránh model nhỏ (qwen 7B) sinh chữ hỏng khi lấy mẫu ngẫu nhiên.
+	result = await run_in_threadpool(_generate_json, prompt, _OVERVIEW_SCHEMA, provider, _OVERVIEW_TEMPERATURE)
 	return {"summary": result["summary"].strip(), "questions": [q.strip() for q in result["questions"] if q.strip()][:3]}
 
 

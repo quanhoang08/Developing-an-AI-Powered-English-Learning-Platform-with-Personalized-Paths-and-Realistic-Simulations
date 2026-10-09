@@ -5,6 +5,7 @@
 // useLearningStats.
 import React, { useState } from "react";
 import { motion } from "motion/react";
+import { TiltCard } from "./TiltCard";
 import { ActiveTab } from "../types";
 import { CatMascot, CatMood } from "./CatMascot";
 import { CountUp } from "./CountUp";
@@ -218,7 +219,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
       {/* Stats — lưới bất đối xứng 5/4/3 thay vì 3 thẻ bằng nhau */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
         {/* Streak: lưới 30 chấm, 14 chấm đã sáng */}
-        <motion.div variants={item} className="surface surface-lift lg:col-span-5 p-6">
+        <TiltCard variants={item} className="surface lg:col-span-5 p-6">
           <div className="flex items-start justify-between mb-5">
             <div>
               <p className="text-sm text-slate-500 italic mb-1">Current streak</p>
@@ -274,7 +275,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               Your {stats.restorableStreak}-day streak broke. Pass a 10-question quiz in Progress today to restore it.
             </p>
           )}
-        </motion.div>
+        </TiltCard>
 
         {/* Spaced repetition: nền màu đặc, không viền */}
         <motion.div
@@ -300,7 +301,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         </motion.div>
 
         {/* Mastery: vòng tiến độ */}
-        <motion.div variants={item} className="surface surface-lift lg:col-span-3 p-6 flex flex-col justify-between">
+        <TiltCard variants={item} className="surface lg:col-span-3 p-6 flex flex-col justify-between">
           <div className="flex items-center gap-4">
             <div className="relative w-20 h-20 shrink-0">
               <svg viewBox="0 0 80 80" className="w-full h-full -rotate-90" aria-hidden="true">
@@ -337,7 +338,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             View skill radar
             <ArrowUpRight className="w-4 h-4 transition-transform group-hover:translate-x-0.5 group-hover:-translate-y-0.5" />
           </button>
-        </motion.div>
+        </TiltCard>
       </div>
 
       {/* Weekly breakdown: một thanh chia tỷ lệ + chú giải, thay cho 4 ô bằng nhau */}

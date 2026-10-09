@@ -1,7 +1,8 @@
 // Từ vựng theo chủ đề thi: độ phủ NAWL (IELTS) / TSL (TOEIC) của từ đã lưu, gợi ý thêm từ, và đo độ phủ của một đoạn văn.
 // Dữ liệu danh sách: Browne et al., newgeneralservicelist.com, CC BY-SA 4.0.
 import React, { useEffect, useState } from "react";
-import { Loader2 } from "lucide-react";
+import { Check, Loader2 } from "lucide-react";
+import { AnimatePresence, motion } from "motion/react";
 import { UnitImportResult, VocabTopic, WordlistCoverage, WordlistName, addVocabTopic, addWordlistWords, listVocabTopics, getWordlistCoverage, getVocabUnitWords, getVocabUnits, getWordlistTextCoverage, importVocabUnit } from "../api";
 
 const TABS: { id: WordlistName; label: string }[] = [
@@ -10,39 +11,77 @@ const TABS: { id: WordlistName; label: string }[] = [
 ];
 
 // Từ vựng theo chủ đề (kinh tế, y tế...): danh sách tự soạn có sẵn nghĩa tiếng Việt, thêm cả chủ đề vào lịch ôn bằng 1 nút.
+const PAGE = 24;
 const TopicWords: React.FC = () => {
   const [topics, setTopics] = useState<VocabTopic[]>([]);
   const [openId, setOpenId] = useState("");
   const [note, setNote] = useState("");
+  const [q, setQ] = useState("");
+  const [page, setPage] = useState(0);
+  const [justAdded, setJustAdded] = useState<number | null>(null); // số từ vừa thêm: nút "biến hình" thành dấu ✓ ~2 giây
   const load = () => listVocabTopics().then(setTopics).catch((e) => setNote(e instanceof Error ? e.message : "Could not load topics."));
   useEffect(() => { void load(); }, []);
+  const needle = q.trim().toLowerCase();
+  const hit = (w: VocabTopic["words"][number]) => !needle || w.term.toLowerCase().includes(needle) || w.meaning_vi.toLowerCase().includes(needle);
+  // Có từ khoá: chỉ giữ chủ đề có tên hoặc có từ khớp; chủ đề đang mở chỉ liệt kê từ khớp.
+  const shown = topics.filter((t) => !needle || t.title.toLowerCase().includes(needle) || t.words.some(hit));
   const open = topics.find((t) => t.id === openId);
   const missing = open ? open.words.filter((w) => !w.saved).length : 0;
+  const words = open ? open.words.filter(hit) : [];
+  const pages = Math.max(1, Math.ceil(words.length / PAGE));
+  const cur = Math.min(page, pages - 1);
   return (
     <div className="rounded-2xl bg-slate-50 p-4 space-y-3 text-sm">
-      <h4 className="font-bold text-slate-900">Words by topic</h4>
-      <div className="flex flex-wrap gap-2">
-        {topics.map((t) => (
-          <button key={t.id} aria-pressed={t.id === openId} onClick={() => { setOpenId(t.id); setNote(""); }}
+      <h4 className="font-bold text-slate-900">Words by topic <span className="font-normal text-slate-500">({topics.length} topics)</span></h4>
+      <input type="search" value={q} onChange={(e) => { setQ(e.target.value); setPage(0); }} placeholder="Search topics or words (English or Vietnamese)…" aria-label="Search topics or words"
+        className="w-full rounded-xl bg-white ring-1 ring-slate-900/10 px-3 py-2 text-sm outline-none focus:ring-slate-900/40" />
+      <div className="flex flex-wrap gap-2 max-h-40 overflow-y-auto">
+        {shown.map((t) => (
+          <button key={t.id} aria-pressed={t.id === openId} onClick={() => { setOpenId(t.id); setPage(0); setNote(""); }}
             className={`px-3 py-1.5 rounded-full text-xs font-bold cursor-pointer ${t.id === openId ? "bg-slate-900 text-white" : "bg-white ring-1 ring-slate-900/10 text-slate-700"}`}>
             {t.title} ({t.words.filter((w) => w.saved).length}/{t.words.length})
           </button>
         ))}
+        {shown.length === 0 && <p className="text-xs text-slate-500">No topic or word matches "{q}".</p>}
       </div>
       {open && (
         <>
           <ul className="grid sm:grid-cols-2 gap-x-6 gap-y-1">
-            {open.words.map((w) => (
+            {words.slice(cur * PAGE, (cur + 1) * PAGE).map((w) => (
               <li key={w.term} className={w.saved ? "text-slate-400" : "text-slate-800"}>
                 <b>{w.term}</b> — {w.meaning_vi}{w.saved && " ✓"}
               </li>
             ))}
+            {words.length === 0 && <li className="text-slate-500">No word in this topic matches "{q}".</li>}
           </ul>
-          <button disabled={missing === 0}
-            onClick={() => void addVocabTopic(open.id).then((added) => { setNote(`Added ${added.length} word(s) to your review.`); return load(); }).catch((e) => setNote(e instanceof Error ? e.message : "Could not add."))}
-            className="px-4 py-2 bg-slate-900 hover:bg-slate-800 disabled:opacity-50 text-white font-bold text-xs rounded-2xl cursor-pointer">
-            {missing === 0 ? "All words saved" : `Add ${missing} missing word(s)`}
-          </button>
+          {pages > 1 && (
+            <div className="flex items-center gap-3 text-xs text-slate-600">
+              <button disabled={cur === 0} onClick={() => setPage(cur - 1)} className="px-3 py-1 rounded-full bg-white ring-1 ring-slate-900/10 disabled:opacity-40 cursor-pointer">Prev</button>
+              <span>Page {cur + 1}/{pages} · {words.length} words</span>
+              <button disabled={cur >= pages - 1} onClick={() => setPage(cur + 1)} className="px-3 py-1 rounded-full bg-white ring-1 ring-slate-900/10 disabled:opacity-40 cursor-pointer">Next</button>
+            </div>
+          )}
+          <motion.button disabled={missing === 0 && justAdded === null} whileTap={{ scale: 0.96 }}
+            animate={{ backgroundColor: justAdded !== null ? "#047857" : "#0f172a" }}
+            onClick={() => void addVocabTopic(open.id).then((added) => {
+              setNote(`Added ${added.length} word(s) to your review.`);
+              setJustAdded(added.length);
+              window.setTimeout(() => setJustAdded(null), 2200);
+              return load();
+            }).catch((e) => setNote(e instanceof Error ? e.message : "Could not add."))}
+            className="px-4 py-2 disabled:opacity-50 text-white font-bold text-xs rounded-2xl cursor-pointer overflow-hidden">
+            <AnimatePresence mode="wait" initial={false}>
+              <motion.span key={justAdded !== null ? "done" : missing === 0 ? "all" : "add"} className="flex items-center gap-1.5"
+                initial={{ y: 12, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: -12, opacity: 0 }} transition={{ duration: 0.18 }}>
+                {justAdded !== null ? (
+                  <>
+                    <motion.span initial={{ scale: 0, rotate: -40 }} animate={{ scale: 1, rotate: 0 }} transition={{ type: "spring", stiffness: 500, damping: 18 }}><Check className="w-4 h-4" /></motion.span>
+                    Added {justAdded}
+                  </>
+                ) : missing === 0 ? "All words saved" : `Add ${missing} missing word(s)`}
+              </motion.span>
+            </AnimatePresence>
+          </motion.button>
         </>
       )}
       {note && <p className="text-xs text-slate-600" role="status">{note}</p>}

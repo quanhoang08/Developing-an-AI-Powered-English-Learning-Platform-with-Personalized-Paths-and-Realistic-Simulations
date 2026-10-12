@@ -1,6 +1,6 @@
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
+from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, WebSocket, status
 from fastapi.responses import FileResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -15,6 +15,8 @@ from app.schemas.speaking import (
 	IeltsEstimateResponse,
 	IeltsExamRequest,
 	IeltsExamResponse,
+	LiveCallItem,
+	LiveCallLine,
 	PhrasebookEntryResponse,
 	PhrasebookSaveRequest,
 	ScenarioResponse,
@@ -26,7 +28,7 @@ from app.schemas.speaking import (
 	TurnResponse,
 	LiteralTranslationNote,
 )
-from app.services import ielts_service, llm_service, speaking_service
+from app.services import ielts_service, live_call_service, llm_service, speaking_service
 
 # Router chỉ gọi speaking_service, không gọi thẳng speech_service/llm_service (mục 6 spec).
 router = APIRouter(prefix="/speaking", tags=["speaking"])
@@ -233,6 +235,30 @@ async def list_phrasebook(
 ) -> list[PhrasebookEntryResponse]:
 	rows = await speaking_service.list_phrasebook(db, current_user.id, formality_level)
 	return [_entry_response(entry, source) for entry, source in rows]
+
+
+# --- Gọi thoại 2 chiều liên tục qua Gemini Live (F22) ---
+@router.websocket("/live")
+async def live_call(websocket: WebSocket) -> None:
+	# Trình duyệt không gắn được header Authorization vào WebSocket; token đi trong tin nhắn đầu
+	# (không để ở query string vì sẽ lọt vào access log). Xác thực nằm trong service.
+	await live_call_service.run_call(websocket)
+
+
+@router.get("/live/calls", response_model=list[LiveCallItem])
+async def list_live_calls(
+	current_user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)
+) -> list[LiveCallItem]:
+	return [
+		LiveCallItem(
+			id=str(call.id),
+			created_at=call.created_at.isoformat(),
+			scenario_title=title,
+			duration_seconds=call.duration_seconds,
+			transcript=[LiveCallLine(**line) for line in call.transcript],
+		)
+		for call, title in await live_call_service.list_calls(db, current_user.id)
+	]
 
 
 # --- IELTS Speaking giả lập (backlog 2.3) ---

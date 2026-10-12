@@ -870,6 +870,29 @@ export function listIeltsAttempts() {
   return request<IeltsAttempt[]>("/api/speaking/ielts/attempts");
 }
 
+// --- Gọi thoại 2 chiều qua Gemini Live (F22) ---
+export interface LiveCallLine {
+  role: "user" | "ai";
+  text: string;
+}
+
+export interface LiveCall {
+  id: string;
+  created_at: string;
+  scenario_title: string | null;
+  duration_seconds: number;
+  transcript: LiveCallLine[];
+}
+
+export function listLiveCalls() {
+  return request<LiveCall[]>("/api/speaking/live/calls");
+}
+
+// BACKEND_URL rỗng = cùng origin với trang (Caddy phục vụ cả web lẫn /api).
+export function liveCallSocketUrl(): string {
+  return `${(BACKEND_URL || window.location.origin).replace(/^http/, "ws")}/api/speaking/live`;
+}
+
 export function createIeltsExam(topic?: string) {
   return request<IeltsExam>("/api/speaking/ielts/exam", {
     method: "POST",

@@ -6,7 +6,7 @@ greenlet==3.5.5
 psycopg[binary]==3.3.5
 pgvector==0.3.5
 alembic==1.13.3
-pydantic==2.9.2
+pydantic==2.14.1
 pydantic-settings==2.5.2
 python-dotenv==1.0.1
 
@@ -21,6 +21,12 @@ langchain==0.3.4
 langchain-google-genai==2.0.1
 langchain-community==0.3.2
 google-generativeai==0.8.3
+# SDK mới, chỉ dùng cho Gemini Live (gọi thoại 2 chiều, F22) — SDK cũ không có Live API.
+# Kéo httpx lên 0.28.1, pydantic lên 2.14.1 (đã chạy lại test auth/gamification/extension).
+google-genai==2.29.0
+# Gọi thoại local (F22, nhánh Ollama): STT + TTS chạy CPU, không cần API key.
+faster-whisper==1.2.1
+piper-tts==1.8.0
 ollama>=0.4.0
 tenacity==8.5.0
 
@@ -29,7 +35,7 @@ pypdf==4.3.1
 python-docx==1.1.2
 beautifulsoup4==4.12.3
 youtube-transcript-api==0.6.2
-httpx==0.27.2
+httpx==0.28.1
 aiofiles==24.1.0
 
 # ==================== Nghe & Nói (Azure Speech gọi qua REST bằng httpx, không dùng SDK native) ====================

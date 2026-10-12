@@ -1,7 +1,12 @@
 import pytest
 
 from app.services import speech_service
-from tests.test_notebook_chat_integration import chat_client, login  # noqa: F401
+from tests.test_notebook_chat_integration import (  # noqa: F401
+    DOCUMENT_TEXT,
+    chat_client,
+    login,
+    make_docx_bytes,
+)
 
 # Phrasebook/slang, STT dự phòng Gemini (khi Azure lỗi) và các endpoint phục vụ audio cho
 # frontend — tất cả chạy với DB/Azure/Gemini thật, chỉ ép Azure STT lỗi bằng monkeypatch
@@ -148,10 +153,12 @@ def test_speaking_reply_audio_is_served_only_to_owner(chat_client, learner_wav) 
     assert saved.status_code == 201 and saved.json()["conversation_turn_id"] == turn["turn_id"]
 
 
-def test_podcast_list_and_audio_endpoints(chat_client, learner_wav) -> None:
+def test_podcast_list_and_audio_endpoints(chat_client) -> None:
     headers = login(chat_client)
     document_id = chat_client.post(
-        "/api/documents", headers=headers, files={"file": ("order.wav", learner_wav, "application/octet-stream")}
+        "/api/documents",
+        headers=headers,
+        files={"file": ("order.docx", make_docx_bytes(DOCUMENT_TEXT), "application/octet-stream")},
     ).json()["id"]
     podcast = chat_client.post(
         "/api/listening/podcasts", headers=headers, json={"document_id": document_id}
@@ -162,7 +169,7 @@ def test_podcast_list_and_audio_endpoints(chat_client, learner_wav) -> None:
     assert listed[0]["title"] == "order" and listed[0]["status"] == "ready"
 
     audio = chat_client.get(f"/api/listening/podcasts/{podcast['id']}/audio", headers=headers)
-    assert audio.status_code == 200 and audio.content == learner_wav
+    assert audio.status_code == 200 and audio.content[:4] == b"RIFF"
     assert chat_client.get(
         f"/api/listening/podcasts/{podcast['id']}/audio", headers=login(chat_client)
     ).status_code == 404

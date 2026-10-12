@@ -11,7 +11,7 @@ export interface WavRecording {
   cancel: () => void;
 }
 
-function downsample(samples: Float32Array, inputRate: number): Float32Array {
+export function downsample(samples: Float32Array, inputRate: number): Float32Array {
   if (inputRate === TARGET_SAMPLE_RATE) return samples;
   const ratio = inputRate / TARGET_SAMPLE_RATE;
   const length = Math.floor(samples.length / ratio);

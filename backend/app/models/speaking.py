@@ -122,6 +122,26 @@ class PhrasebookEntry(Base):
 	created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=True, server_default=text("now()"))
 
 
+class LiveCall(Base):
+	"""1 cuộc gọi thoại 2 chiều qua Gemini Live (F22, migration 20261012_0035).
+
+	transcript: [{"role": "user"|"ai", "text": str}] — chỉ lưu chữ, không lưu audio.
+	"""
+
+	__tablename__ = "live_calls"
+
+	id: Mapped[uuid.UUID] = mapped_column(
+		UUID(as_uuid=True), primary_key=True, server_default=text("uuid_generate_v4()")
+	)
+	user_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"))
+	scenario_id: Mapped[uuid.UUID | None] = mapped_column(
+		UUID(as_uuid=True), ForeignKey("scenarios.id", ondelete="SET NULL"), nullable=True
+	)
+	duration_seconds: Mapped[int] = mapped_column(Integer)
+	transcript: Mapped[list] = mapped_column(JSONB)
+	created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=text("now()"))
+
+
 class IeltsAttempt(Base):
 	"""1 bài IELTS Speaking giả lập đã ước lượng band (migration 20261001_0023)."""
 

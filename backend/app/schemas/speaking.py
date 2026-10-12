@@ -142,6 +142,19 @@ class IeltsEstimateResponse(BaseModel):
 	previous_overall: float | None = None
 
 
+class LiveCallLine(BaseModel):
+	role: str  # "user" | "ai"
+	text: str
+
+
+class LiveCallItem(BaseModel):
+	id: str
+	created_at: str
+	scenario_title: str | None = None
+	duration_seconds: int
+	transcript: list[LiveCallLine]
+
+
 class IeltsAttemptItem(BaseModel):
 	id: str
 	created_at: str

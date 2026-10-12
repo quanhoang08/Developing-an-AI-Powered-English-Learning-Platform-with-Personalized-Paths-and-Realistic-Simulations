@@ -18,6 +18,11 @@ class Settings(BaseSettings):
 	# Email qua Brevo HTTP API (không dùng SMTP vì nhiều host chặn cổng SMTP). BREVO_API_KEY rỗng -> chỉ log mã (dev).
 	# MAIL_FROM_EMAIL phải là sender đã xác minh trong Brevo.
 	brevo_api_key: str = ""
+	# SMTP (vd. Gmail + App Password): SMTP_USER và SMTP_PASSWORD đều có -> dùng SMTP, bỏ qua Brevo.
+	smtp_host: str = "smtp.gmail.com"
+	smtp_port: int = 587
+	smtp_user: str = ""
+	smtp_password: str = ""
 	mail_from_email: str = "no-reply@lumina.local"
 	mail_from_name: str = "Lumina"
 	# True (production): chưa xác minh email thì không đăng nhập được.
@@ -53,6 +58,17 @@ class Settings(BaseSettings):
 	gemini_max_output_tokens: int = Field(
 		default=4096, validation_alias=AliasChoices("GEMINI_MAX_OUTPUT_TOKENS")
 	)
+	# Model Gemini Live (audio vào/ra theo luồng) cho gọi thoại 2 chiều — xem live_call_service.
+	gemini_live_model: str = Field(
+		default="models/gemini-2.5-flash-native-audio-latest",
+		validation_alias=AliasChoices("GEMINI_LIVE_MODEL"),
+	)
+	# Gọi thoại chạy hoàn toàn local (chọn "ollama" ở tab Live call): STT faster-whisper + Ollama + TTS Piper,
+	# cả hai chạy trên CPU để không tranh VRAM với Ollama. Model tải lần đầu vào local_models_dir (đã mount,
+	# không mất khi rebuild container).
+	local_models_dir: str = Field(default="storage/models", validation_alias=AliasChoices("LOCAL_MODELS_DIR"))
+	whisper_model_name: str = Field(default="small.en", validation_alias=AliasChoices("WHISPER_MODEL_NAME"))
+	piper_voice: str = Field(default="en_US-lessac-medium", validation_alias=AliasChoices("PIPER_VOICE"))
 	gemini_embedding_model: str = Field(
 		default="models/gemini-embedding-001",
 		validation_alias=AliasChoices("GEMINI_EMBEDDING_MODEL"),

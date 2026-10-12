@@ -30,6 +30,7 @@ XP_BY_ACTIVITY: dict[str, int] = {
 	"speaking_turn": 10,
 	"pronunciation_practice": 8,
 	"speaking_silent": 3,  # gõ thay nói (backlog 4.5): ít XP hơn nói thật
+	"live_call": 20,  # 1 cuộc gọi thoại 2 chiều (F22) có ít nhất 1 câu người học nói
 	"quiz_completed": 25,
 }
 
@@ -44,6 +45,7 @@ SKILL_BY_ACTIVITY: dict[str, str] = {
 	"writing_submitted": "writing",
 	"speaking_turn": "speaking",
 	"pronunciation_practice": "speaking",
+	"live_call": "speaking",
 }
 # Trọng số của điểm mới trong trung bình động: 0.3 → mỗi bài mới chiếm 30%, bài cũ phai dần.
 SKILL_SCORE_WEIGHT = 0.3

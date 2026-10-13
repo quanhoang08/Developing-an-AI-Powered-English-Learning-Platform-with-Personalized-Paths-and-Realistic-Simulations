@@ -10,6 +10,7 @@ Chạy (trong container api):
 """
 import argparse
 import asyncio
+import difflib
 
 from sqlalchemy import select
 
@@ -20,6 +21,7 @@ from app.services import llm_service, toeic_service
 _BATCH = {2: 10, 3: 1, 4: 1, 5: 10, 6: 1, 7: 1}  # số câu (Part 2/5) hoặc bài (Part 3/4/6/7) xin mỗi lần gọi
 _MAX_FAILURES = 5  # lỗi LLM tích lũy trong một lần chạy trước khi bỏ cuộc
 _MAX_CALLS_PER_TARGET = 6  # chặn vòng lặp vô hạn khi tỉ lệ đạt kiểm chứng quá thấp
+_NEAR_DUPLICATE = 0.85  # độ giống tối thiểu (difflib) để coi hai câu hỏi là một
 
 
 async def verified_flags(items: list[dict], provider: str) -> list[bool]:
@@ -30,6 +32,14 @@ async def verified_flags(items: list[dict], provider: str) -> list[bool]:
 		answers = await llm_service.solve_toeic_items(shuffled, provider)
 		flags = [ok and set(a) == {it["correct_index"]} for ok, it, a in zip(flags, shuffled, answers)]
 	return flags
+
+
+def _is_new(item: dict, seen: set[str]) -> bool:
+	"""Không trùng nguyên văn và không gần giống (>= 85% theo difflib) câu nào đã có; cũng loại câu mới đổi vài chữ."""
+	prompt = item["prompt"].lower()
+	if prompt in seen or (item.get("passage") or "")[:80] in seen:
+		return False
+	return not any(difflib.SequenceMatcher(None, prompt, old).ratio() >= _NEAR_DUPLICATE for old in seen if abs(len(old) - len(prompt)) < 40)
 
 
 def _units(part: int, items: list[dict], flags: list[bool]) -> list[dict]:
@@ -58,7 +68,7 @@ async def build(part: int, target: int, author: str, verifier: str) -> int:
 			await asyncio.sleep(pause)
 			try:
 				raw = toeic_service.clean_items(part, await llm_service.generate_toeic_items(part, batch, author))
-				raw = [it for it in raw if it["prompt"].lower() not in seen and (it.get("passage") or "")[:80] not in seen] if part in (2, 5) else raw
+				raw = [it for it in raw if _is_new(it, seen)] if part in (2, 5) else raw
 				if part in (2, 5):
 					raw = toeic_service.drop_repeated_distractors(raw)
 				if not raw:

@@ -132,7 +132,9 @@ Context:
 
 ---
 
-## 4. ĐỀ XUẤT — Seed data `slang_phrases`
+## 4. Seed data `slang_phrases` (ĐÃ THỰC HIỆN: 80 cụm, cập nhật 2026-10-13)
+
+> **Trạng thái hiện tại (kiểm tra trực tiếp DB):** bảng có **80 cụm** = 48 cụm seed ở migration `20260919_0010` + 32 cụm bổ sung bằng `backend/app/scripts/seed_slang_extra.py` (idempotent, không đổi schema). Phân bố: casual 40 (50%), neutral 25 (31%), formal 15 (19%) — khớp đề xuất ban đầu (~50/35/15). Mọi bản ghi có `source_reference` (Cambridge Dictionary hoặc Merriam-Webster). **Lưu ý khi trích dẫn trong báo cáo:** nguồn là từ điển *cần đối chiếu từng mục* trước khi trích; các định nghĩa/ví dụ do tác giả đề tài soạn, chưa có người dạy tiếng Anh rà soát. Nội dung dưới đây giữ nguyên như đề xuất gốc để đối chiếu.
 
 > Trạng thái theo context: "chỉ mới thống nhất cấu trúc bảng, chưa chốt nội dung". Đề xuất dưới đây về quy mô và tiêu chí nguồn, cần xác nhận trước khi thực sự biên soạn nội dung.
 

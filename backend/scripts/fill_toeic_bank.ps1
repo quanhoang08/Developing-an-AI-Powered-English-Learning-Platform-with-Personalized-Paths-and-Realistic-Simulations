@@ -2,7 +2,7 @@
 #   Start-Process powershell -ArgumentList '-NoProfile','-File','backend\scripts\fill_toeic_bank.ps1' -WindowStyle Hidden
 # Mỗi lượt thử Gemini trước (nhanh, chất lượng cao, nhưng hạn mức ngày nhỏ) rồi Ollama; chạy lại bao nhiêu lần cũng an toàn
 # vì build_toeic_bank bỏ qua đề trùng. Log: fill_toeic_bank.log cạnh file này.
-$targets = @{ 7 = 18; 2 = 34; 5 = 40; 3 = 13; 6 = 5; 4 = 10 }   # tổng số đơn vị mong muốn trong toeic_bank mỗi Part
+$targets = @{ 7 = 30; 2 = 60; 5 = 70; 3 = 20; 6 = 12; 4 = 16 }   # tổng số đơn vị mong muốn trong toeic_bank mỗi Part
 $log = Join-Path $PSScriptRoot "fill_toeic_bank.log"
 
 function Count-Bank([int]$part) {

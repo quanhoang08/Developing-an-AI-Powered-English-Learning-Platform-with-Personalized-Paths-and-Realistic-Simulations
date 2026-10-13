@@ -31,7 +31,7 @@
 -- dùng để khởi tạo DB (2 file có thể tạm lệch nhau về câu chữ/tổ chức, nhưng
 -- file .sql ở đây luôn là nguồn đúng về mặt DDL thực thi được).
 --
--- Sinh lần cuối: 2026-10-08, khớp Alembic revision 20261008_0034 (thêm documents.overview: tóm tắt AI + câu hỏi gợi ý; trước đó 0033 nới source_type thêm doc/pdf, 0032 activity_log + mnemonic_reports, 0031 gỡ cột phụ huynh, 0030 bạn bè/lớp học/nhật ký giọng nói, 0028 toeic_bank).
+-- Sinh lần cuối: 2026-10-13, khớp Alembic revision 20261012_0035 (thêm bảng live_calls: lịch sử cuộc gọi thoại 2 chiều F22; trước đó 0034 documents.overview, 0033 nới source_type thêm doc/pdf, 0032 activity_log + mnemonic_reports).
 -- ============================================================================
 
 
@@ -390,6 +390,20 @@ CREATE TABLE public.listening_quiz_attempts (
     correct_count integer,
     score numeric(5,2),
     submitted_at timestamp with time zone,
+    created_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+
+--
+-- Name: live_calls; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.live_calls (
+    id uuid DEFAULT public.uuid_generate_v4() NOT NULL,
+    user_id uuid NOT NULL,
+    scenario_id uuid,
+    duration_seconds integer NOT NULL,
+    transcript jsonb NOT NULL,
     created_at timestamp with time zone DEFAULT now() NOT NULL
 );
 
@@ -1101,6 +1115,14 @@ ALTER TABLE ONLY public.listening_quiz_attempts
 
 
 --
+-- Name: live_calls live_calls_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.live_calls
+    ADD CONSTRAINT live_calls_pkey PRIMARY KEY (id);
+
+
+--
 -- Name: mnemonic_reports mnemonic_reports_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -1785,6 +1807,13 @@ CREATE INDEX ix_listening_quiz_user_created ON public.listening_quiz_attempts US
 
 
 --
+-- Name: ix_live_calls_user_created; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_live_calls_user_created ON public.live_calls USING btree (user_id, created_at DESC);
+
+
+--
 -- Name: ix_mnemonics_term; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -2067,6 +2096,22 @@ ALTER TABLE ONLY public.listening_quiz_attempts
 
 ALTER TABLE ONLY public.listening_quiz_attempts
     ADD CONSTRAINT listening_quiz_attempts_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id) ON DELETE CASCADE;
+
+
+--
+-- Name: live_calls live_calls_scenario_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.live_calls
+    ADD CONSTRAINT live_calls_scenario_id_fkey FOREIGN KEY (scenario_id) REFERENCES public.scenarios(id) ON DELETE SET NULL;
+
+
+--
+-- Name: live_calls live_calls_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.live_calls
+    ADD CONSTRAINT live_calls_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id) ON DELETE CASCADE;
 
 
 --

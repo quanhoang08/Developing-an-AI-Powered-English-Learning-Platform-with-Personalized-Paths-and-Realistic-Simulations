@@ -231,6 +231,7 @@ Furthermore, the ethical implications surrounding data privacy remain deeply con
         correctOptionIndex: 0,
       });
       setPassageFromDocument(Boolean(session.source_document_id));
+      studyTimer.start();
       setClassicSessionId(session.session_id);
       const questions = session.questions.map((question) => ({
         id: question.id,

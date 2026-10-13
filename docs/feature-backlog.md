@@ -70,3 +70,22 @@ Trạng thái: `[ ]` chưa làm · `[~]` đang làm · `[x]` xong · `[skip]` b�
 | 5.2 | Báo cáo tuần cho phụ huynh | [skip] đã gỡ 2026-10-03 theo yêu cầu: chỉ gửi tay, không có bộ lập lịch, và phụ thuộc vào phần xác nhận phụ huynh (5.3) vốn tự khai, không xác minh được |
 | 5.3 | Xin phụ huynh đồng ý cho dưới 18 tuổi + lọc nội dung chat | [skip] đã gỡ 2026-10-03 theo yêu cầu (tự khai năm sinh/email nên không xác minh được, chỉ chặn bạn bè + lớp). Đã xoá `guardian_service.py`, `content_filter.py`, `GuardianCard.tsx`, endpoint `/api/users/me/guardian*`, các chỗ chặn 403 `parent_consent_required` ở bạn bè/lớp, lọc 422 `inappropriate_content` ở Speaking, trường `birth_year/is_minor/parent_*` ở `UserResponse`. `weekly_stats` chuyển sang `classroom_service.py` (bảng tiến độ giáo viên vẫn dùng). Migration 0031 (đã áp 2026-10-03, sao lưu `backups/lumina_pre_0031.dump`) xoá 3 cột `users.birth_year/parent_email/parent_consent_at`, xoá token OTP `parent_consent` và trả CHECK `auth_tokens.purpose` về 2 giá trị; `schema.sql` và model `User` đã cập nhật. Đã kiểm tra: test social/auth/speaking/study-plan pass, đăng nhập và Dashboard trên web vẫn chạy |
 | 5.4 | Đổi độ khó theo ngày thi | [skip] đã có kế hoạch học theo band + ngày thi (mục 2.5); độ khó từng bài do LLM sinh chưa nhận tham số trình độ riêng nên chưa tách |
+
+## Cập nhật 2026-10-13 (việc làm sau mốc 2026-10-04; nguồn: `git log`, migration 0033-0035 và kiểm tra trực tiếp code)
+
+Trạng thái: `[x]` xong · `[~]` một phần · `[skip]` bỏ
+
+| # | Hạng mục | Trạng thái |
+|---|---|---|
+| 6.1 | Notebook nhận `.docx/.doc/.pdf`, bỏ upload audio mới (migration `20261007_0033`) | [x] `.doc` chưa thử với tệp thật; PDF ảnh quét → `failed` (không OCR) |
+| 6.2 | Notebook: tab Nội dung, tìm kiếm, tóm tắt + câu hỏi gợi ý (`documents.overview`, migration `20261008_0034`) | [x] |
+| 6.3 | Upload kiểu "ném bóng vào rổ" (`BasketballUploadButton.tsx`), nút hủy luôn bấm được | [x] chưa đo bằng touchpad thật |
+| 6.4 | Từ vựng theo chủ đề: 21 chủ đề từ bộ ForumFlash (19-23 từ/chủ đề, học thuật 40 từ; "4.000 từ" của nguồn thực chất chỉ ~490 từ duy nhất) | [x] nguồn không nêu giấy phép; chưa người dạy rà soát |
+| 6.5 | **F22 — cuộc gọi thoại hai chiều** (Gemini Live hoặc local: VAD → faster-whisper → Ollama → Piper; bảng `live_calls`, migration `20261012_0035`) | [~] chưa chấm phát âm, chưa ghi `user_errors`, VAD chỉ là ngưỡng RMS, chưa thử bằng micro/loa thật |
+| 6.6 | Skim & Scan: bấm giờ (thiếu `studyTimer.start()` khi tạo phiên; đã thêm) | [x] chưa thử trên trình duyệt |
+| 6.7 | `slang_phrases` đủ 80 cụm (48 + 32 bằng `seed_slang_extra.py`) | [x] nguồn từ điển cần đối chiếu từng mục |
+| 6.8 | Ngân hàng TOEIC: loại câu gần giống (difflib ≥ 0.85) khi dựng; nâng mục tiêu P2=60, P5=70, P7=30, P3=20, P6=12, P4=16 | [~] Gemini hết hạn mức sau vài lần gọi nên ngân hàng tăng rất chậm (Part 7: 18 → 20) |
+| 6.9 | Thực nghiệm bổ sung: bộ chấm Writing (độ tin cậy/độ phân biệt), bộ đếm cấu trúc câu | [x] xem `docs/thuc_nghiem_bo_sung.md` |
+| 6.10 | Đồng bộ `schema.sql` gốc + `docs/schema.sql` + `docs/api-spec.md` (phụ lục) với code | [x] |
+| 6.11 | Gỡ file sinh khi test khỏi git (`storage/audio`, `storage/documents`), thêm `.gitignore` | [x] đã staged, chưa commit |
+| 6.12 | Quản trị duyệt mẹo nhớ; index full-text `'simple'` cho phụ đề; gỡ `langchain*` khỏi `requirements.txt` | [skip] chưa cần ở quy mô hiện tại (xem `lumina_context.md` mục 8) |

@@ -54,9 +54,9 @@ Nhóm tiến hành đánh giá hệ thống dựa trên các tiêu chí sau:
 
 ### 5.1 Kiến trúc tổng quan
 
-Hệ thống gồm: Frontend Web App (Next.js/React), Backend API (Python/FastAPI + LangChain), cơ sở dữ liệu quan hệ kết hợp vector store (PostgreSQL + pgvector), và tầng tích hợp các dịch vụ AI chuyên dụng (LLM, STT, TTS) thông qua API.
+Hệ thống gồm: Frontend Web App (Next.js/React), Backend API (Python/FastAPI; gọi trực tiếp SDK/HTTP của từng nhà cung cấp LLM, không dùng LangChain), cơ sở dữ liệu quan hệ kết hợp vector store (PostgreSQL + pgvector), và tầng tích hợp các dịch vụ AI chuyên dụng (LLM, STT, TTS) thông qua API.
 
-Riêng luồng "Bạn đồng hành hội thoại AI" hoạt động theo mô hình turn-based — xử lý theo từng lượt nói, không streaming âm thanh hai chiều liên tục: người dùng ghi âm một lượt nói → hệ thống chuyển giọng nói thành văn bản qua Azure Speech-to-Text (ưu tiên; nếu lỗi/timeout, tự động fallback sang Whisper để đảm bảo tính sẵn sàng — xem mục 9.4) → xử lý song song hai nhánh: (1) LLM sinh câu trả lời hội thoại tiếp theo, đồng thời đánh giá ý định giao tiếp, mức độ lịch sự, và gợi ý cụm từ/slang phù hợp ngữ cảnh; (2) dịch vụ đánh giá phát âm (Azure Pronunciation Assessment — không có fallback, vì đây là khả năng chuyên biệt chỉ Azure có) chấm điểm độ chính xác âm vị trên chính đoạn ghi âm đó → kết quả tổng hợp được hiển thị dạng phản hồi và đọc lại bằng TTS để tiếp tục hội thoại. Cách tiếp cận turn-based giúp tránh các thách thức kỹ thuật của mô hình voice-to-voice thời gian thực liên tục, phù hợp hơn với thời gian và nguồn lực của một khóa luận.
+Riêng luồng "Bạn đồng hành hội thoại AI" hoạt động theo mô hình turn-based — xử lý theo từng lượt nói, không streaming âm thanh hai chiều liên tục: người dùng ghi âm một lượt nói → hệ thống chuyển giọng nói thành văn bản qua Azure Speech-to-Text (ưu tiên; nếu lỗi/timeout, tự động fallback sang Gemini để đảm bảo tính sẵn sàng; phương án ban đầu là Whisper nhưng được thay vì không có khóa OpenAI — xem mục 9.4) → xử lý song song hai nhánh: (1) LLM sinh câu trả lời hội thoại tiếp theo, đồng thời đánh giá ý định giao tiếp, mức độ lịch sự, và gợi ý cụm từ/slang phù hợp ngữ cảnh; (2) dịch vụ đánh giá phát âm (Azure Pronunciation Assessment — không có fallback, vì đây là khả năng chuyên biệt chỉ Azure có) chấm điểm độ chính xác âm vị trên chính đoạn ghi âm đó → kết quả tổng hợp được hiển thị dạng phản hồi và đọc lại bằng TTS để tiếp tục hội thoại. Cách tiếp cận turn-based giúp tránh các thách thức kỹ thuật của mô hình voice-to-voice thời gian thực liên tục, phù hợp hơn với thời gian và nguồn lực của một khóa luận.
 
 ### 5.2 Phân nhóm chức năng theo module kỹ năng
 
@@ -92,7 +92,7 @@ Hệ thống được phân chia thành các **module theo kỹ năng/chức nă
 **Module 4 — Nói (Speaking)**
 - Bạn đồng hành hội thoại AI (turn-based; chấm phát âm + ý định/lịch sự) *(Thử nghiệm giới hạn)*
 - Daily Speaking & Slang cơ bản — tích hợp trong luồng hội thoại, kèm Sổ tay Slang/Cụm thoại để lưu và ôn tập *(Thử nghiệm giới hạn)*
-- Nâng cấp lên voice-to-voice thời gian thực liên tục *(Định hướng mở rộng)*
+- Cuộc gọi thoại hai chiều liên tục (F22: micro luôn mở, nói chen được; nhánh Gemini Live hoặc nhánh cục bộ faster-whisper + Ollama + Piper) *(Thử nghiệm giới hạn — đã triển khai 12/10/2026; chưa chấm phát âm và chưa ghi lỗi vào sổ lỗi)*
 
 **Module 5 — Mở rộng nền tảng**
 - Browser Extension: tra từ trên web *(Thử nghiệm giới hạn)*, tra từ trong phụ đề YouTube *(Định hướng mở rộng)*
@@ -109,7 +109,7 @@ Cách phân nhóm này trình bày rõ phạm vi triển khai theo từng kỹ n
 - Giọng nói sử dụng trong hệ thống (chatbot, podcast, Bạn đồng hành hội thoại AI) được lấy từ thư viện giọng có bản quyền/được cấp phép hợp lệ của nhà cung cấp TTS, gắn với các persona nguyên bản do nhóm xây dựng — không thực hiện nhân bản (clone) giọng nói của người nổi tiếng hoặc bất kỳ cá nhân có thật nào.
 - Không thực hiện mô phỏng accent vùng miền theo giọng bản địa từng khu vực; thay vào đó, tập trung vào các cụm từ giao tiếp hàng ngày (daily speaking) và slang cơ bản có nguồn tham chiếu, tích hợp trực tiếp trong luồng Bạn đồng hành hội thoại AI.
 - Đầu vào tài liệu học tập giới hạn ở hai định dạng: âm thanh (audio) và văn bản .docx, áp dụng cho toàn bộ các điểm tải tài liệu trong hệ thống.
-- Không triển khai các chức năng nâng cao như: thanh toán, hạ tầng video streaming thời gian thực quy mô lớn, chế độ voice-to-voice thời gian thực liên tục cho tính năng hội thoại AI (các mục này được đưa vào định hướng mở rộng ở mục 5.2).
+- Không triển khai các chức năng nâng cao như: thanh toán, hạ tầng video streaming thời gian thực quy mô lớn, tương tác thời gian thực giữa người học với nhau (ghép cặp, đấu từ vựng). Chế độ voice-to-voice liên tục cho hội thoại AI ban đầu nằm trong nhóm này nhưng đã được đưa vào làm ở mức thử nghiệm giới hạn (F22, 12/10/2026); phần còn lại được đưa vào định hướng mở rộng ở mục 5.2.
 
 ## 7. Đánh giá khả năng thực hiện của nhóm
 
@@ -144,7 +144,7 @@ Nguyên tắc vận hành là router không gọi thẳng `llm_service` hoặc `
 
 ### 9.2. Các quyết định triển khai chính
 
-- `llm_service.py` là lớp bọc duy nhất cho Gemini thông qua `langchain-google-genai`, giúp đổi provider sau này ít tác động đến feature service.
+- `llm_service.py` là lớp bọc duy nhất cho LLM: gọi trực tiếp SDK `google-generativeai` (Gemini) và HTTP API của Ollama (model chạy cục bộ), chọn nhà cung cấp bằng cấu hình `LLM_PROVIDER` (mặc định Ollama; Gemini cho chat/speaking và dựng ngân hàng đề). Không dùng LangChain: hệ thống chỉ cần gọi model kèm JSON schema nên thêm tầng trừu tượng sẽ tốn bảo trì mà không có lợi; feature service chỉ phụ thuộc `llm_service` nên đổi provider vẫn ít tác động.
 - `speech_service.py` là điểm gom cho STT, TTS và chấm phát âm; khởi tạo `SpeechConfig` một lần rồi tái sử dụng.
 - Audio đầu vào phải được chuẩn hóa về PCM WAV 16 kHz mono trước khi đưa vào Azure Speech SDK.
 - Database dùng SQLAlchemy 2.0 async ORM cho backend, kết hợp Alembic cho migration.
@@ -167,7 +167,7 @@ Bạn đồng hành hội thoại AI được chốt theo mô hình **turn-based
 
 Gợi ý slang/cụm thoại được sinh **cùng một lệnh gọi LLM** với phần đánh giá ý định/lịch sự (không tách thành lệnh gọi riêng), kèm nguồn tham chiếu rõ ràng để đảm bảo tính chính xác. Người học có thể lưu cụm từ gợi ý vào **Sổ tay Slang/Cụm thoại** cá nhân để xem lại sau (chi tiết schema xem mục 10.1).
 
-Mô hình turn-based là nền tảng hiện tại; chế độ voice-to-voice thời gian thực liên tục chỉ là định hướng mở rộng (Module 4).
+Mô hình turn-based là nền tảng chính. Chế độ cuộc gọi hai chiều liên tục (Module 4, F22) đã được bổ sung ngày 12/10/2026 ở mức thử nghiệm giới hạn: WebSocket `/api/speaking/live`, hai nhánh (Gemini Live; hoặc VAD theo năng lượng → faster-whisper → Ollama → Piper chạy cục bộ), lưu bản chép ở bảng `live_calls`; chưa chấm phát âm và chưa ghi lỗi vào sổ lỗi chung.
 
 ### 9.5. Kiến trúc Browser Extension và xác thực dùng chung phiên đăng nhập
 

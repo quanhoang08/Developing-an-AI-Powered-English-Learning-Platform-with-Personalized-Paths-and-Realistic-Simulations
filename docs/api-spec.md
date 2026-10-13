@@ -208,3 +208,97 @@ class ErrorType(str, Enum):
 ## 11. Ghi chú chung
 - Tất cả response object trả trực tiếp field từ model tương ứng (Pydantic `orm_mode`/`from_attributes=True`), không có tầng transform phức tạp trừ khi ghi rõ trong bảng trên.
 - Router → `feature_service` → `infra_service`/model, không bỏ qua lớp nào (mục 9.1 đề cương).
+
+---
+
+## Phụ lục: route có trong code nhưng chưa được mô tả ở các mục trên (đối chiếu tự động 2026-10-13)
+
+> Bản đối chiếu tự động giữa `app.routes` (FastAPI) và các đường dẫn `/api/...` xuất hiện trong file này: **80 trong 136 route** (135 thao tác HTTP dưới `/api` + 1 WebSocket `/api/speaking/live`) chưa có dòng mô tả riêng. Chi tiết tham số/phản hồi của từng route xem Swagger tại `/docs` (luôn khớp code) và `docs/feature-backlog.md` (ngữ cảnh từng tính năng). Cột 'Hàm xử lý' là tên hàm router trong `backend/app/routers/`.
+
+| Nhóm | Phương thức | Đường dẫn | Hàm xử lý |
+|---|---|---|---|
+| activity | GET | `/api/activity/recent` | `get_recent_activity` |
+| activity | GET | `/api/activity/weekly-summary` | `get_weekly_summary` |
+| auth | POST | `/api/auth/forgot-password` | `forgot_password` |
+| auth | POST | `/api/auth/resend-verification` | `resend_verification` |
+| auth | POST | `/api/auth/reset-password` | `reset_password_endpoint` |
+| auth | POST | `/api/auth/verify-email` | `verify_email_endpoint` |
+| classes | GET | `/api/classes` | `mine` |
+| classes | POST | `/api/classes` | `create` |
+| classes | POST | `/api/classes/join` | `join` |
+| classes | DELETE | `/api/classes/{class_id}` | `delete` |
+| classes | GET | `/api/classes/{class_id}` | `detail` |
+| classes | POST | `/api/classes/{class_id}/assignments` | `add_assignment` |
+| classes | DELETE | `/api/classes/{class_id}/assignments/{assignment_id}` | `delete_assignment` |
+| classes | DELETE | `/api/classes/{class_id}/members/{member_id}` | `remove_member` |
+| diary | GET | `/api/diary` | `list_entries` |
+| diary | POST | `/api/diary` | `add_entry` |
+| diary | DELETE | `/api/diary/{entry_id}` | `delete_entry` |
+| diary | GET | `/api/diary/{entry_id}/audio` | `entry_audio` |
+| documents | GET | `/api/documents/{document_id}/content` | `get_document_content` |
+| documents | POST | `/api/documents/{document_id}/overview` | `post_document_overview` |
+| friends | GET | `/api/friends` | `friends` |
+| friends | GET | `/api/friends/leaderboard` | `leaderboard` |
+| friends | POST | `/api/friends/requests` | `send_request` |
+| friends | DELETE | `/api/friends/{friendship_id}` | `remove` |
+| friends | POST | `/api/friends/{friendship_id}/accept` | `accept` |
+| grammar | GET | `/api/grammar/attempts` | `grammar_attempts` |
+| grammar | GET | `/api/grammar/daily` | `grammar_daily` |
+| grammar | GET | `/api/grammar/quiz` | `grammar_quiz` |
+| grammar | POST | `/api/grammar/submit` | `grammar_submit` |
+| listening | GET | `/api/listening/dictation/{attempt_id}/audio` | `get_dictation_audio` |
+| listening | GET | `/api/listening/podcasts/{podcast_id}/audio` | `get_podcast_audio` |
+| listening | POST | `/api/listening/podcasts/{podcast_id}/comprehension` | `create_comprehension` |
+| listening | GET | `/api/listening/quizzes` | `list_quizzes` |
+| listening | POST | `/api/listening/quizzes/{attempt_id}/submit` | `submit_quiz` |
+| movie-context | GET | `/api/movie-context/matches/{match_id}/audio` | `get_match_audio` |
+| movie-context | GET | `/api/movie-context/matches/{match_id}/video` | `get_match_video` |
+| pronunciation | POST | `/api/pronunciation/pairs/check` | `pairs_check` |
+| pronunciation | GET | `/api/pronunciation/pairs/quiz` | `pairs_quiz` |
+| pronunciation | GET | `/api/pronunciation/sentences` | `sentences` |
+| pronunciation | POST | `/api/pronunciation/sentences/{sentence_id}/assess` | `assess` |
+| pronunciation | GET | `/api/pronunciation/sentences/{sentence_id}/audio` | `sentence_audio` |
+| pronunciation | POST | `/api/pronunciation/silent` | `silent` |
+| pronunciation | GET | `/api/pronunciation/silent/prompt` | `silent_prompt` |
+| reading | POST | `/api/reading/adapt` | `adapt_text` |
+| speaking | POST | `/api/speaking/ielts/answer` | `submit_ielts_answer` |
+| speaking | GET | `/api/speaking/ielts/attempts` | `list_ielts_attempts` |
+| speaking | POST | `/api/speaking/ielts/estimate` | `estimate_ielts_band` |
+| speaking | POST | `/api/speaking/ielts/exam` | `create_ielts_exam` |
+| speaking | WS | `/api/speaking/live` | `live_call` |
+| speaking | GET | `/api/speaking/live/calls` | `list_live_calls` |
+| speaking | GET | `/api/speaking/slang` | `list_slang` |
+| speaking | GET | `/api/speaking/turns/{turn_id}/audio` | `get_turn_reply_audio` |
+| toeic | POST | `/api/toeic/mock` | `start_mock` |
+| toeic | GET | `/api/toeic/part1/images/{name}` | `part1_image` |
+| toeic | POST | `/api/toeic/practice` | `start_practice` |
+| toeic | GET | `/api/toeic/summary` | `toeic_summary` |
+| toeic | POST | `/api/toeic/{attempt_id}/submit` | `submit_practice` |
+| users | GET | `/api/users/me/study-plan` | `get_study_plan` |
+| vocab | GET | `/api/vocab/confusables/quiz` | `confusables_quiz` |
+| vocab | POST | `/api/vocab/confusables/submit` | `confusables_submit` |
+| vocab | POST | `/api/vocab/from-errors` | `vocab_from_errors` |
+| vocab | POST | `/api/vocab/import-unit` | `vocab_import_unit` |
+| vocab | GET | `/api/vocab/mnemonics` | `list_mnemonics` |
+| vocab | POST | `/api/vocab/mnemonics` | `save_mnemonic` |
+| vocab | DELETE | `/api/vocab/mnemonics/{mnemonic_id}` | `delete_mnemonic` |
+| vocab | POST | `/api/vocab/mnemonics/{mnemonic_id}/report` | `report_mnemonic` |
+| vocab | POST | `/api/vocab/mnemonics/{mnemonic_id}/vote` | `vote_mnemonic` |
+| vocab | GET | `/api/vocab/topics` | `vocab_topics` |
+| vocab | POST | `/api/vocab/topics/{topic_id}/add` | `add_vocab_topic` |
+| vocab | GET | `/api/vocab/units` | `vocab_units` |
+| vocab | GET | `/api/vocab/units/words` | `vocab_unit_words` |
+| vocab | POST | `/api/vocab/wordlists/{name}/add` | `wordlist_add` |
+| vocab | GET | `/api/vocab/wordlists/{name}/coverage` | `wordlist_coverage` |
+| vocab | POST | `/api/vocab/wordlists/{name}/text-coverage` | `wordlist_text_coverage` |
+| vocab | POST | `/api/vocab/{vocab_item_id}/check-sentence` | `check_sentence` |
+| vocab | GET | `/api/vocab/{vocab_item_id}/word-family` | `word_family` |
+| writing | GET | `/api/writing/paraphrase-bank` | `paraphrase_bank` |
+| writing | POST | `/api/writing/paraphrase-bank/{bank_id}/check` | `paraphrase_check` |
+| writing | GET | `/api/writing/submissions/{submission_id}` | `get_writing_submission` |
+| writing | GET | `/api/writing/submissions/{submission_id}/structures` | `get_submission_structures` |
+
+Ghi chú các route đáng chú ý:
+- `WS /api/speaking/live` (F22): token JWT gửi trong tin nhắn đầu tiên (không đi qua query string); tin nhắn đầu bắt buộc trong 10 giây; tối đa 600 giây/cuộc gọi; khung âm thanh > 64 KB bị bỏ. Lịch sử: `GET /api/speaking/live/calls` (20 cuộc gần nhất).
+- `GET /api/documents/{id}/content` (các đoạn đã nạp theo thứ tự) và `POST /api/documents/{id}/overview` (tóm tắt AI + 3 câu hỏi gợi ý, lưu ở `documents.overview`). `POST /api/documents` nhận `.docx`, `.doc`, `.pdf` (không còn nhận audio mới từ migration 0033).
+- Mọi route trừ đăng ký/đăng nhập cần JWT; token `client_type=extension` chỉ qua được `/api/extension/*`, `/api/reading/lookup` và `/api/vocab` (xem `app/core/extension_scope.py`).

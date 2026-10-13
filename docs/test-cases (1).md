@@ -46,7 +46,8 @@
 |---|---|---|---|---|---|
 | DOC-001 | HP | Upload tài liệu audio hợp lệ | Đã login | `POST /api/documents` multipart, file `.mp3`/`.wav` | HTTP 201, `status: "processing"` |
 | DOC-002 | HP | Upload tài liệu .docx hợp lệ | Đã login | `POST /api/documents` multipart, file `.docx` | HTTP 201, `status: "processing"` |
-| DOC-003 | BR | Upload định dạng không được hỗ trợ | Đã login | `POST /api/documents` với file `.pdf` hoặc `.jpg` | HTTP 400, `error_code` rõ ràng (ví dụ `unsupported_file_type`) — đúng giới hạn nghiêm ngặt "chỉ audio và .docx" (`lumina_context.md` mục 2) |
+| DOC-003 | BR | Upload định dạng không được hỗ trợ | Đã login | `POST /api/documents` với file `.jpg`, `.png`, `.wav`, `.mp4` | HTTP 400, `error_code` rõ ràng (ví dụ `unsupported_file_type`) — giới hạn hiện hành là chỉ `.docx`, `.doc`, `.pdf` (từ 2026-10-07, migration `20261007_0033`; trình duyệt cũng chặn sớm và không gửi lên máy chủ). *Đã cập nhật: bản cũ ghi "chỉ audio và .docx" và coi `.pdf` là không hợp lệ.* |
+| DOC-003b | HP | Upload PDF có lớp chữ | Đã login | `POST /api/documents` với `.pdf` có văn bản | HTTP 201, `source_type = 'pdf'`, sau khi nạp xong `status = 'ready'` và `document_chunks` có dòng; PDF ảnh quét (không có lớp chữ) → `status = 'failed'` |
 | DOC-004 | EC | Document đang `processing`, dùng để tạo bài Reading/Podcast/Writing | Tài liệu vừa upload, chưa `ready` | Gọi `POST /api/reading/classic/sessions` với `document_id` này | HTTP 400, `error_code: document_not_ready` (mục 1.3 `feature-reading.md`) |
 | DOC-005 | HP | Document xử lý xong | — | Poll `GET /api/documents/{id}` đến khi `status = 'ready'` | Tài liệu sẵn sàng dùng cho mọi tính năng phụ thuộc |
 | DOC-006 | EC | Document xử lý lỗi | Tài liệu upload nhưng backend xử lý thất bại (ví dụ audio hỏng) | Poll `GET /api/documents/{id}` | `status: "failed"`, không rơi vào trạng thái `processing` vô thời hạn |

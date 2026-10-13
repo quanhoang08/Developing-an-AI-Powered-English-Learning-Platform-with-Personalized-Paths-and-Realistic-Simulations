@@ -6,7 +6,25 @@
 
 ---
 
-## 1. Document Ingestion Pipeline (Đầy đủ, chỉ .docx)
+## 0. CẬP NHẬT 2026-10-13 — những điểm dưới đây đã khác phiên bản đặc tả ban đầu (2026-09-16)
+
+Mục 1 và 2 giữ nguyên làm lịch sử thiết kế; **trạng thái đúng với code hiện tại** là:
+
+| Hạng mục | Đặc tả ban đầu (mục 1-2) | Code hiện tại |
+|---|---|---|
+| Định dạng upload | chỉ `.docx` (audio giữ `processing`) | `.docx`, `.doc` (antiword), `.pdf` (pypdf, cần lớp chữ). Bỏ upload audio mới (migration `20261007_0033`; CHECK vẫn giữ `'audio'` cho bản ghi cũ). `.doc` chưa thử với tệp thật. PDF ảnh quét → `failed` (không có OCR) |
+| Chia chunk | ~350 từ/chunk (`chunk_text`) | theo câu, ~120 từ, chồng lấp 1 câu (`CHUNK_STRATEGY=sentence`, `app/utils/chunking.py`) |
+| Embedding | Gemini `gemini-embedding-001`, `vector(768)` | mặc định `bge-m3` qua Ollama, `vector(1024)` ở cột `embedding_local`; `EMBEDDING_PROVIDER=gemini` vẫn dùng cột `embedding` 768 |
+| Mô hình trả lời chat | Gemini | tham số `provider` mỗi yêu cầu: Ollama (`lumina-rag-qwen`, mặc định) hoặc Gemini; ngôn ngữ trả lời do hàm xác định `utils/language.py` (ký tự có dấu tiếng Việt > 2%) ghi vào prompt |
+| Truy hồi chat | top-5, lịch sử 6 lượt | top-5 (`rag_service.retrieve_relevant_chunks(top_k=5)`) |
+| Tab Nội dung | chưa có | `GET /api/documents/{id}/content` (ghép các đoạn đã nạp, vài câu ở ranh giới đoạn lặp 2 lần do chồng lấp) + ô tìm kiếm tô vàng chỗ khớp |
+| Tóm tắt + câu hỏi gợi ý | chưa có | `POST /api/documents/{id}/overview`: chỉ sinh khi người dùng bấm, lưu `documents.overview` (JSONB, migration `20261008_0034`); nhiệt độ thấp, ngôn ngữ tóm tắt theo ngôn ngữ tài liệu |
+| Giao diện upload | nút bấm | thao tác "ném bóng vào rổ" (`BasketballUploadButton.tsx`, kéo-ngắm kiểu ná cao su, vật lý bước cố định 16 ms, vành rổ bán kính 48); nút hủy luôn bấm được |
+| Thời gian nạp | ~1 s (embedding đám mây) | 28 s đến vài phút với bge-m3 cục bộ khi máy thiếu RAM/GPU (xem báo cáo mục 5.5.2); vẫn đồng bộ trong request |
+
+---
+
+## 1. Document Ingestion Pipeline (đặc tả ban đầu 2026-09-16 — chỉ .docx; xem mục 0 cho trạng thái hiện tại)
 
 ### 1.1 Mục tiêu
 Biến file `.docx` người dùng upload thành dữ liệu có thể tìm kiếm ngữ nghĩa (`document_chunks` + embedding), làm nền tảng cho Classic Mode (đã có trước), Skim & Scan nhánh `document_id`, Writing `document_summary`/`extended_topic`, và RAG Chat (mục 2 dưới đây).

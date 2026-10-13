@@ -88,3 +88,7 @@ Toàn bộ chạy qua pipeline RAG đề xuất (top-3 chunk). Với mỗi model
 - `EMBEDDING_PROVIDER=ollama` (bge-m3, 1024 chiều) ghi vào cột mới `document_chunks.embedding_local` (migration `20260919_0011`, chỉ thêm cột, không xóa dữ liệu Gemini cũ). Chunk có sẵn được embed lại bằng `python scripts/reindex_embeddings.py`. Đặt `EMBEDDING_PROVIDER=gemini` để quay lại.
 - `llm_service.answer_grounded_question`: mặc định theo `LLM_PROVIDER` (Ollama) và dùng model `OLLAMA_RAG_MODEL_NAME`; nếu chưa tạo Modelfile thì tự lùi về model gốc.
 - Test: `tests/test_chunking.py`, `tests/test_rag_local_pipeline.py`.
+
+## 7. Thực nghiệm bổ sung (2026-10-13)
+
+Ngoài RAG và model nhỏ (tra từ, quiz) ở trên, đã thêm: độ tin cậy/độ phân biệt của bộ chấm Writing (`backend/experiments/run_writing_eval.py`), độ chính xác bộ đếm cấu trúc câu bằng luật (`run_structure_eval.py`), và thử hai model 4B mới (gemma3:4b, qwen3:4b-instruct-2507) cùng bộ benchmark cũ. Số liệu và kết luận: `docs/thuc_nghiem_bo_sung.md`. Lưu ý đã phát hiện khi đối chiếu báo cáo: thực nghiệm sinh câu trả lời ở mục 4 dùng **top-3**, trong khi hệ thống thật truy hồi **top-5** (`rag_service.retrieve_relevant_chunks`) — xem `docs/doi_chieu_bao_cao_voi_code.md`.

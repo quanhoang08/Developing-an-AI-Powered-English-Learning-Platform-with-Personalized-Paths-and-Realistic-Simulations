@@ -89,6 +89,12 @@ class Settings(BaseSettings):
 	ollama_judge_model_name: str = Field(
 		default="llama3.1:8b", validation_alias=AliasChoices("OLLAMA_JUDGE_MODEL_NAME")
 	)
+	# Chấm bài Writing (grade_open_essay): qwen3:4b-instruct-2507 xếp hạng tốt nhất trong 4 model thử trên 12 bài AI tự soạn
+	# (Spearman 0,97), nhưng chỉ 0,37 trên 40 bài thật BEA-2019 (docs/thuc_nghiem_bo_sung.md mục 2 và 3): chưa đủ
+	# bằng chứng để coi là model chấm tốt. Chưa pull thì tự lùi về ollama_model_name.
+	ollama_writing_model_name: str = Field(
+		default="qwen3:4b-instruct-2507-q4_K_M", validation_alias=AliasChoices("OLLAMA_WRITING_MODEL_NAME")
+	)
 	ollama_temperature: float = Field(
 		default=0.7, validation_alias=AliasChoices("OLLAMA_TEMPERATURE")
 	)

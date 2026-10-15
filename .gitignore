@@ -6,3 +6,5 @@ backend/storage/models/
 # File sinh ra khi chạy/thử (podcast, chép chính tả, tài liệu upload): không commit. storage/videos giữ lại vì là kho demo.
 backend/storage/audio/
 backend/storage/documents/
+backend/experiments/writing_eval_bea.json
+backend/experiments/results/writing_eval_bea/

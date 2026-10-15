@@ -17,7 +17,8 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent
 sys.path.insert(0, str(ROOT.parent))
 OUT_DIR = ROOT / "results" / "writing_eval"
-OUT_DIR.mkdir(parents=True, exist_ok=True)
+SET_FILE, REPORT, TITLE = ROOT / "writing_eval_set.json", ROOT / "results" / "writing_eval.md", "12 bài tự soạn"
+LEVEL_SRC = "do người soạn gán (chưa có giám khảo người xác nhận)"
 LEVELS = ["A1", "A2", "B1", "B2", "C1", "C2"]
 
 from app.core.config import get_settings  # noqa: E402
@@ -53,8 +54,9 @@ def spearman(x: list[float], y: list[float]) -> float | None:
 async def run_model(model: str, repeats: int) -> None:
 	settings = get_settings()
 	settings.ollama_model_name = model
+	settings.ollama_writing_model_name = model  # grade_open_essay dùng model Writing riêng từ 2026-10-13
 	settings.llm_provider = "ollama"
-	data = json.loads((ROOT / "writing_eval_set.json").read_text(encoding="utf-8"))
+	data = json.loads(SET_FILE.read_text(encoding="utf-8"))
 	rows = []
 	for rep in range(repeats):
 		for index, essay in enumerate(data["essays"]):
@@ -72,7 +74,7 @@ async def run_model(model: str, repeats: int) -> None:
 
 
 def _load(path: Path) -> list[dict]:
-	return [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines() if line.strip()]
+	return [json.loads(line) for line in path.read_text(encoding="utf-8").split("\n") if line.strip()]  # không dùng splitlines(): nó tách cả ở U+2028 nằm trong chuỗi JSON
 
 
 def _cefr_index(value) -> int | None:
@@ -118,8 +120,8 @@ def _fmt(value, pct=False) -> str:
 
 
 def summary() -> None:
-	lines = ["# Thực nghiệm bộ chấm Writing (12 bài tự soạn x lần chạy lặp, rubric 4 tiêu chí kiểu IELTS Task 2)", "",
-		"Mức A2/B1/B2/C1 của bài do người soạn gán (chưa có giám khảo người xác nhận). Spearman = tương quan hạng giữa mức gán và điểm tổng; "
+	lines = [f"# Thực nghiệm bộ chấm Writing ({TITLE} x lần chạy lặp, rubric 4 tiêu chí kiểu IELTS Task 2)", "",
+		f"Mức A2/B1/B2/C1 của bài: {LEVEL_SRC}. Spearman = tương quan hạng giữa mức gán và điểm tổng; "
 		"'Tăng nghiêm ngặt' = số nhóm (đề, lần chạy) có điểm A2<B1<B2<C1; SD = độ lệch chuẩn điểm tổng giữa các lần chạy lặp cùng một bài (điểm 0-100).", "",
 		"| Model | Lần gọi (lỗi) | Spearman | Tăng nghiêm ngặt | Tăng không giảm | SD TB | Biên độ TB | CEFR đúng | CEFR ±1 mức | Điểm TB A2/B1/B2/C1 | Giây/bài |", "|---|---|---|---|---|---|---|---|---|---|---|"]
 	for path in sorted(OUT_DIR.glob("*.jsonl")):
@@ -127,7 +129,7 @@ def summary() -> None:
 		s = stats(rows)
 		lm = s["level_means"]
 		lines.append(f"| {rows[0]['model']} | {s['n_calls']} ({s['n_calls'] - s['n_ok']}) | {_fmt(s['spearman'])} | {s['strict']} | {s['loose']} | {_fmt(s['sd_mean'])} | {_fmt(s['range_mean'])} | {_fmt(s['cefr_exact'], True)} | {_fmt(s['cefr_within1'], True)} | {' / '.join(str(lm.get(k, '-')) for k in ('A2', 'B1', 'B2', 'C1'))} | {s['mean_s']:.1f} |")
-	(ROOT / "results" / "writing_eval.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
+	REPORT.write_text("\n".join(lines) + "\n", encoding="utf-8")
 	print("\n".join(lines))
 
 
@@ -136,7 +138,14 @@ def main() -> None:
 	parser.add_argument("command", choices=["run", "summary"])
 	parser.add_argument("--models", default="qwen2.5:7b-instruct-q4_K_M")
 	parser.add_argument("--repeats", type=int, default=3)
+	parser.add_argument("--set", choices=["own", "bea"], default="own", help="bea = bài thật của người học từ make_bea_set.py")
 	args = parser.parse_args()
+	if args.set == "bea":
+		global OUT_DIR, SET_FILE, REPORT, TITLE, LEVEL_SRC
+		OUT_DIR, SET_FILE, REPORT = ROOT / "results" / "writing_eval_bea", ROOT / "writing_eval_bea.json", ROOT / "results" / "writing_eval_bea.md"
+		TITLE = "bài thật của người học, BEA-2019 / Cambridge Write & Improve"
+		LEVEL_SRC = "do người chú thích của Cambridge gán (BEA-2019)"
+	OUT_DIR.mkdir(parents=True, exist_ok=True)
 	if args.command == "summary":
 		summary()
 		return

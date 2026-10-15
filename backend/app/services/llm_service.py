@@ -641,6 +641,19 @@ suggested_text."""
 	return await run_in_threadpool(_generate_json, prompt, _COVERAGE_GRADING_SCHEMA)
 
 
+def _writing_json(prompt: str, schema: dict) -> dict:
+	"""Chấm Writing bằng model riêng khi provider là ollama (xem config.ollama_writing_model_name); Gemini giữ nguyên."""
+	settings = get_settings()
+	if settings.llm_provider != "ollama":
+		return _generate_json(prompt, schema)
+	try:
+		return _call_ollama_json(prompt, schema, None, settings.ollama_writing_model_name)
+	except AIServiceError as error:
+		if error.code != "ollama_model_missing":
+			raise
+		return _call_ollama_json(prompt, schema)
+
+
 async def grade_open_essay(prompt_text: str, submitted_text: str) -> dict:
 	"""Chấm extended_topic/free_topic theo rubric 4 tiêu chí kiểu IELTS Writing Task 2."""
 	prompt = f"""You are an IELTS Writing Task 2 examiner. Grade the following essay against
@@ -658,7 +671,7 @@ Give task_response, coherence_cohesion, lexical_resource, grammatical_range_accu
 cefr_level (A1-C2), an estimated ielts_band (e.g. "6.5"), and a list of insights (type
 grammar/vocabulary/style) with a short title/description and, when relevant,
 original_text and suggested_text."""
-	return await run_in_threadpool(_generate_json, prompt, _RUBRIC_GRADING_SCHEMA)
+	return await run_in_threadpool(_writing_json, prompt, _RUBRIC_GRADING_SCHEMA)
 
 
 _AUDIO_MIME_TYPES = {

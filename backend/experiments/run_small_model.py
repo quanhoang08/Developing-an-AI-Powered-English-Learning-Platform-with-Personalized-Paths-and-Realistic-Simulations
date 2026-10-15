@@ -191,7 +191,7 @@ async def run_model(model: str, tasks: set[str], repeats_lookup: int, repeats_qu
 
 
 def _load(path: Path) -> list[dict]:
-	return [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines() if line.strip()] if path.exists() else []
+	return [json.loads(line) for line in path.read_text(encoding="utf-8").split("\n") if line.strip()] if path.exists() else []  # không dùng splitlines(): nó tách cả ở U+2028 nằm trong chuỗi JSON
 
 
 _JUDGE_SCHEMA = {"type": "object", "properties": {"answer_index": {"type": "integer"}}, "required": ["answer_index"]}

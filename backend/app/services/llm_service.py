@@ -406,11 +406,32 @@ async def embed_text(text: str, *, is_query: bool = False) -> list[float]:
 	return await run_in_threadpool(_embed_sync, text, task_type)
 
 
+# Tinh cach chat: chi doi GIONG dieu, luat bam tai lieu van giu nguyen. Khoa la -> "polite" (hanh vi cu).
+PERSONA_STYLES = {
+	"polite": "",
+	"rebel": (
+		"STYLE: be a cheeky, mischievous rebel -- tease the student playfully, use sarcasm and slang, "
+		"complain dramatically about 'homework', but stay good-natured (never insult or swear) and still "
+		"give the correct answer."
+	),
+	"buddy": (
+		"STYLE: talk like a close friend chatting casually -- relaxed, warm, contractions and light slang, "
+		"short sentences, encouraging."
+	),
+}
+
+
+def persona_style(persona: str | None) -> str:
+	# Dung chung cho chat Notebook, hoi thoai Speaking va Live Call (khong emoji vi co the bi doc thanh tieng).
+	return PERSONA_STYLES.get(persona or "polite", "")
+
+
 async def answer_grounded_question(
 	context_chunks: list[str],
 	question: str,
 	history: list[dict[str, str]],
 	provider: str | None = None,
+	persona: str | None = None,
 ) -> str:
 	"""Tra loi cau hoi CHI dua tren context_chunks (RAG) kieu NotebookLM.
 
@@ -422,8 +443,9 @@ async def answer_grounded_question(
 	"""
 	settings = get_settings()
 	provider = provider or settings.llm_provider
+	style = persona_style(persona)
 	if provider == "ollama":
-		return await run_in_threadpool(_answer_with_rag_model, context_chunks, question, history)
+		return await run_in_threadpool(_answer_with_rag_model, context_chunks, question, history, style)
 	context = "\n\n---\n\n".join(context_chunks) if context_chunks else "(no relevant excerpt found)"
 	history_text = "\n".join(f'{turn["role"]}: {turn["content"]}' for turn in history[-6:])
 	prompt = f"""You are a helpful study assistant answering questions about a document the
@@ -438,12 +460,14 @@ CONVERSATION SO FAR:
 
 STUDENT QUESTION: {question}
 
-Answer concisely and directly."""
+Answer concisely and directly. {style}"""
 
 	return await run_in_threadpool(_generate_text, prompt, provider)
 
 
-def _answer_with_rag_model(context_chunks: list[str], question: str, history: list[dict[str, str]]) -> str:
+def _answer_with_rag_model(
+	context_chunks: list[str], question: str, history: list[dict[str, str]], style: str = ""
+) -> str:
 	"""Trả lời RAG bằng model Modelfile tùy biến: luật (chỉ dùng đoạn trích, từ chối chuẩn, đúng ngôn
 	ngữ, ngắn gọn) nằm trong SYSTEM của Modelfile nên prompt chỉ cần đoạn trích đánh số + câu hỏi."""
 	settings = get_settings()
@@ -454,6 +478,8 @@ def _answer_with_rag_model(context_chunks: list[str], question: str, history: li
 		prompt += f"CONVERSATION SO FAR:\n{history_text}\n\n"
 	# Ngôn ngữ đích do hàm xác định quyết định, không nhờ model 7B tự đoán (nó hay trôi sang tiếng Việt).
 	prompt += f"QUESTION: {question}\nANSWER LANGUAGE: {language_name(question)}"
+	if style:
+		prompt += f"\n{style}"
 	try:
 		client = ollama.Client(host=settings.ollama_base_url)
 		response = client.chat(
@@ -756,14 +782,17 @@ async def generate_conversation_turn(
 	transcript: str,
 	provider: str | None = None,
 	past_errors: list[str] | None = None,
+	persona: str | None = None,
 ) -> dict:
 	"""1 lệnh LLM duy nhất sinh phản hồi hội thoại + chấm ý định/lịch sự + gợi ý cụm từ
 	(feature-speaking.md mục 1.3 nhánh A, rubric mục 3), kèm natural_rephrase và bắt lỗi
 	literal_translation. past_errors: lỗi cũ của learner để AI chủ động cho dùng lại. Sai schema -> retry 1 lần."""
 	history_text = "\n".join(f"{item['role']}: {item['content']}" for item in history[-10:]) or "(none)"
 	memory_text = "\n".join(f"- {line}" for line in (past_errors or [])) or "(none)"
+	style = persona_style(persona)
+	style_text = f"\nPERSONALITY for response_text only (scoring and feedback stay objective): {style}" if style else ""
 	prompt = f"""You are an English conversation partner AND examiner. Stay in character for the
-scenario below and reply to the learner's latest utterance in 1-3 short spoken sentences.
+scenario below and reply to the learner's latest utterance in 1-3 short spoken sentences.{style_text}
 Also score the learner's utterance (0-100) on two criteria:
 - intent_score: did the utterance achieve the communicative goal of this turn? (90-100 fully,
   60-89 mostly but vague, 30-59 unclear, 0-29 off-topic)

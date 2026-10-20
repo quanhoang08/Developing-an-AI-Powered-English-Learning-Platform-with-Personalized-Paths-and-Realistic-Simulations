@@ -63,6 +63,8 @@ class ChatMessageCreate(BaseModel):
 	# gemini (xem llm_service.answer_grounded_question). De str thuong (khong Literal)
 	# de khong phai sua enum moi khi them provider khac.
 	provider: str | None = None
+	# Tinh cach tra loi: polite (mac dinh) | rebel | buddy. Gia tri la -> polite (xem llm_service.PERSONA_STYLES).
+	persona: str | None = None
 
 
 class ChatSource(BaseModel):

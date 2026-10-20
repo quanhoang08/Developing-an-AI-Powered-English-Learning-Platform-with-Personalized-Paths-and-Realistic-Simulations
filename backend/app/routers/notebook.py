@@ -264,7 +264,8 @@ async def post_chat_message(
 	# RAG thật: tìm chunk liên quan bằng pgvector rồi gọi Gemini trả lời có trích dẫn.
 	try:
 		user_message, assistant_message = await send_message(
-			db, current_user.id, document_id, request.message, provider=request.provider
+			db, current_user.id, document_id, request.message, provider=request.provider,
+			persona=request.persona,
 		)
 	except ValueError as error:
 		code = str(error)

@@ -203,6 +203,7 @@ async def converse(
 	scenario: Scenario | None,
 	transcript: list[dict],
 	prior: list[dict] | None = None,
+	persona: str | None = None,
 ) -> str | None:
 	"""Chạy 1 cuộc gọi local tới khi cúp máy/hết giờ. Trả mã lỗi (hoặc None nếu kết thúc bình thường).
 
@@ -217,7 +218,7 @@ async def converse(
 		return "local_models_unavailable"
 	await websocket.send_json({"type": "ready", "max_seconds": MAX_CALL_SECONDS})
 
-	system = build_system_prompt(user.target_level, scenario) + "\n" + _LOCAL_STYLE
+	system = build_system_prompt(user.target_level, scenario, persona) + "\n" + _LOCAL_STYLE
 	opener = _GREETING
 	if prior:
 		recap = "\n".join(f"{'Learner' if line['role'] == 'user' else 'You'}: {line['text']}" for line in prior)

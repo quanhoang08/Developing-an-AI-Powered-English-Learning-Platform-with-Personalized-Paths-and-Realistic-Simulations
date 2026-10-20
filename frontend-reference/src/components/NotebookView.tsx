@@ -1,5 +1,6 @@
 // Trang Knowledge Space: danh sách folder/document thật (sau login) hoặc demo (trước login),
 // xem nội dung, và chat RAG (NotebookLM-style) trên tài liệu đã ingest xong.
+import { CatPersona, usePersona } from "../catPersonas";
 import React, { useEffect, useRef, useState } from "react";
 import {
   FolderKanban,
@@ -26,6 +27,7 @@ import {
 } from "lucide-react";
 import {
   ChatMessage,
+  ChatPersona,
   ChatProvider,
   createFolder,
   deleteDocument,
@@ -93,6 +95,8 @@ export const NotebookView: React.FC<NotebookViewProps> = ({ authVersion }) => {
       // localStorage không khả dụng: lựa chọn chỉ có hiệu lực trong phiên hiện tại.
     }
   };
+  // Tính cách trả lời của Chat (dùng chung với Speaking / Live Call).
+  const [chatPersona, setChatPersona] = usePersona();
   const [isChatLoading, setIsChatLoading] = useState(false);
   const [isChatSending, setIsChatSending] = useState(false);
   const [chatError, setChatError] = useState<string | null>(null);
@@ -272,7 +276,7 @@ Meaning: To make people feel more comfortable in a social setting.`
     setChatError(null);
     setIsChatSending(true);
     try {
-      const result = await sendChatMessage(activeMaterial.id, message, chatProvider);
+      const result = await sendChatMessage(activeMaterial.id, message, chatProvider, chatPersona);
       setChatMessages((current) => [...current, result.user_message, result.assistant_message]);
     } catch (error) {
       const raw = error instanceof Error ? error.message : "Failed to send message";
@@ -734,6 +738,17 @@ Meaning: To make people feel more comfortable in a social setting.`
                       >
                         <option value="gemini">Gemini</option>
                         <option value="ollama">Ollama (local)</option>
+                      </select>
+                      <select
+                        value={chatPersona}
+                        onChange={(event) => setChatPersona(event.target.value as CatPersona)}
+                        disabled={isChatSending}
+                        aria-label="Chat personality"
+                        className="px-2 py-2.5 text-xs bg-white ring-1 ring-slate-900/10 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500/60"
+                      >
+                        <option value="polite">🎩 Polite</option>
+                        <option value="rebel">😈 Rebel</option>
+                        <option value="buddy">🤙 Buddy</option>
                       </select>
                       <input
                         type="text"

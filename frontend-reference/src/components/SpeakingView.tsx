@@ -16,7 +16,10 @@ import {
 } from "../api";
 import { startWavRecording, WavRecording } from "../wavRecorder";
 import { useStudyTimer } from "../useStudyTimer";
-import { CatMascot, CatMood } from "./CatMascot";
+import { CatMood } from "./CatMascot";
+import { CatStage, PersonaChip } from "./CatStage";
+import { PersonaPicker } from "./PersonaPicker";
+import { PERSONAS, usePersona } from "../catPersonas";
 import { CountdownTimer } from "./CountdownTimer";
 import { IeltsPanel } from "./IeltsPanel";
 import { LiveCallPanel } from "./LiveCallPanel";
@@ -209,8 +212,12 @@ export const SpeakingView: React.FC = () => {
       setPhase("processing");
       setBubble("Hmm, let me think...");
       try {
-        const turn = await sendSpeakingTurn(sessionId, blob, provider, studyTimer.lap());
+        const turn = await sendSpeakingTurn(sessionId, blob, provider, studyTimer.lap(), persona);
         setTurns((current) => [...current, turn]);
+        if ((turn.pronunciation_score != null && turn.pronunciation_score < 70) || (turn.intent_score != null && turn.intent_score < 60)) {
+          setFrown(true);
+          window.setTimeout(() => setFrown(false), 6000);
+        }
         setBubble(turn.response_text ?? "");
         await speakReply(turn);
       } catch (turnError) {
@@ -250,6 +257,10 @@ export const SpeakingView: React.FC = () => {
     }
   };
 
+  const [persona] = usePersona();
+  // Bad Kitty cau mày vài giây khi lượt vừa rồi phát âm chưa chuẩn hoặc trả lời lệch ý.
+  const [frown, setFrown] = useState(false);
+  const theme = PERSONAS[persona].ui;
   const mood: CatMood =
     phase === "recording" ? "listening" : phase === "processing" ? "thinking" : phase === "speaking" ? "speaking" : "idle";
   const latest = turns[turns.length - 1];
@@ -293,19 +304,20 @@ export const SpeakingView: React.FC = () => {
       <div className={`grid grid-cols-1 lg:grid-cols-12 gap-6 ${tab === "chat" ? "" : "hidden"}`}>
         {/* Sân khấu con mèo */}
         <div className="lg:col-span-5 space-y-4">
-          <div className="relative overflow-hidden bg-[radial-gradient(ellipse_at_50%_35%,var(--color-purple-100),var(--color-indigo-100)_70%)] rounded-[2rem] p-6 shadow-[0_30px_50px_-30px_rgba(31,87,73,0.6)]">
+          <div className={`relative overflow-hidden ${theme.stage} rounded-[2rem] p-6 shadow-[0_30px_50px_-30px_rgba(31,87,73,0.6)] transition-colors duration-500`}>
+            <PersonaChip persona={persona} />
             <motion.div
               key={String(bubble)}
               initial={{ opacity: 0, y: 10, scale: 0.92 }}
               animate={{ opacity: 1, y: 0, scale: 1 }}
               transition={{ type: "spring", stiffness: 380, damping: 22 }}
-              className="relative bg-[#fffdf8] rounded-3xl px-5 py-4 text-sm text-slate-700 min-h-[64px] shadow-[0_12px_24px_-14px_rgba(95,70,30,0.5)] font-medium"
+              className={`relative ${theme.bubble} rounded-3xl px-5 py-4 text-sm min-h-[64px] mt-8 shadow-[0_12px_24px_-14px_rgba(95,70,30,0.5)] font-medium`}
             >
               {phase === "processing" && <Loader2 className="w-4 h-4 animate-spin inline mr-2 text-indigo-500" />}
               {bubble}
-              <span className="absolute -bottom-2 left-1/2 -translate-x-1/2 w-4 h-4 bg-[#fffdf8] rotate-45 rounded-sm" />
+              <span className="absolute -bottom-2 left-1/2 -translate-x-1/2 w-4 h-4 bg-inherit rotate-45 rounded-sm" />
             </motion.div>
-            <CatMascot mouthOpen={mouthOpen} mood={mood} className="w-64 h-80 mx-auto mt-3" />
+            <CatStage mouthOpen={mouthOpen} mood={mood} persona={persona} frown={frown} className="w-64 h-80 mx-auto mt-3" />
 
             <div className="flex flex-col items-center gap-2">
               <button
@@ -315,12 +327,12 @@ export const SpeakingView: React.FC = () => {
                 className={`w-[72px] h-[72px] rounded-full flex items-center justify-center text-white transition-all active:scale-95 disabled:opacity-40 ${
                   phase === "recording"
                     ? "bg-rose-500 shadow-[0_0_0_10px_rgba(244,63,94,0.2),0_0_0_22px_rgba(244,63,94,0.1)] animate-pulse"
-                    : "bg-indigo-700 hover:bg-indigo-800 hover:-translate-y-0.5 shadow-[0_18px_28px_-12px_rgba(31,87,73,0.9)]"
+                    : `${theme.mic} hover:-translate-y-0.5`
                 }`}
               >
                 {phase === "recording" ? <Square className="w-6 h-6" /> : <Mic className="w-7 h-7" />}
               </button>
-              <p className="text-xs text-slate-600 mt-1">
+              <p className={`text-xs ${theme.muted} mt-1`}>
                 {!sessionId
                   ? "Start a session first"
                   : phase === "recording"
@@ -343,6 +355,7 @@ export const SpeakingView: React.FC = () => {
           </div>
 
           <div className="surface p-5 space-y-3">
+            <PersonaPicker />
             <select
               value={scenarioId}
               onChange={(event) => setScenarioId(event.target.value)}

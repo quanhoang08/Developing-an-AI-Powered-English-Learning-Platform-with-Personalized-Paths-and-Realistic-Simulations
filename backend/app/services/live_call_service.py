@@ -28,6 +28,7 @@ from app.database import get_session_factory
 from app.models.speaking import LiveCall, Scenario
 from app.models.user import User
 from app.services.gamification_service import award_activity
+from app.services.llm_service import persona_style
 
 logger = logging.getLogger(__name__)
 
@@ -65,7 +66,7 @@ def _prior(hello: dict) -> list[dict]:
 	]
 
 
-def build_system_prompt(target_level: str | None, scenario: Scenario | None) -> str:
+def build_system_prompt(target_level: str | None, scenario: Scenario | None, persona: str | None = None) -> str:
 	level = target_level or "B1"
 	lines = [
 		"You are Lumina, a warm English speaking tutor on a live voice call with a Vietnamese learner"
@@ -82,6 +83,8 @@ def build_system_prompt(target_level: str | None, scenario: Scenario | None) -> 
 		lines.append(f"Keep the register {scenario.formality_level}. Open the call in character.")
 	else:
 		lines.append("This is free conversation: greet the learner and ask what they'd like to talk about.")
+	if style := persona_style(persona):
+		lines.append(f"{style} Keep teaching correctly in this personality.")
 	return "\n".join(lines)
 
 
@@ -165,12 +168,12 @@ async def _save(user: User, scenario: Scenario | None, transcript: list[dict], s
 
 
 async def _converse_gemini(
-	websocket: WebSocket, user: User, scenario: Scenario | None, transcript: list[dict]
+	websocket: WebSocket, user: User, scenario: Scenario | None, transcript: list[dict], persona: str | None = None
 ) -> None:
 	settings = get_settings()
 	config = types.LiveConnectConfig(
 		response_modalities=[types.Modality.AUDIO],
-		system_instruction=build_system_prompt(user.target_level, scenario),
+		system_instruction=build_system_prompt(user.target_level, scenario, persona),
 		input_audio_transcription=types.AudioTranscriptionConfig(),
 		output_audio_transcription=types.AudioTranscriptionConfig(),
 	)
@@ -212,6 +215,7 @@ async def run_call(websocket: WebSocket) -> None:
 		await websocket.close(code=1008)
 		return
 	user, scenario = auth
+	persona = hello.get("persona") if isinstance(hello.get("persona"), str) else None
 
 	transcript: list[dict] = []
 	started = time.monotonic()
@@ -221,9 +225,11 @@ async def run_call(websocket: WebSocket) -> None:
 			# Import lười: local_call_service import lại các hàm dùng chung của file này.
 			from app.services import local_call_service
 
-			error_code = await local_call_service.converse(websocket, user, scenario, transcript, _prior(hello))
+			error_code = await local_call_service.converse(
+				websocket, user, scenario, transcript, _prior(hello), persona
+			)
 		else:
-			await _converse_gemini(websocket, user, scenario, transcript)
+			await _converse_gemini(websocket, user, scenario, transcript, persona)
 	except WebSocketDisconnect:
 		pass
 	except Exception as error:  # noqa: BLE001 — mọi lỗi Gemini/mạng đều phải báo về client, không làm sập socket

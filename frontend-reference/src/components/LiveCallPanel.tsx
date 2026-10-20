@@ -14,7 +14,9 @@ import {
   Scenario,
 } from "../api";
 import { LiveMic, PcmPlayer, startLiveMic } from "../liveAudio";
-import { CatMascot } from "./CatMascot";
+import { CatStage, PersonaChip } from "./CatStage";
+import { PersonaPicker } from "./PersonaPicker";
+import { PERSONAS, usePersona } from "../catPersonas";
 
 type Status = "idle" | "connecting" | "live" | "ending";
 
@@ -67,6 +69,8 @@ export const LiveCallPanel: React.FC = () => {
   const [scenarios, setScenarios] = useState<Scenario[]>([]);
   const [scenarioId, setScenarioId] = useState("");
   const [provider, setProvider] = useState<ChatProvider>(readProvider);
+  const [persona] = usePersona();
+  const theme = PERSONAS[persona].ui;
   const [status, setStatus] = useState<Status>("idle");
   const [lines, setLines] = useState<LiveCallLine[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -148,6 +152,7 @@ export const LiveCallPanel: React.FC = () => {
           token: getAccessToken(),
           scenario_id: scenarioId || null,
           provider,
+          persona,
           prior_transcript: carry.length ? carry : undefined,
         }),
       );
@@ -215,11 +220,13 @@ export const LiveCallPanel: React.FC = () => {
   return (
     <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
       <div className="lg:col-span-5 space-y-4">
-        <div className="relative overflow-hidden bg-[radial-gradient(ellipse_at_50%_35%,var(--color-purple-100),var(--color-indigo-100)_70%)] rounded-[2rem] p-6 shadow-[0_30px_50px_-30px_rgba(31,87,73,0.6)]">
-          <p className="text-center num text-3xl font-bold text-slate-900" aria-live="off">
+        <div className={`relative overflow-hidden ${theme.stage} rounded-[2rem] p-6 shadow-[0_30px_50px_-30px_rgba(31,87,73,0.6)] transition-colors duration-500`}>
+          <PersonaChip persona={persona} />
+          <p className={`text-center num text-3xl font-bold ${theme.text}`} aria-live="off">
             {status === "live" ? formatTime(elapsed) : " "}
           </p>
-          <CatMascot
+          <CatStage
+            persona={persona}
             mouthOpen={mouthOpen}
             mood={status === "connecting" ? "thinking" : aiSpeaking ? "speaking" : status === "live" ? "listening" : "idle"}
             className="w-64 h-80 mx-auto mt-1"
@@ -232,7 +239,7 @@ export const LiveCallPanel: React.FC = () => {
               className={`w-[72px] h-[72px] rounded-full flex items-center justify-center text-white transition-all active:scale-95 disabled:opacity-40 ${
                 inCall
                   ? "bg-rose-500 hover:bg-rose-600 shadow-[0_18px_28px_-12px_rgba(244,63,94,0.9)]"
-                  : "bg-emerald-600 hover:bg-emerald-700 hover:-translate-y-0.5 shadow-[0_18px_28px_-12px_rgba(5,150,105,0.9)]"
+                  : `${theme.mic} hover:-translate-y-0.5`
               }`}
             >
               {status === "connecting" || status === "ending" ? (
@@ -243,7 +250,7 @@ export const LiveCallPanel: React.FC = () => {
                 <Phone className="w-7 h-7" />
               )}
             </button>
-            <p className="text-xs text-slate-600 mt-1" aria-live="polite">
+            <p className={`text-xs ${theme.muted} mt-1`} aria-live="polite">
               {status === "connecting"
                 ? "Connecting..."
                 : status === "ending"
@@ -258,6 +265,7 @@ export const LiveCallPanel: React.FC = () => {
         </div>
 
         <div className="surface p-5 space-y-3">
+          <PersonaPicker disabled={inCall} />
           <select
             value={scenarioId}
             onChange={(event) => setScenarioId(event.target.value)}

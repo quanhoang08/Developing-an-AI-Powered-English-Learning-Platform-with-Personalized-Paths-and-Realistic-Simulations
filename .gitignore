@@ -8,3 +8,19 @@ backend/storage/audio/
 backend/storage/documents/
 backend/experiments/writing_eval_bea.json
 backend/experiments/results/writing_eval_bea/
+
+# Môi trường ảo, cache, log, build
+.venv/
+.venv-1/
+.pytest_cache/
+.vite/
+node_modules/
+dist/
+*.log
+.DS_Store
+
+# File nhị phân/sinh ra: không commit
+extension.zip
+backups/
+graphify-out/
+.claude/settings.local.json

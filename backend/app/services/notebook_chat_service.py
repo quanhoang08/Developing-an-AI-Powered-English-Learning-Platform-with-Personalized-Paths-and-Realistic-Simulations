@@ -66,6 +66,7 @@ async def send_message(
 	document_id: uuid.UUID,
 	message: str,
 	provider: str | None = None,
+	persona: str | None = None,
 ) -> tuple[NotebookChatMessage, NotebookChatMessage]:
 	"""Lưu câu hỏi user, chạy RAG (retrieve + generate) rồi lưu câu trả lời — trả cả 2 dòng."""
 	await _get_owned_ready_document(db, user_id, document_id)
@@ -81,7 +82,8 @@ async def send_message(
 
 	relevant_chunks = await rag_service.retrieve_relevant_chunks(db, document_id, message)
 	answer = await llm_service.answer_grounded_question(
-		[chunk.content for chunk in relevant_chunks], message, history_payload, provider=provider
+		[chunk.content for chunk in relevant_chunks], message, history_payload, provider=provider,
+		persona=persona,
 	)
 	sources = [
 		{"chunk_id": str(chunk.id), "excerpt": chunk.content[:200]} for chunk in relevant_chunks

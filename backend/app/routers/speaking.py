@@ -124,12 +124,13 @@ async def submit_turn(
 	audio: UploadFile = File(...),
 	provider: str | None = Query(default=None),
 	duration_seconds: int | None = Query(default=None, gt=0),
+	persona: str | None = Query(default=None),
 	current_user: User = Depends(get_current_user),
 	db: AsyncSession = Depends(get_db),
 ) -> TurnResponse:
 	try:
 		turn = await speaking_service.submit_turn(
-			db, current_user.id, session_id, audio, provider, duration_seconds
+			db, current_user.id, session_id, audio, provider, duration_seconds, persona
 		)
 	except ValueError as error:
 		_raise_business_error(error)

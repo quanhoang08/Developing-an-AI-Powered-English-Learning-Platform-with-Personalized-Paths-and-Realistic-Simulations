@@ -144,6 +144,7 @@ async def _transcribe_and_reply(
 	history: list[dict],
 	provider: str | None,
 	past_errors: list[str],
+	persona: str | None = None,
 ) -> tuple[str, str, dict]:
 	# Nhánh A: STT (Azure -> Gemini dự phòng) -> LLM. Cả 2 STT lỗi -> stt_service_unavailable,
 	# rỗng -> empty_transcription.
@@ -162,7 +163,7 @@ async def _transcribe_and_reply(
 		"formality_level": scenario.formality_level,
 	}
 	reply = await llm_service.generate_conversation_turn(
-		scenario_payload, history, text, provider, past_errors
+		scenario_payload, history, text, provider, past_errors, persona
 	)
 	await _add_practice_question(reply, scenario_payload["description"], text, past_errors)
 	return text, stt_provider, reply
@@ -211,6 +212,7 @@ async def submit_turn(
 	audio: UploadFile,
 	provider: str | None = None,
 	duration_seconds: int | None = None,
+	persona: str | None = None,
 ) -> ConversationTurn:
 	started = time.perf_counter()
 	session = await get_owned_session(db, user_id, session_id)
@@ -246,7 +248,7 @@ async def submit_turn(
 	past_errors = await _recent_error_notes(db, user_id)
 	# Hai nhánh độc lập dữ liệu vào: B luôn nhận audio gốc, không nhận text đã qua STT.
 	(transcript_text, stt_provider, reply), pronunciation = await asyncio.gather(
-		_transcribe_and_reply(str(audio_path), scenario, history, provider, past_errors),
+		_transcribe_and_reply(str(audio_path), scenario, history, provider, past_errors, persona),
 		_assess_pronunciation(str(audio_path)),
 	)
 

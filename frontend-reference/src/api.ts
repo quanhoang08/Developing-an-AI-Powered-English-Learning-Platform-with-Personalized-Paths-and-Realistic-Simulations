@@ -530,10 +530,17 @@ export function getChatHistory(documentId: string) {
 // Gửi 1 câu hỏi RAG về document; backend tìm chunk liên quan rồi gọi Gemini trả lời có trích dẫn.
 export type ChatProvider = "gemini" | "ollama";
 
-export function sendChatMessage(documentId: string, message: string, provider: ChatProvider = "gemini") {
+export type ChatPersona = "polite" | "rebel" | "buddy";
+
+export function sendChatMessage(
+  documentId: string,
+  message: string,
+  provider: ChatProvider = "gemini",
+  persona: ChatPersona = "polite",
+) {
   return request<{ user_message: ChatMessage; assistant_message: ChatMessage }>(
     `/api/documents/${documentId}/chat`,
-    { method: "POST", body: JSON.stringify({ message, provider }) },
+    { method: "POST", body: JSON.stringify({ message, provider, persona }) },
   );
 }
 
@@ -811,10 +818,16 @@ export function createSpeakingSession(scenarioId: string) {
   });
 }
 
-export function sendSpeakingTurn(sessionId: string, audio: Blob, provider: ChatProvider, durationSeconds?: number) {
+export function sendSpeakingTurn(
+  sessionId: string,
+  audio: Blob,
+  provider: ChatProvider,
+  durationSeconds?: number,
+  persona: ChatPersona = "polite",
+) {
   const body = new FormData();
   body.append("audio", audio, "turn.wav");
-  const query = durationSeconds ? `&duration_seconds=${durationSeconds}` : "";
+  const query = `${durationSeconds ? `&duration_seconds=${durationSeconds}` : ""}&persona=${persona}`;
   return request<SpeakingTurn>(`/api/speaking/sessions/${sessionId}/turns?provider=${provider}${query}`, {
     method: "POST",
     body,

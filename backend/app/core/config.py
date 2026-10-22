@@ -69,6 +69,10 @@ class Settings(BaseSettings):
 	local_models_dir: str = Field(default="storage/models", validation_alias=AliasChoices("LOCAL_MODELS_DIR"))
 	whisper_model_name: str = Field(default="small.en", validation_alias=AliasChoices("WHISPER_MODEL_NAME"))
 	piper_voice: str = Field(default="en_US-lessac-medium", validation_alias=AliasChoices("PIPER_VOICE"))
+	# Phụ đề trực tiếp (caption_service): có SONIOX_API_KEY thì dùng Soniox (STT + dịch real-time), không thì tự
+	# chạy local (whisper + Ollama). Để trống = luôn local; Soniox lỗi giữa chừng cũng tự lùi về local.
+	soniox_api_key: str = Field(default="", validation_alias=AliasChoices("SONIOX_API_KEY"))
+	soniox_model: str = Field(default="stt-rt-v5", validation_alias=AliasChoices("SONIOX_MODEL"))
 	gemini_embedding_model: str = Field(
 		default="models/gemini-embedding-001",
 		validation_alias=AliasChoices("GEMINI_EMBEDDING_MODEL"),

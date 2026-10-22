@@ -28,7 +28,7 @@ from app.schemas.speaking import (
 	TurnResponse,
 	LiteralTranslationNote,
 )
-from app.services import ielts_service, live_call_service, llm_service, speaking_service
+from app.services import caption_service, ielts_service, live_call_service, llm_service, speaking_service
 
 # Router chỉ gọi speaking_service, không gọi thẳng speech_service/llm_service (mục 6 spec).
 router = APIRouter(prefix="/speaking", tags=["speaking"])
@@ -244,6 +244,12 @@ async def live_call(websocket: WebSocket) -> None:
 	# Trình duyệt không gắn được header Authorization vào WebSocket; token đi trong tin nhắn đầu
 	# (không để ở query string vì sẽ lọt vào access log). Xác thực nằm trong service.
 	await live_call_service.run_call(websocket)
+
+
+@router.websocket("/captions")
+async def live_captions(websocket: WebSocket) -> None:
+	# Phụ đề trực tiếp + dịch tiếng Việt, giao thức và cách xác thực giống /live (xem caption_service).
+	await caption_service.run_captions(websocket)
 
 
 @router.get("/live/calls", response_model=list[LiveCallItem])

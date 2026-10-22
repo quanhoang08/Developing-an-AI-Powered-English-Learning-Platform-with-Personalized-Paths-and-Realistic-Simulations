@@ -17,12 +17,13 @@ import {
 import { startWavRecording, WavRecording } from "../wavRecorder";
 import { useStudyTimer } from "../useStudyTimer";
 import { CatMood } from "./CatMascot";
-import { CatStage, PersonaChip } from "./CatStage";
+import { CatStage, PersonaChip, StageBackdrop } from "./CatStage";
 import { PersonaPicker } from "./PersonaPicker";
 import { PERSONAS, usePersona } from "../catPersonas";
 import { CountdownTimer } from "./CountdownTimer";
 import { IeltsPanel } from "./IeltsPanel";
 import { LiveCallPanel } from "./LiveCallPanel";
+import { LiveCaptionsPanel } from "./LiveCaptionsPanel";
 import { PronunciationPanel } from "./PronunciationPanel";
 import { PhrasebookPanel } from "./PhrasebookPanel";
 
@@ -62,7 +63,7 @@ export const SpeakingView: React.FC = () => {
   });
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [turns, setTurns] = useState<SpeakingTurn[]>([]);
-  const [tab, setTab] = useState<"chat" | "live" | "ielts" | "pron">("chat");
+  const [tab, setTab] = useState<"chat" | "live" | "captions" | "ielts" | "pron">("chat");
   const [phase, setPhase] = useState<Phase>("idle");
   const [mouthOpen, setMouthOpen] = useState(0);
   const [bubble, setBubble] = useState("Hi! Pick a scene and start a session, then tap the mic and talk to me.");
@@ -280,7 +281,7 @@ export const SpeakingView: React.FC = () => {
       </div>
 
       <div className="flex gap-2" role="tablist">
-        {([["chat", "Conversation practice"], ["live", "Live call"], ["ielts", "IELTS mock test"], ["pron", "Pronunciation lab"]] as const).map(([id, label]) => (
+        {([["chat", "Conversation practice"], ["live", "Live call"], ["captions", "Live captions"], ["ielts", "IELTS mock test"], ["pron", "Pronunciation lab"]] as const).map(([id, label]) => (
           <button
             key={id}
             role="tab"
@@ -305,6 +306,7 @@ export const SpeakingView: React.FC = () => {
         {/* Sân khấu con mèo */}
         <div className="lg:col-span-5 space-y-4">
           <div className={`relative overflow-hidden ${theme.stage} rounded-[2rem] p-6 shadow-[0_30px_50px_-30px_rgba(31,87,73,0.6)] transition-colors duration-500`}>
+            <StageBackdrop persona={persona} />
             <PersonaChip persona={persona} />
             <motion.div
               key={String(bubble)}
@@ -317,7 +319,7 @@ export const SpeakingView: React.FC = () => {
               {bubble}
               <span className="absolute -bottom-2 left-1/2 -translate-x-1/2 w-4 h-4 bg-inherit rotate-45 rounded-sm" />
             </motion.div>
-            <CatStage mouthOpen={mouthOpen} mood={mood} persona={persona} frown={frown} className="w-64 h-80 mx-auto mt-3" />
+            <CatStage mouthOpen={mouthOpen} mood={mood} persona={persona} frown={frown} className="w-72 h-[22rem] mx-auto mt-3" />
 
             <div className="flex flex-col items-center gap-2">
               <button
@@ -502,6 +504,9 @@ export const SpeakingView: React.FC = () => {
       </div>
       <div className={tab === "live" ? "" : "hidden"}>
         <LiveCallPanel />
+      </div>
+      <div className={tab === "captions" ? "" : "hidden"}>
+        <LiveCaptionsPanel />
       </div>
       <div className={tab === "ielts" ? "" : "hidden"}>
         <IeltsPanel />

@@ -22,7 +22,16 @@ Tooltip hiện 2 tầng, nghĩa tiếng Việt luôn ở trên:
 - `manifest.json`
 - `background.js`: service worker — tra từ (có cache), đăng nhập/refresh token, lưu từ, menu chuột phải. Mọi request cross-origin đi qua đây nên không vướng CORS.
 - `content-script.js`: bắt hover/chuột phải, dựng tooltip trong Shadow DOM.
-- `popup/`: đăng nhập, đăng xuất, bật/tắt tra nghĩa, cấu hình API URL.
+- `popup/`: đăng nhập, đăng xuất, bật/tắt tra nghĩa và phụ đề YouTube, nút "Bật phụ đề cho tab này", cấu hình API URL.
+- `youtube-captions.js`: đọc phụ đề (CC) mà YouTube đang vẽ, hiện lại ở khung riêng với công tắc English / Tiếng Việt / Cả hai; bản dịch qua `TRANSLATE` trong `background.js` → `POST /api/extension/translate` (Ollama), chưa đăng nhập hoặc lỗi thì MyMemory. Rê chuột vào từ trong khung vẫn tra nghĩa được. Video phát hơn 15 giây mà YouTube chưa vẽ chữ nào thì khung nhắc dùng phụ đề từ âm thanh.
+- `tab-captions.js`, `offscreen.html`, `offscreen.js`: phụ đề từ **âm thanh của tab** (trang bất kỳ, video không có phụ đề). Popup → `background.js` (`tabCapture.getMediaStreamId`) → offscreen document thu âm, đổi sang PCM16 16 kHz, gửi WebSocket `/api/extension/captions` (cùng giao thức với `/api/speaking/captions`: STT Soniox hoặc local whisper + dịch) → phụ đề quay về `tab-captions.js`. Cần đăng nhập. Tab vẫn nghe tiếng bình thường (offscreen phát lại âm thanh).
+- Khung phụ đề đứng yên khi con trỏ đang ở trên nó (để bấm nút / tra từ), phụ đề mới hiện khi chuột rời khung.
+
+### Phụ đề trực tiếp: lưu ý
+
+- Mỗi lần tạo lại tunnel Cloudflare (quick tunnel) URL đổi: dán URL mới vào API URL trong popup và đăng nhập lại. Chạy cùng máy thì dùng `http://127.0.0.1:8000`.
+- Không có `SONIOX_API_KEY` (hoặc hết credit) thì backend chạy offline: lần đầu mất ~15 giây nạp mô hình, chỉ hiện câu đã xong, trễ vài giây.
+- Mô hình offline chỉ nhận tiếng Anh (`small.en`); nhạc và tiếng nước khác cho kết quả vô nghĩa.
 
 ## Chạy thử
 

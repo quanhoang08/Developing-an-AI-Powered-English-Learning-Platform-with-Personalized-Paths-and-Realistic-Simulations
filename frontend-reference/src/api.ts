@@ -906,6 +906,10 @@ export function liveCallSocketUrl(): string {
   return `${(BACKEND_URL || window.location.origin).replace(/^http/, "ws")}/api/speaking/live`;
 }
 
+export function captionSocketUrl(): string {
+  return `${(BACKEND_URL || window.location.origin).replace(/^http/, "ws")}/api/speaking/captions`;
+}
+
 export function createIeltsExam(topic?: string) {
   return request<IeltsExam>("/api/speaking/ielts/exam", {
     method: "POST",

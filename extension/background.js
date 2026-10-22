@@ -187,6 +187,45 @@ function lookupAi(rawWord, sentence) {
   return pending;
 }
 
+// ---------- Dịch dòng phụ đề (YouTube) ----------
+
+const translateCache = new Map();
+
+function postTranslate(text, token, apiBaseUrl) {
+  return fetch(`${apiBaseUrl}/api/extension/translate`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+    body: JSON.stringify({ text }),
+    signal: AbortSignal.timeout(20000),
+  });
+}
+
+async function fetchBackendTranslation(text, config) {
+  let response = await postTranslate(text, config.accessToken, config.apiBaseUrl);
+  if (response.status === 401) {
+    const fresh = await refreshAccessToken();
+    if (!fresh) return null;
+    response = await postTranslate(text, fresh, config.apiBaseUrl);
+  }
+  return response.ok ? (await response.json()).translation || null : null;
+}
+
+// Đã đăng nhập thì dịch bằng Ollama qua backend (hợp ngữ cảnh, không giới hạn ký tự); chưa/lỗi thì MyMemory.
+async function translateLine(rawText) {
+  const text = String(rawText || "").replace(/\s+/g, " ").trim().slice(0, 300);
+  if (!text) return null;
+  if (translateCache.has(text)) return translateCache.get(text);
+  const config = await getConfig();
+  const translated =
+    (config.accessToken ? await fetchBackendTranslation(text, config).catch(() => null) : null) ??
+    (await fetchVietnamese(text));
+  if (translated) {
+    if (translateCache.size >= CACHE_LIMIT) translateCache.delete(translateCache.keys().next().value);
+    translateCache.set(text, translated);
+  }
+  return translated;
+}
+
 // ---------- Xác thực ----------
 
 async function readError(response) {
@@ -315,11 +354,93 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
   }
 });
 
+// ---------- Phụ đề từ âm thanh tab (trang bất kỳ, video không có phụ đề) ----------
+// popup (thao tác của người dùng -> activeTab) -> tabCapture.getMediaStreamId -> offscreen.js thu âm + gửi backend
+// -> phụ đề quay về đây -> chuyển cho tab-captions.js của tab đang được thu.
+
+let captionTabId = null;
+
+async function ensureOffscreen() {
+  const existing = await chrome.runtime.getContexts({ contextTypes: ["OFFSCREEN_DOCUMENT"] });
+  if (existing.length > 0) return;
+  await chrome.offscreen.createDocument({
+    url: "offscreen.html",
+    reasons: ["USER_MEDIA", "AUDIO_PLAYBACK"],
+    justification: "Thu âm thanh của tab để tạo phụ đề trực tiếp và phát lại cho người dùng nghe.",
+  });
+}
+
+function sendToCaptionTab(message) {
+  if (captionTabId !== null) chrome.tabs.sendMessage(captionTabId, message).catch(() => {});
+}
+
+function clearCaptionBadge(tabId) {
+  chrome.action.setBadgeText({ text: "", tabId }).catch(() => {});
+}
+
+async function startTabCaptions(tabId) {
+  const config = await getConfig();
+  if (!config.accessToken) throw new Error("not_logged_in");
+  // Access token có thể đã hết hạn; đổi mới trước khi mở socket (thất bại vì mạng thì dùng token đang có).
+  const token = (await refreshAccessToken().catch(() => null)) || config.accessToken;
+  await stopTabCaptions();
+  const streamId = await chrome.tabCapture.getMediaStreamId({ targetTabId: tabId });
+  await ensureOffscreen();
+  captionTabId = tabId;
+  showCaptionBadge(tabId);
+  sendToCaptionTab({ type: "TAB_STATUS", state: "connecting" });
+  await chrome.runtime.sendMessage({
+    target: "offscreen",
+    type: "OFFSCREEN_START",
+    streamId,
+    wsUrl: `${config.apiBaseUrl.replace(/^http/, "ws")}/api/extension/captions`,
+    token,
+  });
+}
+
+// notifyTab=false khi lỗi: để lại thông báo lỗi trên khung thay vì xoá nó bằng "closed".
+async function stopTabCaptions(notifyTab = true) {
+  const tabId = captionTabId;
+  if (tabId === null) return;
+  const existing = await chrome.runtime.getContexts({ contextTypes: ["OFFSCREEN_DOCUMENT"] });
+  if (existing.length > 0) {
+    await chrome.runtime.sendMessage({ target: "offscreen", type: "OFFSCREEN_STOP" }).catch(() => {});
+    await chrome.offscreen.closeDocument().catch(() => {});
+  }
+  if (notifyTab) sendToCaptionTab({ type: "TAB_STATUS", state: "closed" });
+  clearCaptionBadge(tabId);
+  captionTabId = null;
+}
+
+chrome.tabs.onRemoved.addListener((tabId) => {
+  if (tabId === captionTabId) stopTabCaptions();
+});
+
+// Chrome xoá huy hiệu theo tab mỗi lần điều hướng, trong khi phiên thu vẫn chạy: đặt lại để người dùng biết vẫn đang bật.
+function showCaptionBadge(tabId) {
+  chrome.action.setBadgeText({ text: "CC", tabId }).catch(() => {});
+  chrome.action.setBadgeBackgroundColor({ color: "#4f46e5", tabId }).catch(() => {});
+}
+
+chrome.tabs.onUpdated.addListener((tabId, changeInfo) => {
+  if (tabId === captionTabId && changeInfo.status === "complete") showCaptionBadge(tabId);
+});
+
 // ---------- Nhận message ----------
 
 const handlers = {
   LOOKUP: (message) => lookupFast(message.word),
   LOOKUP_AI: (message) => lookupAi(message.word, message.sentence),
+  TRANSLATE: (message) => translateLine(message.text),
+  START_TAB_CAPTIONS: (message) => startTabCaptions(message.tabId),
+  STOP_TAB_CAPTIONS: () => stopTabCaptions(),
+  TAB_CAPTION_STATE: (message) => captionTabId !== null && captionTabId === message.tabId,
+  // Từ offscreen.js: phụ đề mới / trạng thái socket.
+  TAB_CAPTION: (message) => sendToCaptionTab({ type: "TAB_CAPTION", caption: message.caption }),
+  TAB_STATUS: async (message) => {
+    sendToCaptionTab({ type: "TAB_STATUS", ...message });
+    if (message.state === "closed" || message.state === "error") await stopTabCaptions(false);
+  },
   SAVE: (message, sender) => saveVocab(message.input, sender.tab?.url || sender.url),
   MENU_TITLE: (message) => setMenuTitle(message.word),
   AUTH_STATUS: async () => {

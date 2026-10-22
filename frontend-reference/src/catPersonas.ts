@@ -9,9 +9,11 @@ export interface PersonaDef {
   emoji: string;
   tagline: string;
   // Màu mèo 3D (hex): lông, vằn/mảng tối, bụng-mõm, trong tai, màu nhấn của phụ kiện, đèn viền.
-  look: { fur: string; dark: string; cream: string; ear: string; accent: string; rim: string; tempo: number };
+  look: { fur: string; dark: string; cream: string; ear: string; accent: string; rim: string; tempo: number; iris: string; platform: string };
   // Class Tailwind của sân khấu (panel chứa mèo) và các thành phần trên đó.
-  ui: { stage: string; text: string; muted: string; bubble: string; mic: string; chip: string; picked: string };
+  ui: { stage: string; text: string; muted: string; bubble: string; mic: string; chip: string; picked: string; orbA: string; orbB: string };
+  // Câu mèo nói khi bấm vào mèo ở Dashboard.
+  lines: string[];
 }
 
 export const PERSONAS: Record<CatPersona, PersonaDef> = {
@@ -20,7 +22,7 @@ export const PERSONAS: Record<CatPersona, PersonaDef> = {
     name: "Sir Whiskers",
     emoji: "🎩",
     tagline: "Polite, patient, and always properly dressed.",
-    look: { fur: "#f7b267", dark: "#e58f3a", cream: "#fff1dc", ear: "#ff9fb2", accent: "#4f46e5", rim: "#a5b4fc", tempo: 1 },
+    look: { fur: "#f7b267", dark: "#e58f3a", cream: "#fff1dc", ear: "#ff9fb2", accent: "#4f46e5", rim: "#a5b4fc", tempo: 1, iris: "#b9782a", platform: "#efe6d6" },
     ui: {
       stage: "bg-[radial-gradient(ellipse_at_50%_35%,var(--color-purple-100),var(--color-indigo-100)_70%)]",
       text: "text-slate-900",
@@ -29,14 +31,17 @@ export const PERSONAS: Record<CatPersona, PersonaDef> = {
       mic: "bg-indigo-700 hover:bg-indigo-800 shadow-[0_18px_28px_-12px_rgba(31,87,73,0.9)]",
       chip: "bg-white/70 text-indigo-900",
       picked: "ring-2 ring-indigo-500 bg-indigo-50",
+      orbA: "bg-indigo-300/50",
+      orbB: "bg-amber-200/60",
     },
+    lines: ["Good day! Shall we practise a little English together?", "Splendid to see you. Do take your time.", "Ah, a scholar returns. Shall we begin?"],
   },
   rebel: {
     id: "rebel",
     name: "Bad Kitty",
     emoji: "😈",
     tagline: "Sassy troublemaker. Teases you, still teaches you.",
-    look: { fur: "#3b3b4f", dark: "#1d1d2b", cream: "#8d8da6", ear: "#ff2e93", accent: "#c6ff00", rim: "#ff2e93", tempo: 1.6 },
+    look: { fur: "#3b3b4f", dark: "#1d1d2b", cream: "#8d8da6", ear: "#ff2e93", accent: "#c6ff00", rim: "#ff2e93", tempo: 1.6, iris: "#9bd400", platform: "#1a1030" },
     ui: {
       stage: "bg-[radial-gradient(ellipse_at_50%_30%,#5b1f86,#160a26_75%)] shadow-[0_0_60px_-10px_rgba(255,46,147,0.55)]",
       text: "text-lime-300",
@@ -45,14 +50,17 @@ export const PERSONAS: Record<CatPersona, PersonaDef> = {
       mic: "bg-fuchsia-600 hover:bg-fuchsia-500 shadow-[0_0_28px_rgba(255,46,147,0.8)]",
       chip: "bg-black/60 text-lime-300",
       picked: "ring-2 ring-fuchsia-500 bg-fuchsia-50",
+      orbA: "bg-fuchsia-500/40",
+      orbB: "bg-lime-300/30",
     },
+    lines: ["Oh look, who showed up. Ready to be roasted?", "Mistakes? Pfft. I make you look good. Mostly.", "Don't just stand there. Talk to me, rookie!"],
   },
   buddy: {
     id: "buddy",
     name: "Chill Buddy",
     emoji: "🎧",
     tagline: "Relaxed best friend. Zero pressure, just vibes.",
-    look: { fur: "#f4d2a4", dark: "#d98c4a", cream: "#fff6e8", ear: "#ffb4a2", accent: "#14b8a6", rim: "#fdba74", tempo: 0.7 },
+    look: { fur: "#f4d2a4", dark: "#d98c4a", cream: "#fff6e8", ear: "#ffb4a2", accent: "#14b8a6", rim: "#fdba74", tempo: 0.7, iris: "#6b4f3a", platform: "#f6c9a8" },
     ui: {
       stage: "bg-[radial-gradient(ellipse_at_50%_35%,#fff1dc,#ffd9b8_55%,#ffb4a2)]",
       text: "text-amber-950",
@@ -61,7 +69,10 @@ export const PERSONAS: Record<CatPersona, PersonaDef> = {
       mic: "bg-teal-600 hover:bg-teal-700 shadow-[0_18px_28px_-12px_rgba(13,148,136,0.9)]",
       chip: "bg-white/70 text-teal-900",
       picked: "ring-2 ring-teal-500 bg-teal-50",
+      orbA: "bg-orange-300/60",
+      orbB: "bg-teal-300/50",
     },
+    lines: ["Heyyy! Wanna just chat for a bit?", "No stress, no pressure. Just vibes and English.", "Grab a seat, let's talk about anything!"],
   },
 };
 

@@ -60,22 +60,27 @@ export const GrammarDailyCard: React.FC<{ setActiveTab: (tab: ActiveTab) => void
   if (doneToday === null) return null;
 
   return (
-    <section className="pop-in surface p-6 space-y-3" aria-label="Daily grammar lesson">
-      <h3 className="font-display text-xl font-bold text-slate-900">Daily grammar lesson (3 min)</h3>
+    <section className="pop-in surface p-6 space-y-4 h-full" aria-label="Daily grammar lesson">
+      <div className="flex items-start justify-between gap-3">
+        <h3 className="font-display text-xl font-bold text-slate-900">Daily grammar lesson</h3>
+        <span className={`tag shrink-0 ${doneToday ? "bg-emerald-100 text-emerald-700" : "bg-purple-100 text-purple-700"}`}>
+          {doneToday ? "Done" : "3 min"}
+        </span>
+      </div>
       <p className="text-sm text-slate-600">{doneToday ? "Done for today. Nice work." : "Not done yet today: 6 questions on your weakest topic."}</p>
-      <div className="flex flex-wrap items-center gap-3">
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-3">
         {!doneToday && (
-          <button onClick={() => setActiveTab("writing")} className="px-4 py-2 bg-indigo-700 hover:bg-indigo-800 text-white font-bold text-sm rounded-2xl cursor-pointer">
+          <button onClick={() => setActiveTab("writing")} className="btn-primary">
             Open Grammar map
           </button>
         )}
         {supported && (
-          <label className="text-xs text-slate-600 flex items-center gap-2">
+          <label className="text-xs text-slate-600 flex flex-wrap items-center gap-2">
             Remind me at
             <select
               value={hour ?? ""}
               onChange={(e) => enable(e.target.value === "" ? null : Number(e.target.value))}
-              className="rounded-lg ring-1 ring-slate-900/10 px-2 py-1"
+              className="field !py-1 !px-2 !rounded-lg"
             >
               <option value="">Off</option>
               {[8, 12, 18, 20, 21].map((h) => <option key={h} value={h}>{h}:00</option>)}

@@ -199,6 +199,8 @@
   function wordAtPoint(x, y) {
     const caret = caretAt(x, y);
     if (!caret || caret.node.nodeType !== Node.TEXT_NODE || isEditable(caret.node)) return null;
+    // Vùng chữ không phải tiếng Anh do extension tự vẽ (dòng dịch của phụ đề YouTube) thì không tra.
+    if (caret.node.parentElement?.closest("[data-lumina-skip-lookup]")) return null;
     const text = caret.node.data;
     WORD_PATTERN.lastIndex = 0;
     let match;

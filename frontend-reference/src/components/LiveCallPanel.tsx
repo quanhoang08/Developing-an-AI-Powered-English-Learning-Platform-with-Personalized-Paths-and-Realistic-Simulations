@@ -14,7 +14,7 @@ import {
   Scenario,
 } from "../api";
 import { LiveMic, PcmPlayer, startLiveMic } from "../liveAudio";
-import { CatStage, PersonaChip } from "./CatStage";
+import { CatStage, PersonaChip, StageBackdrop } from "./CatStage";
 import { PersonaPicker } from "./PersonaPicker";
 import { PERSONAS, usePersona } from "../catPersonas";
 
@@ -221,6 +221,7 @@ export const LiveCallPanel: React.FC = () => {
     <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
       <div className="lg:col-span-5 space-y-4">
         <div className={`relative overflow-hidden ${theme.stage} rounded-[2rem] p-6 shadow-[0_30px_50px_-30px_rgba(31,87,73,0.6)] transition-colors duration-500`}>
+          <StageBackdrop persona={persona} />
           <PersonaChip persona={persona} />
           <p className={`text-center num text-3xl font-bold ${theme.text}`} aria-live="off">
             {status === "live" ? formatTime(elapsed) : " "}
@@ -229,7 +230,7 @@ export const LiveCallPanel: React.FC = () => {
             persona={persona}
             mouthOpen={mouthOpen}
             mood={status === "connecting" ? "thinking" : aiSpeaking ? "speaking" : status === "live" ? "listening" : "idle"}
-            className="w-64 h-80 mx-auto mt-1"
+            className="w-72 h-[22rem] mx-auto mt-1"
           />
           <div className="flex flex-col items-center gap-2">
             <button

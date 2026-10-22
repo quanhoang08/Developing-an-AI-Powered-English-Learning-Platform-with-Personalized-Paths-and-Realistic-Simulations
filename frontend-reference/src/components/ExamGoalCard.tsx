@@ -39,21 +39,21 @@ export const ExamGoalCard: React.FC = () => {
   };
 
   return (
-    <section className="pop-in surface p-6 space-y-4 mt-6">
+    <section className="pop-in surface p-6 space-y-4 h-full">
       <h3 className="font-display text-xl font-bold text-slate-900">IELTS goal &amp; daily plan</h3>
       <div className="flex flex-wrap items-end gap-3">
         <label className="text-xs font-bold text-slate-600 space-y-1">
           Target band
-          <select name="target_band" value={band} onChange={(e) => setBand(e.target.value)} className="block px-3 py-2 rounded-xl ring-1 ring-slate-900/10 text-sm">
+          <select name="target_band" value={band} onChange={(e) => setBand(e.target.value)} className="field block">
             <option value="">—</option>
             {BANDS.map((b) => <option key={b} value={b}>{b.toFixed(1)}</option>)}
           </select>
         </label>
         <label className="text-xs font-bold text-slate-600 space-y-1">
           Exam date
-          <input name="exam_date" type="date" value={date} onChange={(e) => setDate(e.target.value)} className="block px-3 py-2 rounded-xl ring-1 ring-slate-900/10 text-sm" />
+          <input name="exam_date" type="date" value={date} onChange={(e) => setDate(e.target.value)} className="field block" />
         </label>
-        <button onClick={save} disabled={busy} className="px-4 py-2 bg-indigo-700 hover:bg-indigo-800 disabled:opacity-50 text-white font-bold text-sm rounded-2xl cursor-pointer">
+        <button onClick={save} disabled={busy} className="btn-primary">
           Save goal
         </button>
       </div>

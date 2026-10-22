@@ -1,6 +1,7 @@
 import React from "react";
 import { LogIn } from "lucide-react";
-import { CatMascot } from "./CatMascot";
+import { CatStage } from "./CatStage";
+import { usePersona } from "../catPersonas";
 
 interface LockedFeatureProps {
   featureName: string;
@@ -9,12 +10,13 @@ interface LockedFeatureProps {
 // Chặn truy cập mọi view ngoài Dashboard tới khi user đăng nhập thật với backend.
 export const LockedFeature: React.FC<LockedFeatureProps> = ({ featureName }) => {
   const requestAuth = () => window.dispatchEvent(new Event("lumina-open-auth"));
+  const [persona] = usePersona();
 
   return (
     <div className="flex flex-col items-center justify-center text-center px-6 py-16 max-w-xl mx-auto">
       <div className="relative mb-6">
         <div className="absolute inset-x-2 bottom-0 h-20 rounded-full bg-indigo-200/60 blur-2xl" aria-hidden="true" />
-        <CatMascot mouthOpen={0} mood="thinking" className="relative h-44 w-auto" />
+        <CatStage variant="hero" persona={persona} mouthOpen={0} mood="thinking" className="relative h-60 w-52" />
       </div>
       <h2 className="font-display text-3xl font-bold text-slate-900 mb-3">
         {featureName} is waiting for you

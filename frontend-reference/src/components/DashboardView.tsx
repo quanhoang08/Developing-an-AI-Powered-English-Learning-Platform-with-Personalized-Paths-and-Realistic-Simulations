@@ -3,11 +3,14 @@
 // tự bật "chế độ bấm giờ" — GET/PATCH /api/users/me, GET /api/activity/weekly-summary) và "Pick up
 // where you left off" (GET /api/activity/recent — luôn thật, không phụ thuộc bấm giờ) qua
 // useLearningStats.
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { motion } from "motion/react";
 import { TiltCard } from "./TiltCard";
 import { ActiveTab } from "../types";
-import { CatMascot, CatMood } from "./CatMascot";
+import { CatMood } from "./CatMascot";
+import { CatStage } from "./CatStage";
+import { PersonaPicker } from "./PersonaPicker";
+import { PERSONAS, usePersona } from "../catPersonas";
 import { CountUp } from "./CountUp";
 import { CommunityCard } from "./CommunityCard";
 import { ExamGoalCard } from "./ExamGoalCard";
@@ -91,12 +94,30 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   const activeDaySet = new Set(stats.recentActiveDates);
   const displayName = userEmail ? userEmail.split("@")[0] : null;
   const [isTogglingTimer, setIsTogglingTimer] = useState(false);
-  // Bấm vào mèo: vẫy tay + nốt nhạc ~1.8s rồi về idle.
+  // Mèo 3D: tự chào khi vào trang, bấm vào để nghe câu mới, rê chuột vào thì quay sang lắng nghe.
+  const [persona] = usePersona();
   const [catMood, setCatMood] = useState<CatMood>("idle");
+  const [catMouth, setCatMouth] = useState(0);
+  const [lineIndex, setLineIndex] = useState(0);
+  const catLine = PERSONAS[persona].lines[lineIndex % PERSONAS[persona].lines.length];
   function greetCat() {
+    setLineIndex((current) => current + 1);
     setCatMood("speaking");
-    window.setTimeout(() => setCatMood("idle"), 1800);
+    window.setTimeout(() => setCatMood((current) => (current === "speaking" ? "idle" : current)), 2800);
   }
+  useEffect(() => {
+    const id = window.setTimeout(greetCat, 1200);
+    return () => window.clearTimeout(id);
+  }, []);
+  // Không có audio thật ở Dashboard: giả nhịp nhép miệng ngẫu nhiên trong lúc "nói".
+  useEffect(() => {
+    if (catMood !== "speaking") {
+      setCatMouth(0);
+      return;
+    }
+    const id = window.setInterval(() => setCatMouth(Math.random()), 110);
+    return () => window.clearInterval(id);
+  }, [catMood]);
 
   async function handleToggleTimerMode() {
     setIsTogglingTimer(true);
@@ -176,7 +197,15 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               {displayName && (
                 <>
                   ,<br />
-                  <span className="italic font-semibold text-purple-300">{displayName}</span>
+                  {/* Tên dài (phần trước @ của email) co nhỏ và cắt gọn, không chiếm hết banner. */}
+                  <span
+                    title={displayName}
+                    className={`block max-w-full truncate pb-1 italic font-semibold text-purple-300 ${
+                      displayName.length > 14 ? "text-2xl sm:text-3xl md:text-4xl mt-2" : ""
+                    }`}
+                  >
+                    {displayName}
+                  </span>
                 </>
               )}
             </h1>
@@ -208,10 +237,35 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             </div>
           </div>
 
-          <div className="hidden md:flex justify-center self-end h-full pr-6">
-            <button type="button" onClick={greetCat} aria-label="Say hi to the cat" className="cursor-pointer self-end focus-visible:outline-offset-4">
-              <CatMascot mouthOpen={0} mood={catMood} className="h-72 w-auto translate-y-6 drop-shadow-[0_24px_24px_rgba(0,0,0,0.35)] transition-transform hover:scale-[1.03]" />
+          <div className="hidden md:block relative self-end w-full max-w-sm justify-self-center pr-6">
+            <div
+              className="absolute inset-0 pointer-events-none"
+              style={{ background: `radial-gradient(circle at 50% 62%, ${PERSONAS[persona].look.rim}55, transparent 62%)` }}
+              aria-hidden="true"
+            />
+            {catMood === "speaking" && (
+              <motion.p
+                key={catLine}
+                initial={{ opacity: 0, y: 8, scale: 0.94 }}
+                animate={{ opacity: 1, y: 0, scale: 1 }}
+                className="absolute top-6 left-0 right-6 z-10 rounded-2xl rounded-br-sm bg-white/95 text-slate-800 text-sm font-medium px-4 py-3 shadow-[0_14px_28px_-14px_rgba(0,0,0,0.6)]"
+              >
+                {catLine}
+              </motion.p>
+            )}
+            <button
+              type="button"
+              onClick={greetCat}
+              onPointerEnter={() => setCatMood((current) => (current === "idle" ? "listening" : current))}
+              onPointerLeave={() => setCatMood((current) => (current === "listening" ? "idle" : current))}
+              aria-label="Say hi to the cat"
+              className="relative block w-full cursor-pointer focus-visible:outline-offset-4"
+            >
+              <CatStage variant="hero" persona={persona} mouthOpen={catMouth} mood={catMood} className="h-[21rem] w-full" />
             </button>
+            <div className="relative z-10 flex justify-center pb-5 pt-1">
+              <PersonaPicker compact />
+            </div>
           </div>
         </div>
       </motion.section>
@@ -302,8 +356,8 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
 
         {/* Mastery: vòng tiến độ */}
         <TiltCard variants={item} className="surface lg:col-span-3 p-6 flex flex-col justify-between">
-          <div className="flex items-center gap-4">
-            <div className="relative w-20 h-20 shrink-0">
+          <div className="flex-1 flex flex-col items-center justify-center gap-3 text-center">
+            <div className="relative w-28 h-28 shrink-0">
               <svg viewBox="0 0 80 80" className="w-full h-full -rotate-90" aria-hidden="true">
                 <circle cx="40" cy="40" r={RING_RADIUS} fill="none" strokeWidth="8" className="stroke-slate-200/80" />
                 <motion.circle
@@ -452,8 +506,12 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           </div>
         )}
       </motion.section>
-      {userEmail && <GrammarDailyCard setActiveTab={setActiveTab} />}
-      {userEmail && <ExamGoalCard />}
+      {userEmail && (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 lg:[&>*:only-child]:col-span-2">
+          <GrammarDailyCard setActiveTab={setActiveTab} />
+          <ExamGoalCard />
+        </div>
+      )}
       {userEmail && <CommunityCard />}
     </motion.div>
   );

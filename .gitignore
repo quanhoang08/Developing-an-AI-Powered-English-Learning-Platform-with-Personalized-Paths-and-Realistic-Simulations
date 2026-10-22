@@ -24,3 +24,12 @@ extension.zip
 backups/
 graphify-out/
 .claude/settings.local.json
+
+# Cache/coverage/OS khác
+*.zip
+.ruff_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+*.tsbuildinfo
+Thumbs.db

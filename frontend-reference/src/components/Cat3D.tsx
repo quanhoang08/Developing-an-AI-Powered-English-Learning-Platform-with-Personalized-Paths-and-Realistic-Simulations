@@ -1,7 +1,7 @@
 // Mèo 3D (three.js + react-three-fiber) dựng hoàn toàn từ hình khối cơ bản nên không cần file model.
 // `mouthOpen` (0..1) nhóp nhép theo giọng nói, `mood` đổi tư thế, `persona` đổi màu lông + phụ kiện + nhịp điệu.
 // Đầu mèo luôn quay theo con trỏ chuột. Tải lười qua CatStage để không làm nặng các trang không có mèo.
-import React, { useRef } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Canvas, useFrame } from "@react-three/fiber";
 import * as THREE from "three";
 import type { CatMood } from "./CatMascot";
@@ -13,6 +13,8 @@ interface Cat3DProps {
   persona: CatPersona;
   // Bad Kitty cau mày khi người học trả lời sai / phát âm chưa chuẩn.
   frown?: boolean;
+  // "stage": đứng trên bục sân khấu (Speaking); "hero": đứng thẳng trên nền trang (Dashboard, màn khóa).
+  variant?: "stage" | "hero";
   className?: string;
 }
 
@@ -21,9 +23,106 @@ const damp = THREE.MathUtils.damp;
 const SEAT_LIFT = 0.37;
 const clamp01 = (value: number) => Math.max(0, Math.min(1, value));
 
-const Flat: React.FC<{ color: string; opacity?: number }> = ({ color, opacity }) => (
-  <meshStandardMaterial color={color} roughness={0.55} transparent={opacity !== undefined} opacity={opacity ?? 1} />
-);
+// Bóng đổ mềm dưới chân (gradient tròn) rẻ hơn shadow map và đẹp hơn một đĩa xám phẳng.
+let blobTexture: THREE.CanvasTexture | null = null;
+const getBlobTexture = () => {
+  if (blobTexture) return blobTexture;
+  const canvas = document.createElement("canvas");
+  canvas.width = canvas.height = 128;
+  const ctx = canvas.getContext("2d")!;
+  const gradient = ctx.createRadialGradient(64, 64, 4, 64, 64, 64);
+  gradient.addColorStop(0, "rgba(0,0,0,0.55)");
+  gradient.addColorStop(0.6, "rgba(0,0,0,0.18)");
+  gradient.addColorStop(1, "rgba(0,0,0,0)");
+  ctx.fillStyle = gradient;
+  ctx.fillRect(0, 0, 128, 128);
+  blobTexture = new THREE.CanvasTexture(canvas);
+  return blobTexture;
+};
+
+// Vật liệu "lông": sheen tạo viền sáng mờ ở mép như lông tơ thật.
+const Flat: React.FC<{ color: string; opacity?: number }> = ({ color, opacity }) => {
+  const sheen = useMemo(() => new THREE.Color(color).lerp(new THREE.Color("#ffffff"), 0.55), [color]);
+  return (
+    <meshPhysicalMaterial
+      color={color}
+      roughness={0.72}
+      sheen={1}
+      sheenRoughness={0.45}
+      sheenColor={sheen}
+      transparent={opacity !== undefined}
+      opacity={opacity ?? 1}
+    />
+  );
+};
+
+// Bục sân khấu riêng từng tính cách + vòng sáng ở mép.
+const Platform: React.FC<{ persona: CatPersona }> = ({ persona }) => {
+  const look = PERSONAS[persona].look;
+  return (
+    <group>
+      <mesh position={[0, -0.06, 0]}>
+        <cylinderGeometry args={[1.55, 1.62, 0.12, 64]} />
+        <meshStandardMaterial color={look.platform} roughness={0.45} metalness={persona === "polite" ? 0.25 : 0.1} />
+      </mesh>
+      <mesh position={[0, 0.003, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+        <ringGeometry args={[1.38, 1.46, 64]} />
+        <meshBasicMaterial color={look.rim} transparent opacity={0.85} />
+      </mesh>
+    </group>
+  );
+};
+
+// Hạt sáng bay lên quanh mèo: vàng lấp lánh (Sir Whiskers), tia neon (Bad Kitty), đốm ấm (Chill Buddy).
+const MOTE_COUNT = 16;
+const Motes: React.FC<{ persona: CatPersona; mood: CatMood }> = ({ persona, mood }) => {
+  const look = PERSONAS[persona].look;
+  const refs = useRef<(THREE.Mesh | null)[]>([]);
+  const live = useRef(mood);
+  live.current = mood;
+  const colors = persona === "polite" ? ["#ffd166", "#fff1b8", "#ffffff"] : persona === "rebel" ? [look.accent, look.ear, "#ffffff"] : ["#fff1dc", look.accent, "#ffd9b8"];
+  const seeds = useMemo(
+    () =>
+      Array.from({ length: MOTE_COUNT }, (_, i) => ({
+        angle: (i / MOTE_COUNT) * Math.PI * 2 + ((i * 0.37) % 1),
+        radius: 1.1 + ((i * 0.61) % 1) * 0.9,
+        speed: 0.5 + ((i * 0.29) % 1) * 0.7,
+        offset: (i * 0.173) % 1,
+        size: 0.04 + ((i * 0.53) % 1) * 0.06,
+      })),
+    [],
+  );
+  useFrame((state) => {
+    const t = state.clock.elapsedTime;
+    const boost = live.current === "speaking" ? 2.2 : live.current === "listening" ? 1.4 : 1;
+    refs.current.forEach((mote, i) => {
+      if (!mote) return;
+      const seed = seeds[i];
+      const progress = (t * 0.12 * look.tempo * boost * seed.speed + seed.offset) % 1;
+      const angle = seed.angle + t * 0.15 * seed.speed;
+      const fade = Math.sin(progress * Math.PI);
+      mote.position.set(Math.cos(angle) * seed.radius, 0.3 + progress * 3.6, Math.sin(angle) * seed.radius * 0.6 - 0.2);
+      mote.scale.setScalar(seed.size * (0.4 + fade));
+      mote.rotation.y = t * seed.speed * 2;
+      (mote.material as THREE.MeshBasicMaterial).opacity = fade * 0.9;
+    });
+  });
+  return (
+    <group>
+      {seeds.map((_, i) => (
+        <mesh
+          key={i}
+          ref={(node) => {
+            refs.current[i] = node;
+          }}
+        >
+          {persona === "buddy" ? <sphereGeometry args={[1, 10, 10]} /> : <octahedronGeometry args={[1, 0]} />}
+          <meshBasicMaterial color={colors[i % colors.length]} transparent opacity={0} depthWrite={false} />
+        </mesh>
+      ))}
+    </group>
+  );
+};
 
 const TailSegment: React.FC<{ color: string; segment: React.RefObject<THREE.Group | null>; children?: React.ReactNode }> = ({
   color,
@@ -39,7 +138,7 @@ const TailSegment: React.FC<{ color: string; segment: React.RefObject<THREE.Grou
   </group>
 );
 
-const CatModel: React.FC<Omit<Cat3DProps, "className">> = ({ mouthOpen, mood, persona, frown }) => {
+const CatModel: React.FC<Omit<Cat3DProps, "className">> = ({ mouthOpen, mood, persona, frown, variant = "stage" }) => {
   const look = PERSONAS[persona].look;
   const live = useRef({ mouthOpen, mood, frown: Boolean(frown) });
   live.current = { mouthOpen, mood, frown: Boolean(frown) };
@@ -221,14 +320,18 @@ const CatModel: React.FC<Omit<Cat3DProps, "className">> = ({ mouthOpen, mood, pe
   const eye = (side: 1 | -1, ref: React.RefObject<THREE.Group | null>) => (
     <group ref={ref} position={[side * 0.34, 0.15, 0.7]}>
       <mesh scale={[1, 1.3, 0.6]}>
-        <sphereGeometry args={[0.13, 20, 20]} />
-        <meshStandardMaterial color="#2a1f24" roughness={0.3} />
+        <sphereGeometry args={[0.13, 24, 24]} />
+        <meshStandardMaterial color={look.iris} roughness={0.2} />
       </mesh>
-      <mesh position={[0.045, 0.07, 0.07]}>
+      <mesh position={[0, 0, 0.02]} scale={[0.74, 1, 0.6]}>
+        <sphereGeometry args={[0.13, 24, 24]} />
+        <meshStandardMaterial color="#17101a" roughness={0.2} />
+      </mesh>
+      <mesh position={[0.045, 0.07, 0.1]}>
         <sphereGeometry args={[0.045, 12, 12]} />
         <meshBasicMaterial color="#ffffff" />
       </mesh>
-      <mesh position={[-0.04, -0.07, 0.07]}>
+      <mesh position={[-0.04, -0.07, 0.1]}>
         <sphereGeometry args={[0.022, 10, 10]} />
         <meshBasicMaterial color="#ffffff" />
       </mesh>
@@ -238,10 +341,12 @@ const CatModel: React.FC<Omit<Cat3DProps, "className">> = ({ mouthOpen, mood, pe
   return (
     <group>
       {/* Bóng + sóng âm dưới chân (đứng yên, không nhún theo mèo) */}
-      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.005, 0]}>
-        <circleGeometry args={[1.05, 32]} />
-        <meshBasicMaterial color="#000000" transparent opacity={0.14} />
+      {variant === "stage" && <Platform persona={persona} />}
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.008, 0]}>
+        <planeGeometry args={[3.4, 3.4]} />
+        <meshBasicMaterial map={getBlobTexture()} transparent depthWrite={false} />
       </mesh>
+      <Motes persona={persona} mood={mood} />
       {[0, 1].map((index) => (
         <mesh
           key={index}
@@ -546,24 +651,38 @@ const CatModel: React.FC<Omit<Cat3DProps, "className">> = ({ mouthOpen, mood, pe
 };
 
 // Chill Buddy ngồi trên ghế nên cao hơn: lùi camera ra một chút cho vừa khung.
-const Rig: React.FC<{ persona: CatPersona }> = ({ persona }) => {
+const Rig: React.FC<{ persona: CatPersona; variant: "stage" | "hero" }> = ({ persona, variant }) => {
   useFrame(({ camera }) => {
     const seated = persona === "buddy";
-    camera.position.set(seated ? 2.4 : 1.6, seated ? 2.9 : 2.5, seated ? 9.5 : 7.4);
-    camera.lookAt(0, seated ? 2.2 : 1.85, 0);
+    // Bản sân khấu lùi xa hơn để thấy trọn cả bục dưới chân.
+    const stage = variant === "stage";
+    camera.position.set(seated ? 2.4 : 1.6, seated ? 2.8 : 2.5, seated ? (stage ? 9.4 : 9.5) : stage ? 8.5 : 7.4);
+    camera.lookAt(0, seated ? (stage ? 2.0 : 2.2) : stage ? 1.7 : 1.85, 0);
   });
   return null;
 };
 
 export const Cat3D: React.FC<Cat3DProps> = ({ className, ...props }) => {
   const look = PERSONAS[props.persona].look;
+  const holder = useRef<HTMLDivElement>(null);
+  // Tab bị ẩn (display: none) hoặc cuộn khỏi màn hình thì dừng vẽ để khỏi tốn GPU.
+  const [visible, setVisible] = useState(true);
+  useEffect(() => {
+    const element = holder.current;
+    if (!element || !("IntersectionObserver" in window)) return;
+    const observer = new IntersectionObserver(([entry]) => setVisible(entry.isIntersecting));
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, []);
   return (
-    <div className={className} role="img" aria-label={`3D cat mascot, ${PERSONAS[props.persona].name}`}>
-      <Canvas dpr={[1, 2]} camera={{ position: [0, 2.1, 7.6], fov: 32 }}>
-        <Rig persona={props.persona} />
-        <hemisphereLight args={["#ffffff", "#c7b8a8", 1.1]} />
-        <directionalLight position={[3, 6, 5]} intensity={1.6} />
+    <div ref={holder} className={className} role="img" aria-label={`3D cat mascot, ${PERSONAS[props.persona].name}`}>
+      <Canvas dpr={[1, 2]} frameloop={visible ? "always" : "never"} camera={{ position: [0, 2.1, 7.6], fov: 32 }}>
+        <Rig persona={props.persona} variant={props.variant ?? "stage"} />
+        <hemisphereLight args={["#fff7ec", "#b8a898", 0.9]} />
+        <directionalLight position={[3, 6, 5]} intensity={1.7} color="#fff3e0" />
+        <directionalLight position={[-4, 2, 3]} intensity={0.55} color="#cfe0ff" />
         <pointLight position={[-3, 3, -3]} intensity={30} color={look.rim} />
+        <pointLight position={[3, 2, -3]} intensity={14} color={look.rim} />
         <CatModel {...props} />
       </Canvas>
     </div>

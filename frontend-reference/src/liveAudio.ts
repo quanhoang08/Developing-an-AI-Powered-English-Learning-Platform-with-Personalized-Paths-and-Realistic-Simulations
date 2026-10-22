@@ -30,11 +30,35 @@ export interface LiveMic {
 }
 
 // Cùng cách thu với wavRecorder (ScriptProcessor), nhưng đẩy từng mẩu ~128ms đi ngay thay vì gom lại.
-export async function startLiveMic(onChunk: (pcm: ArrayBuffer) => void): Promise<LiveMic> {
-  // echoCancellation quan trọng: không có nó, giọng AI lọt lại vào mic và Gemini tưởng người học đang nói chen.
+// echoCancellation mặc định bật: không có nó, giọng AI lọt lại vào mic và Gemini tưởng người học đang nói chen.
+// Phụ đề trực tiếp tắt nó để cổng chống vọng ở server (echo_gate) tự quyết, vì trình duyệt không biết loa đang phát gì ở tab khác.
+export async function startLiveMic(onChunk: (pcm: ArrayBuffer) => void, echoCancellation = true): Promise<LiveMic> {
   const stream = await navigator.mediaDevices.getUserMedia({
-    audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true, autoGainControl: true },
+    audio: { channelCount: 1, echoCancellation, noiseSuppression: true, autoGainControl: true },
   });
+  return captureStream(stream, onChunk);
+}
+
+// Âm thanh của tab/cửa sổ/màn hình người học chọn để chia sẻ (video đang phát...). Trình duyệt bắt buộc xin cả video
+// nên bỏ luôn track video; nếu người học không tick "chia sẻ âm thanh" thì báo lỗi thay vì im lặng.
+export async function startSystemAudio(onChunk: (pcm: ArrayBuffer) => void, onEnded?: () => void): Promise<LiveMic> {
+  const display = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: true });
+  display.getVideoTracks().forEach((track) => track.stop());
+  const audioTracks = display.getAudioTracks();
+  if (audioTracks.length === 0) throw new Error("no_system_audio");
+  audioTracks[0].onended = () => onEnded?.();
+  return captureStream(new MediaStream(audioTracks), onChunk);
+}
+
+// Phụ đề trực tiếp ghép 2 nguồn vào 1 socket: byte đầu = nguồn (0 mic, 1 âm thanh hệ thống).
+export function tagSource(source: 0 | 1, pcm: ArrayBuffer): ArrayBuffer {
+  const out = new Uint8Array(pcm.byteLength + 1);
+  out[0] = source;
+  out.set(new Uint8Array(pcm), 1);
+  return out.buffer;
+}
+
+async function captureStream(stream: MediaStream, onChunk: (pcm: ArrayBuffer) => void): Promise<LiveMic> {
   const Ctor = AudioContextClass();
   const context = new Ctor({ sampleRate: INPUT_RATE });
   const source = context.createMediaStreamSource(stream);

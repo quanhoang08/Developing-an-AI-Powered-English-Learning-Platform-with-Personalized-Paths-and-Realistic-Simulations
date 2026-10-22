@@ -20,8 +20,8 @@ import {
 } from "../api";
 
 const SKILLS = ["reading", "listening", "writing", "speaking", "vocab", "grammar"];
-const input = "px-3 py-1.5 rounded-xl ring-1 ring-slate-900/10 text-sm";
-const btn = "px-4 py-2 bg-slate-900 hover:bg-slate-800 disabled:opacity-50 text-white font-bold text-xs rounded-2xl cursor-pointer";
+const input = "field";
+const btn = "btn-primary !text-xs";
 
 const Friends: React.FC<{ onError: (m: string) => void }> = ({ onError }) => {
   const [data, setData] = useState<FriendsOverview | null>(null);
@@ -61,9 +61,10 @@ const Friends: React.FC<{ onError: (m: string) => void }> = ({ onError }) => {
       {data?.outgoing.map((f) => <p key={f.friendship_id} className="text-xs text-slate-500">Waiting for {f.name}…</p>)}
       <ol className="space-y-1">
         {board.map((r) => (
-          <li key={r.user_id} className={`flex justify-between text-sm px-3 py-1.5 rounded-xl ${r.is_me ? "bg-indigo-50 font-bold" : "bg-slate-50"}`}>
-            <span>{r.rank}. {r.name}{r.is_me ? " (you)" : ""}</span>
-            <span className="num">{period === "week" ? r.weekly_xp : r.total_xp} XP · {r.streak}d streak</span>
+          <li key={r.user_id} className={`flex items-center gap-3 text-sm px-3 py-2 rounded-xl ${r.is_me ? "bg-indigo-50 font-bold ring-1 ring-indigo-200" : "bg-slate-50"}`}>
+            <span className={`num w-6 h-6 shrink-0 rounded-full flex items-center justify-center text-xs font-bold ${r.rank === 1 ? "bg-amber-300 text-slate-900" : "bg-slate-200 text-slate-600"}`}>{r.rank}</span>
+            <span className="flex-1 min-w-0 truncate">{r.name}{r.is_me ? " (you)" : ""}</span>
+            <span className="num text-xs text-slate-600 shrink-0">{period === "week" ? r.weekly_xp : r.total_xp} XP · {r.streak}d streak</span>
           </li>
         ))}
       </ol>
@@ -156,8 +157,10 @@ export const CommunityCard: React.FC = () => {
   return (
     <section className="pop-in surface p-7 space-y-6" aria-label="Friends and classes">
       <h3 className="font-display text-xl font-bold text-slate-900">Friends &amp; classes</h3>
-      <Friends onError={setError} />
-      <div className="border-t border-dashed border-slate-200 pt-5"><Classes onError={setError} /></div>
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-x-10 gap-y-6">
+        <Friends onError={setError} />
+        <div className="border-t border-dashed border-slate-200 pt-5 lg:border-t-0 lg:pt-0 lg:border-l lg:pl-10"><Classes onError={setError} /></div>
+      </div>
       <p role="alert" className="text-xs text-rose-700">
         {error}
       </p>

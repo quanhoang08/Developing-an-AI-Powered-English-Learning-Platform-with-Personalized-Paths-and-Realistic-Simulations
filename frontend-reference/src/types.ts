@@ -9,7 +9,11 @@ export type ActiveTab =
   | "listening"
   | "speaking"
   | "writing"
-  | "analytics";
+  | "analytics"
+  | "games"
+  | "community"
+  | "exam"
+  | "tools";
 
 export interface VocabWord {
   id: string;

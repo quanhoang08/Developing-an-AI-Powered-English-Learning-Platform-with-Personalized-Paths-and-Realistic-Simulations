@@ -7,9 +7,11 @@ from pathlib import Path
 
 from fastapi import UploadFile
 from sqlalchemy import func, select
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 from starlette.concurrency import run_in_threadpool
 
+from app.models.economy import PhonemeStat
 from app.models.gamification import ActivityLog
 from app.services import llm_service, speaking_service, speech_service
 from app.services.gamification_service import XP_BY_ACTIVITY, award_activity, day_start
@@ -135,6 +137,7 @@ async def assess(db: AsyncSession, user_id: uuid.UUID, sentence_id: str, audio: 
 	finally:
 		path.unlink(missing_ok=True)  # chỉ cần điểm; không giữ lại giọng người học
 	await award_activity(db, user_id, "pronunciation_practice", score=result.score)
+	await _record_phonemes(db, user_id, result.phonemes)
 	await db.commit()
 	return {
 		"sentence_id": sentence_id,
@@ -145,6 +148,52 @@ async def assess(db: AsyncSession, user_id: uuid.UUID, sentence_id: str, audio: 
 		"words": [{"word": w, "score": round(s)} for w, s in result.words],
 		"weak_words": build_feedback(result.words, _BY_ID[sentence_id][0]),
 	}
+
+
+# --- IPA Pronunciation Heatmap: điểm trung bình từng âm qua các lần luyện câu mẫu ---
+IPA_44 = [
+	*"iː ɪ e æ ɑː ɒ ɔː ʊ uː ʌ ɜː ə eɪ aɪ ɔɪ aʊ əʊ ɪə eə ʊə".split(),
+	*"p b t d k g f v θ ð s z ʃ ʒ h tʃ dʒ m n ŋ l r j w".split(),
+]
+# Azure trả IPA kiểu Mỹ; quy về ký hiệu Anh chuẩn 44 âm để heatmap không tách đôi cùng một âm.
+_IPA_ALIASES = {"oʊ": "əʊ", "ɑ": "ɑː", "i": "iː", "u": "uː", "ɔ": "ɔː", "ɝ": "ɜː", "ɚ": "ə", "ʧ": "tʃ", "ʤ": "dʒ", "ɹ": "r", "ɡ": "g", "ɛ": "e", "ɪr": "ɪə"}
+
+
+def normalize_phoneme(symbol: str) -> str:
+	symbol = symbol.strip()
+	return _IPA_ALIASES.get(symbol, symbol)
+
+
+async def _record_phonemes(db: AsyncSession, user_id: uuid.UUID, phonemes: list[tuple[str, float]]) -> None:
+	totals: dict[str, list[float]] = {}
+	for symbol, score in phonemes:
+		totals.setdefault(normalize_phoneme(symbol)[:12], []).append(score)
+	for symbol, scores in totals.items():
+		insert = pg_insert(PhonemeStat).values(user_id=user_id, phoneme=symbol, attempts=len(scores), total_score=sum(scores))
+		await db.execute(
+			insert.on_conflict_do_update(
+				index_elements=["user_id", "phoneme"],
+				set_={
+					"attempts": PhonemeStat.attempts + insert.excluded.attempts,
+					"total_score": PhonemeStat.total_score + insert.excluded.total_score,
+					"updated_at": func.now(),
+				},
+			)
+		)
+
+
+async def heatmap(db: AsyncSession, user_id: uuid.UUID) -> list[dict]:
+	"""44 âm chuẩn (kèm âm lạ Azure trả thêm); âm chưa luyện có avg_score = None. Xanh >= 80, cam 60-79, đỏ < 60 do client tô."""
+	rows = {r.phoneme: r for r in await db.scalars(select(PhonemeStat).where(PhonemeStat.user_id == user_id))}
+	symbols = IPA_44 + sorted(set(rows) - set(IPA_44))
+	return [
+		{
+			"phoneme": s,
+			"attempts": rows[s].attempts if s in rows else 0,
+			"avg_score": round(rows[s].total_score / rows[s].attempts, 1) if s in rows and rows[s].attempts else None,
+		}
+		for s in symbols
+	]
 
 
 def sentence_audio(sentence_id: str) -> bytes:

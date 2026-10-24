@@ -159,9 +159,9 @@ export const ReadingExtrasPanel: React.FC = () => {
     setSelected((current) => (current.includes(id) ? current.filter((x) => x !== id) : [...current, id].slice(0, 15)));
 
   return (
-    <div className="surface p-7 space-y-8">
-      <section className="space-y-4">
-        <h3 className="font-display text-2xl font-bold text-slate-900 flex items-center gap-2">
+    <div className="space-y-5">
+      <section className="surface p-6 md:p-7 space-y-4">
+        <h3 className="font-display text-xl font-bold text-slate-900 flex items-center gap-2">
           <BookMarked className="w-6 h-6 text-indigo-600" /> Guess the context
         </h3>
         <div className="flex gap-2">
@@ -217,8 +217,8 @@ export const ReadingExtrasPanel: React.FC = () => {
         )}
       </section>
 
-      <section className="space-y-4 border-t border-dashed border-slate-200 pt-6">
-        <h3 className="font-display text-2xl font-bold text-slate-900">Story from your words</h3>
+      <section className="surface p-6 md:p-7 space-y-4">
+        <h3 className="font-display text-xl font-bold text-slate-900">Story from your words</h3>
         {vocab === null ? (
           <button
             onClick={loadVocab}
@@ -252,8 +252,8 @@ export const ReadingExtrasPanel: React.FC = () => {
         )}
       </section>
 
-      <section className="space-y-4 border-t border-dashed border-slate-200 pt-6">
-        <h3 className="font-display text-2xl font-bold text-slate-900">Use it in a sentence</h3>
+      <section className="surface p-6 md:p-7 space-y-4">
+        <h3 className="font-display text-xl font-bold text-slate-900">Use it in a sentence</h3>
         {vocab === null ? (
           <button
             onClick={loadVocab}
@@ -335,8 +335,8 @@ export const ReadingExtrasPanel: React.FC = () => {
         )}
       </section>
 
-      <section className="space-y-4 border-t border-dashed border-slate-200 pt-6">
-        <h3 className="font-display text-2xl font-bold text-slate-900">Confusing word pairs</h3>
+      <section className="surface p-6 md:p-7 space-y-4">
+        <h3 className="font-display text-xl font-bold text-slate-900">Confusing word pairs</h3>
         {confQuiz === null ? (
           <button
             onClick={startConfusables}

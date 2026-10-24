@@ -148,8 +148,8 @@ export const ToeicPanel: React.FC = () => {
   return (
     <div className="surface p-7 space-y-5 mt-6">
       <div>
-        <h3 className="font-display text-2xl font-bold text-slate-900">TOEIC-style practice</h3>
-        <p className="text-xs text-slate-500">Original practice questions written by AI in the TOEIC format — not official ETS material.</p>
+        <h3 className="font-display text-xl font-bold text-slate-900">TOEIC-style practice</h3>
+        <p className="text-sm text-slate-500 mt-1">Original practice questions written by AI in the TOEIC format — not official ETS material.</p>
       </div>
 
       {!practice && (

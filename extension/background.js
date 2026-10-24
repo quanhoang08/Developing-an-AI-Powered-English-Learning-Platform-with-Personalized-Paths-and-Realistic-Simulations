@@ -428,7 +428,35 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo) => {
 
 // ---------- Nhận message ----------
 
+// Gọi API backend đã xác thực (tự làm mới token khi 401); dùng cho quiz hằng ngày và trợ lý viết ở side panel.
+async function backendJson(path, init = {}) {
+  const config = await getConfig();
+  if (!config.accessToken) throw new Error("not_logged_in");
+  const call = (token) =>
+    fetch(`${config.apiBaseUrl}${path}`, {
+      ...init,
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+      signal: AbortSignal.timeout(60000),
+    });
+  let response = await call(config.accessToken);
+  if (response.status === 401) {
+    const fresh = await refreshAccessToken();
+    if (!fresh) throw new Error("not_logged_in");
+    response = await call(fresh);
+  }
+  if (!response.ok) {
+    const body = await response.json().catch(() => ({}));
+    throw new Error(typeof body.detail === "string" ? body.detail : `http_${response.status}`);
+  }
+  return response.json();
+}
+
 const handlers = {
+  QUIZ_GET: () => backendJson("/api/extension/quiz"),
+  QUIZ_ANSWER: (message) =>
+    backendJson("/api/extension/quiz/answer", { method: "POST", body: JSON.stringify({ prompt: message.prompt, choice: message.choice }) }),
+  GRAMMAR_CHECK: (message) =>
+    backendJson("/api/extension/grammar-check", { method: "POST", body: JSON.stringify({ raw_text: message.text }) }),
   LOOKUP: (message) => lookupFast(message.word),
   LOOKUP_AI: (message) => lookupAi(message.word, message.sentence),
   TRANSLATE: (message) => translateLine(message.text),

@@ -222,7 +222,7 @@ export const PodcastPanel: React.FC = () => {
       <div className="lg:col-span-4 space-y-4">
         <div className="surface p-6 space-y-3">
           <h3 className="font-display text-xl font-bold text-slate-900 flex items-center gap-2">
-            <Plus className="w-5 h-5 text-indigo-600" /> New podcast from a document
+            <Plus className="w-5 h-5 text-indigo-600 shrink-0" /> New podcast
           </h3>
           {documents.length === 0 ? (
             <p className="text-xs text-slate-500">Upload a .docx or audio file in Knowledge Space first.</p>

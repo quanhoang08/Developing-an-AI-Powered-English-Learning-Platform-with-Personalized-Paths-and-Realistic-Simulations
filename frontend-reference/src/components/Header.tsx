@@ -1,14 +1,13 @@
 import React from "react";
-import { motion } from "motion/react";
-import { Search, Flame, Trophy, Bell, Command, Menu, Snowflake } from "lucide-react";
+import { Flame, Trophy, Menu, Snowflake } from "lucide-react";
 import { ActiveTab } from "../types";
 import { useLearningStats } from "../stats";
 import { AuthPanel } from "./AuthPanel";
+import { HeaderSearch } from "./HeaderSearch";
+import { NotificationBell } from "./NotificationBell";
 
 interface HeaderProps {
   activeTab: ActiveTab;
-  searchQuery: string;
-  setSearchQuery: (q: string) => void;
   openFlashcards: () => void;
   onAuthChanged: () => void;
   onOpenMenu: () => void;
@@ -16,8 +15,6 @@ interface HeaderProps {
 
 export const Header: React.FC<HeaderProps> = ({
   activeTab,
-  searchQuery,
-  setSearchQuery,
   openFlashcards,
   onAuthChanged,
   onOpenMenu,
@@ -40,13 +37,21 @@ export const Header: React.FC<HeaderProps> = ({
         return "Writing & Correction Lab";
       case "analytics":
         return "Adaptive Analytics";
+      case "games":
+        return "Games & Rewards";
+      case "community":
+        return "Friends, Classes & Guild";
+      case "exam":
+        return "IELTS & TOEIC Prep";
+      case "tools":
+        return "Vocabulary & Grammar Tools";
       default:
         return "Lumina Learning";
     }
   };
 
   return (
-    <header className="h-16 bg-paper/80 backdrop-blur-xl border-b border-slate-200/60 px-4 md:px-6 flex items-center justify-between gap-2 sticky top-0 z-10">
+    <header className="h-20 bg-paper/80 backdrop-blur-xl border-b border-slate-200/60 px-4 md:px-8 flex items-center justify-between gap-3 sticky top-0 z-30">
       {/* Title / Search */}
       <div className="flex items-center gap-3 md:gap-6 flex-1 min-w-0 max-w-2xl">
         <button
@@ -56,23 +61,11 @@ export const Header: React.FC<HeaderProps> = ({
         >
           <Menu className="w-5 h-5" />
         </button>
-        <h2 className="font-display text-xl font-bold text-slate-900 shrink-0 hidden md:block">
+        <h2 className="font-display text-2xl font-bold text-slate-900 shrink-0 hidden md:block">
           {getTabTitle()}
         </h2>
 
-        <div className="relative flex-1 min-w-0 group">
-          <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2 transition-colors group-focus-within:text-indigo-600" />
-          <input
-            type="text"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Search idioms, grammar, stories, or movie quotes..."
-            className="w-full pl-10 pr-14 py-2 text-xs bg-[#fffdf8] rounded-full ring-1 ring-slate-900/10 focus:outline-none focus:ring-2 focus:ring-indigo-500/60 text-slate-800 placeholder-slate-400 transition-shadow shadow-[0_6px_16px_-12px_rgba(95,70,30,0.5)]"
-          />
-          <div className="absolute right-3 top-1/2 -translate-y-1/2 hidden sm:flex items-center gap-0.5 text-[10px] text-slate-400 font-mono">
-            <Command className="w-2.5 h-2.5" /> K
-          </div>
-        </div>
+        <HeaderSearch />
       </div>
 
       {/* Gamification & User Stats */}
@@ -81,7 +74,7 @@ export const Header: React.FC<HeaderProps> = ({
             Ngọn lửa chỉ sáng khi hôm nay đã học, mờ đi nếu streak đang chờ được giữ. */}
         <button
           onClick={openFlashcards}
-          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full active:scale-95 transition-all cursor-pointer group ${
+          className={`flex items-center gap-2 px-4 py-2.5 rounded-full active:scale-95 transition-all cursor-pointer group ${
             stats.todayActive
               ? "bg-purple-50 text-purple-800 hover:bg-purple-100"
               : "bg-paper-deep text-slate-600 hover:bg-slate-200/70"
@@ -89,18 +82,18 @@ export const Header: React.FC<HeaderProps> = ({
           title={stats.todayActive ? "Streak kept for today" : "Study today to keep your streak - click to review"}
         >
           <Flame
-            className={`w-4 h-4 group-hover:animate-wiggle ${
+            className={`w-5 h-5 group-hover:animate-wiggle ${
               stats.todayActive ? "text-purple-500 fill-purple-500" : "text-slate-400"
             }`}
           />
-          <span className="num text-xs font-bold">
+          <span className="num text-sm font-bold">
             {stats.currentStreak} {stats.currentStreak === 1 ? "day" : "days"}
           </span>
         </button>
 
         {/* Freeze: tặng mỗi 7 ngày liên tiếp (tối đa 2), tự lấp ngày bỏ lỡ. Streak vừa đứt thì báo có thể khôi phục. */}
         <div
-          className={`hidden sm:flex items-center gap-1 px-2.5 py-1.5 rounded-full ${
+          className={`hidden sm:flex items-center gap-1.5 px-3.5 py-2.5 rounded-full ${
             stats.restorableStreak > 0 ? "bg-amber-50 text-amber-800" : "bg-sky-50 text-sky-800"
           }`}
           title={
@@ -109,38 +102,21 @@ export const Header: React.FC<HeaderProps> = ({
               : `${stats.freezesAvailable} streak freeze(s): each covers a missed day`
           }
         >
-          <Snowflake className="w-4 h-4" />
-          <span className="num text-xs font-bold">{stats.restorableStreak > 0 ? "Restore" : stats.freezesAvailable}</span>
+          <Snowflake className="w-5 h-5" />
+          <span className="num text-sm font-bold">{stats.restorableStreak > 0 ? "Restore" : stats.freezesAvailable}</span>
         </div>
 
         {/* XP Level */}
         <div
-          className="hidden lg:flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-indigo-50 text-indigo-900"
+          className="hidden lg:flex items-center gap-2 px-4 py-2.5 rounded-full bg-indigo-50 text-indigo-900"
           title={`${stats.xpIntoLevel} / ${stats.xpForNextLevel} XP to level ${stats.level + 1}`}
         >
-          <Trophy className="w-4 h-4 text-indigo-600" />
-          <span className="num text-xs font-bold">{stats.totalXp.toLocaleString("en-US")} XP</span>
-          <span className="tag bg-indigo-600 text-white">Lv {stats.level}</span>
+          <Trophy className="w-5 h-5 text-indigo-600" />
+          <span className="num text-sm font-bold">{stats.totalXp.toLocaleString("en-US")} XP</span>
+          <span className="tag bg-indigo-600 text-white !text-xs !px-2 !py-0.5">Lv {stats.level}</span>
         </div>
 
-        {/* Notifications */}
-        <button
-          className="relative p-2 rounded-full text-slate-500 hover:bg-slate-900/5 hover:text-slate-700 transition-colors"
-          aria-label="Notifications"
-        >
-          {/* Chuông lắc định kỳ + khi rê chuột (ý tưởng BellNova, infiwebcraft.com) */}
-          <motion.span
-            className="block"
-            style={{ transformOrigin: "50% 15%" }}
-            animate={{ rotate: [0, -16, 14, -10, 6, 0] }}
-            whileHover={{ rotate: [0, -16, 14, -10, 6, 0], transition: { duration: 0.7 } }}
-            transition={{ duration: 0.9, repeat: Infinity, repeatDelay: 7 }}
-          >
-            <Bell className="w-4 h-4" />
-          </motion.span>
-          <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-purple-500 rounded-full ring-2 ring-paper"></span>
-          <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-purple-400 rounded-full animate-ping" aria-hidden="true"></span>
-        </button>
+        <NotificationBell openFlashcards={openFlashcards} />
 
         {/* Kết nối phiên đăng nhập của giao diện với FastAPI backend. */}
         <AuthPanel onAuthChanged={onAuthChanged} />

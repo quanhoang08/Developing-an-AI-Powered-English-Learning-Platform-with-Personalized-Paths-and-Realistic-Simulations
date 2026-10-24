@@ -652,7 +652,7 @@ Meaning: To make people feel more comfortable in a social setting.`
                   </>
                 ) : null}
 
-                <div className="max-w-none text-slate-700 text-[17px] leading-[1.85] font-serif bg-paper-deep/50 p-6 rounded-2xl whitespace-pre-line break-words">
+                <div className="max-w-none text-slate-700 text-[17px] leading-[1.85] font-serif bg-paper-deep/50 p-6 rounded-2xl whitespace-pre-line break-words max-h-[60vh] overflow-y-auto">
                   {contentParagraphs?.length
                     ? visibleParagraphs.length
                       ? visibleParagraphs.map((paragraph, index) => (

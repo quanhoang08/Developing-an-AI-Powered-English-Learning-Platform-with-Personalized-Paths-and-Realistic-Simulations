@@ -92,3 +92,8 @@ async def silent(
 		return await pronunciation_service.silent_answer(db, current_user.id, request.prompt_id, request.text)
 	except ValueError as error:
 		_raise(error)
+
+
+@router.get("/heatmap")
+async def pronunciation_heatmap(current_user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)) -> list[dict]:
+	return await pronunciation_service.heatmap(db, current_user.id)

@@ -4,7 +4,7 @@
 // thoại khác màu trắng. Video nằm sau JWT nên tải về dạng blob rồi mới gán cho <video>.
 import React, { useEffect, useRef, useState } from "react";
 import { Bookmark, Check, Film, Loader2, RotateCcw, X } from "lucide-react";
-import { fetchAudioObjectUrl, getMovieSubtitles, MovieContextMatch, SubtitleCue } from "../api";
+import { fetchAudioObjectUrl, getMovieSubtitles, lookupWord, MovieContextMatch, saveVocabulary, SubtitleCue } from "../api";
 
 interface VideoPlayerOverlayProps {
   match: MovieContextMatch;
@@ -34,6 +34,10 @@ export const VideoPlayerOverlay: React.FC<VideoPlayerOverlayProps> = ({ match, o
   const startMs = match.start_ms ?? 0;
   const [cues, setCues] = useState<SubtitleCue[]>([]);
   const [activeCue, setActiveCue] = useState<SubtitleCue | null>(null);
+  // Từ người học bấm trong phụ đề: dừng video, hiện bài điền chỗ trống + nút tra/lưu từ.
+  const [picked, setPicked] = useState<{ word: string; line: string } | null>(null);
+  const [guess, setGuess] = useState("");
+  const [saveState, setSaveState] = useState<"idle" | "busy" | "saved" | "failed">("idle");
 
   // Cảnh mô phỏng đã có phụ đề ghi trong hình — chỉ phim thật mới cần lớp phụ đề này.
   useEffect(() => {
@@ -69,6 +73,35 @@ export const VideoPlayerOverlay: React.FC<VideoPlayerOverlayProps> = ({ match, o
       if (objectUrl) URL.revokeObjectURL(objectUrl);
     };
   }, [match.video_url]);
+
+  const pickWord = (rawWord: string, line: string) => {
+    const word = rawWord.replace(/[^A-Za-z']/g, "");
+    if (!word) return;
+    videoRef.current?.pause();
+    setPicked({ word, line });
+    setGuess("");
+    setSaveState("idle");
+  };
+
+  const saveWord = async () => {
+    if (!picked) return;
+    setSaveState("busy");
+    try {
+      const info = await lookupWord(picked.word, picked.line);
+      await saveVocabulary({
+        term: picked.word,
+        definition: info.definition,
+        sourceUrl: `movie:${match.title ?? "scene"}`,
+        exampleSentence: picked.line,
+        synonyms: info.synonyms,
+        antonyms: info.antonyms,
+        ipa: info.ipa ?? undefined,
+      });
+      setSaveState("saved");
+    } catch {
+      setSaveState("failed");
+    }
+  };
 
   const replayLine = () => {
     const video = videoRef.current;
@@ -131,7 +164,15 @@ export const VideoPlayerOverlay: React.FC<VideoPlayerOverlayProps> = ({ match, o
                   activeCue.is_match ? "text-amber-300" : "text-white"
                 }`}
               >
-                {activeCue.text}
+                {activeCue.text.split(/(\s+)/).map((part, i) =>
+                  part.trim() ? (
+                    <span key={i} role="button" onClick={() => pickWord(part, activeCue.text)} className="pointer-events-auto cursor-pointer rounded hover:bg-white/25">
+                      {part}
+                    </span>
+                  ) : (
+                    part
+                  ),
+                )}
               </p>
             )}
           </div>
@@ -153,6 +194,30 @@ export const VideoPlayerOverlay: React.FC<VideoPlayerOverlayProps> = ({ match, o
                 <RotateCcw className="w-3.5 h-3.5" /> Replay this line
               </button>
             </div>
+
+            {picked && (
+              <div className="space-y-2 p-3 rounded-xl bg-slate-800 border border-slate-700" aria-label="Fill in the blank">
+                <h4 className="text-xs font-bold uppercase tracking-wider text-slate-400">Fill in the blank</h4>
+                <p className="text-sm leading-relaxed">
+                  {picked.line.replace(new RegExp(`\\b${picked.word}\\b`, "i"), "_____")}
+                </p>
+                <input
+                  name="cloze_guess"
+                  value={guess}
+                  onChange={(e) => setGuess(e.target.value)}
+                  aria-label="Missing word"
+                  className="w-full px-2 py-1.5 rounded-lg bg-slate-900 border border-slate-600 text-sm"
+                />
+                {guess && (
+                  <p className={`text-xs font-semibold ${guess.trim().toLowerCase() === picked.word.toLowerCase() ? "text-emerald-400" : "text-slate-400"}`}>
+                    {guess.trim().toLowerCase() === picked.word.toLowerCase() ? `Correct: ${picked.word}` : "Keep trying…"}
+                  </p>
+                )}
+                <button onClick={saveWord} disabled={saveState === "busy" || saveState === "saved"} className="text-xs font-bold text-indigo-300 hover:text-white disabled:opacity-50 cursor-pointer">
+                  {saveState === "saved" ? "Saved to flashcards" : saveState === "busy" ? "Saving…" : saveState === "failed" ? "Could not save - retry" : `Look up & save "${picked.word}"`}
+                </button>
+              </div>
+            )}
 
             <button
               onClick={onSave}

@@ -12,9 +12,9 @@ import { CatStage } from "./CatStage";
 import { PersonaPicker } from "./PersonaPicker";
 import { PERSONAS, usePersona } from "../catPersonas";
 import { CountUp } from "./CountUp";
-import { CommunityCard } from "./CommunityCard";
-import { ExamGoalCard } from "./ExamGoalCard";
 import { GrammarDailyCard } from "./GrammarDailyCard";
+import { DailyQuestsCard } from "./DailyQuestsCard";
+import { DailyQuizCard } from "./DailyQuizCard";
 import { useLearningStats } from "../stats";
 import { setTimerMode } from "../api";
 import {
@@ -509,10 +509,14 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
       {userEmail && (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 lg:[&>*:only-child]:col-span-2">
           <GrammarDailyCard setActiveTab={setActiveTab} />
-          <ExamGoalCard />
         </div>
       )}
-      {userEmail && <CommunityCard />}
+      {userEmail && (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+          <DailyQuizCard />
+          <DailyQuestsCard />
+        </div>
+      )}
     </motion.div>
   );
 };

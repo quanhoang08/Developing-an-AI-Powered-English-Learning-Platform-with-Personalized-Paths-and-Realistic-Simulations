@@ -14,6 +14,7 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import get_settings
+from app.services import economy_service
 from app.models.gamification import ActivityLog, SkillProgress, Streak, StudyTimeLog
 
 
@@ -32,6 +33,17 @@ XP_BY_ACTIVITY: dict[str, int] = {
 	"speaking_silent": 3,  # gõ thay nói (backlog 4.5): ít XP hơn nói thật
 	"live_call": 20,  # 1 cuộc gọi thoại 2 chiều (F22) có ít nhất 1 câu người học nói
 	"quiz_completed": 25,
+	"wordle_completed": 10,  # mini-game Daily Wordle: đoán đúng từ của ngày (1 lần/ngày)
+	"word_rain_completed": 8,
+	"bubble_pop_completed": 8,
+	"word_search_completed": 8,
+	"voice_runner_completed": 10,
+	"dictation_racer_completed": 10,
+	"word_chain_completed": 8,
+	"grammar_detective_completed": 10,
+	"speed_quiz_completed": 12,  # thắng/thua 1v1 Speed Quiz đều tính hoạt động, XP khác nhau do caller truyền
+	"micro_quiz_completed": 3,  # câu quiz hằng ngày trong extension (tối đa 5 câu đúng/ngày có XP)
+	"memory_match_completed": 8,  # mini-game lật thẻ ghép cặp từ - nghĩa (tối đa 3 lần/ngày có XP)
 }
 
 
@@ -175,6 +187,7 @@ async def award_activity(
 	"""
 	if xp is None:
 		xp = XP_BY_ACTIVITY[activity]
+	xp = await economy_service.boost_and_pay(db, user_id, xp, now)  # booster 2x + xu = XP // 2
 	db.add(ActivityLog(user_id=user_id, activity=activity, xp=xp))
 	if score is not None and activity in SKILL_BY_ACTIVITY:
 		await record_skill_score(db, user_id, SKILL_BY_ACTIVITY[activity], score, cefr_level)

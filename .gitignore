@@ -33,3 +33,7 @@ graphify-out/
 htmlcov/
 *.tsbuildinfo
 Thumbs.db
+
+# Sinh ra bởi archify / graphify
+.archify/
+graphify-out/

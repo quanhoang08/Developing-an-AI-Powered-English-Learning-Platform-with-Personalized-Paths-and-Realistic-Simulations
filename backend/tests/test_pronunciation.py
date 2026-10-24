@@ -51,3 +51,23 @@ def test_assess_and_silent(vocab_client: TestClient, monkeypatch) -> None:
 	body = {"prompt_id": 0, "text": "This morning I woke up early and drank some coffee."}
 	xps = [vocab_client.post("/api/pronunciation/silent", headers=h, json=body).json()["xp"] for _ in range(5)]
 	assert xps == [3, 3, 3, 3, 0]  # lần thứ 6 trong ngày: hết XP
+
+
+def test_phoneme_heatmap_aggregates_normalizes_and_lists_44(vocab_client: TestClient, monkeypatch) -> None:
+	scores = iter([[("θ", 40.0), ("oʊ", 80.0), ("æ", 90.0)], [("θ", 60.0), ("ɹ", 70.0)]])
+
+	def fake(path, locale, ref):
+		return speech_service.PronunciationResult(
+			score=70, accuracy=70, fluency=80, completeness=100, words=[("Thank", 50.0)], phonemes=next(scores)
+		)
+
+	monkeypatch.setattr(speech_service, "assess_pronunciation", fake)
+	h = login(vocab_client)
+	empty = vocab_client.get("/api/pronunciation/heatmap", headers=h).json()
+	assert len(empty) == 44 and all(c["attempts"] == 0 and c["avg_score"] is None for c in empty)
+	for _ in range(2):
+		wav = {"audio": ("a.wav", io.BytesIO(b"x"), "audio/wav")}
+		assert vocab_client.post("/api/pronunciation/sentences/t1/assess", headers=h, files=wav).status_code == 200
+	cells = {c["phoneme"]: c for c in vocab_client.get("/api/pronunciation/heatmap", headers=h).json()}
+	assert cells["θ"]["attempts"] == 2 and cells["θ"]["avg_score"] == 50.0
+	assert cells["əʊ"]["avg_score"] == 80.0 and cells["r"]["avg_score"] == 70.0 and cells["æ"]["attempts"] == 1

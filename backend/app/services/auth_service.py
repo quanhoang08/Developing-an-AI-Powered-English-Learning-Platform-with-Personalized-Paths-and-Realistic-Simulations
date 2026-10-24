@@ -5,6 +5,7 @@ import hmac
 import secrets
 from datetime import datetime, timedelta, timezone
 
+import httpx
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -56,6 +57,40 @@ async def authenticate_user(
 	user = result.scalar_one_or_none()
 	if user is None or not verify_password(password, user.password_hash):
 		return None
+	return user
+
+
+GOOGLE_TOKENINFO_URL = "https://oauth2.googleapis.com/tokeninfo"
+
+
+async def verify_google_credential(credential: str) -> str | None:
+	# Google tự kiểm chữ ký/hạn của ID token; ta chỉ kiểm audience (đúng client_id của app) và email_verified.
+	# Trả email chữ thường nếu hợp lệ, None nếu sai; lỗi mạng ném httpx.HTTPError cho router xử lý.
+	client_id = get_settings().google_client_id
+	if not client_id:
+		return None
+	async with httpx.AsyncClient(timeout=10) as http:
+		response = await http.get(GOOGLE_TOKENINFO_URL, params={"id_token": credential})
+	if response.status_code != 200:
+		return None
+	info = response.json()
+	if info.get("aud") != client_id or str(info.get("email_verified")).lower() != "true":
+		return None
+	return (info.get("email") or "").lower() or None
+
+
+async def login_with_google(db: AsyncSession, email: str) -> User:
+	# Email đã được Google xác minh: tạo user mới nếu chưa có (mật khẩu ngẫu nhiên, không dùng được để đăng nhập)
+	# hoặc đánh dấu đã xác minh cho user cũ.
+	user = await db.scalar(select(User).where(User.email == email))
+	now = datetime.now(timezone.utc)
+	if user is None:
+		user = User(email=email, password_hash=hash_password(secrets.token_urlsafe(32)), email_verified_at=now)
+		db.add(user)
+	elif user.email_verified_at is None:
+		user.email_verified_at = now
+	await db.commit()
+	await db.refresh(user)
 	return user
 
 

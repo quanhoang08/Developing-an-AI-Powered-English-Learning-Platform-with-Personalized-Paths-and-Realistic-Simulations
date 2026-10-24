@@ -2,8 +2,8 @@
   "manifest_version": 3,
   "name": "Lumina Word Lookup",
   "description": "Rê chuột vào bất kỳ từ tiếng Anh nào để xem nghĩa; chuột phải để thêm vào danh sách từ vựng cần học.",
-  "version": "0.2.0",
-  "permissions": ["storage", "contextMenus", "tabCapture", "offscreen", "activeTab"],
+  "version": "0.3.0",
+  "permissions": ["storage", "contextMenus", "tabCapture", "offscreen", "activeTab", "sidePanel"],
   "host_permissions": [
     "https://api.dictionaryapi.dev/*",
     "https://api.mymemory.translated.net/*",
@@ -11,6 +11,9 @@
     "http://127.0.0.1:8000/*",
     "https://*.trycloudflare.com/*"
   ],
+  "side_panel": {
+    "default_path": "sidepanel/sidepanel.html"
+  },
   "background": {
     "service_worker": "background.js"
   },

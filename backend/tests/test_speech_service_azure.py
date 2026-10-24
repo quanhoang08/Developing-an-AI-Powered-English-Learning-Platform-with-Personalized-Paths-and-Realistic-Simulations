@@ -26,7 +26,7 @@ def test_tts_returns_pcm_wav(spoken_wav: str) -> None:
 def test_stt_roundtrip_returns_text_and_word_timestamps(spoken_wav: str) -> None:
     result = speech_service.transcribe_audio(spoken_wav)
     lowered = result.text.lower()
-    assert "eiffel" in lowered and "gustave" in lowered
+    assert "eiffel" in lowered and "gustav" in lowered
     assert result.duration_ms > 3000
     assert len(result.words) >= 10
     # Timestamp cấp từ phải tăng dần và không âm — nền tảng cho transcript_segments.

@@ -336,7 +336,7 @@ export const AnalyticsView: React.FC = () => {
             {reviewQueue.slice(0, 6).map((entry) => (
               <li key={`${entry.item_type}-${entry.item_id}`} className="flex items-center gap-3 text-sm px-4 py-2.5 rounded-xl bg-white ring-1 ring-slate-900/10">
                 <span className="tag bg-slate-100 text-slate-600">{entry.item_type === "vocab" ? "word" : "mistake"}</span>
-                <span className="flex-1 truncate text-slate-800">{entry.label ?? "—"}</span>
+                <span className="flex-1 truncate text-slate-800 capitalize">{entry.label?.replace(/_/g, " ") ?? "—"}</span>
               </li>
             ))}
           </ul>

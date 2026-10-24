@@ -1,3 +1,4 @@
+import httpx
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -8,6 +9,7 @@ from app.models.user import User
 from app.core.config import get_settings
 from app.schemas.auth import (
 	EmailRequest,
+	GoogleLoginRequest,
 	OtpRequest,
 	LoginRequest,
 	RefreshRequest,
@@ -19,12 +21,14 @@ from app.schemas.auth import (
 from app.services.auth_service import (
 	authenticate_user,
 	create_token_pair,
+	login_with_google,
 	register_user,
 	request_email_flow,
 	reset_password,
 	rotate_refresh_token,
 	send_verification_email,
 	verify_email,
+	verify_google_credential,
 )
 
 
@@ -43,11 +47,46 @@ def user_response(user: User) -> UserResponse:
 	)
 
 
+def _require_google_for_gmail(email: str) -> None:
+	# Bật REQUIRE_GOOGLE_FOR_GMAIL: Gmail phải đi qua Google để chứng minh là chủ email (mặc định tắt để test).
+	if get_settings().require_google_for_gmail and email.lower().endswith(("@gmail.com", "@googlemail.com")):
+		raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="use_google_signin")
+
+
+@router.get("/google/config")
+async def google_config() -> dict[str, str | None]:
+	# Frontend đọc client_id lúc chạy (không nhúng vào bundle); None = chưa cấu hình, ẩn nút Google.
+	return {"client_id": get_settings().google_client_id or None}
+
+
+@router.post("/google", response_model=TokenResponse)
+async def google_login(
+	request: GoogleLoginRequest, db: AsyncSession = Depends(get_db)
+) -> TokenResponse:
+	# Đăng nhập/đăng ký bằng Google: xác minh ID token với Google rồi cấp token pair như login thường.
+	if not get_settings().google_client_id:
+		raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="google_not_configured")
+	try:
+		email = await verify_google_credential(request.credential)
+	except httpx.HTTPError as error:
+		raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail="google_unreachable") from error
+	if email is None:
+		raise HTTPException(
+			status_code=status.HTTP_401_UNAUTHORIZED,
+			detail="invalid_google_credential",
+			headers={"WWW-Authenticate": "Bearer"},
+		)
+	user = await login_with_google(db, email)
+	access_token, refresh_token = await create_token_pair(db, user, request.client_type)
+	return TokenResponse(access_token=access_token, refresh_token=refresh_token)
+
+
 @router.post("/register", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
 async def register(
 	request: RegisterRequest, db: AsyncSession = Depends(get_db)
 ) -> UserResponse:
 	# Endpoint đăng ký: validate schema trước, sau đó giao nghiệp vụ cho auth_service.
+	_require_google_for_gmail(request.email)
 	try:
 		user = await register_user(
 			db, request.email, request.password, request.target_level
@@ -68,6 +107,7 @@ async def login(
 	request: LoginRequest, db: AsyncSession = Depends(get_db)
 ) -> TokenResponse:
 	# Endpoint đăng nhập: xác thực user rồi trả access/refresh token pair.
+	_require_google_for_gmail(request.email)
 	user = await authenticate_user(db, request.email, request.password)
 	if user is None:
 		raise HTTPException(

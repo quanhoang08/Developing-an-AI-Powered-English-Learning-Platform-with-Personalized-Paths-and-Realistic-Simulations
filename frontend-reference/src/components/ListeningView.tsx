@@ -5,7 +5,6 @@ import { motion } from "motion/react";
 import { CountdownTimer } from "./CountdownTimer";
 import { MovieContextPanel } from "./MovieContextPanel";
 import { PodcastPanel } from "./PodcastPanel";
-import { ToeicPanel } from "./ToeicPanel";
 import {
   Headphones,
   Film,
@@ -121,8 +120,6 @@ export const ListeningView: React.FC = () => {
       ) : (
         <MovieContextPanel />
       )}
-
-      <ToeicPanel />
 
     </div>
   );

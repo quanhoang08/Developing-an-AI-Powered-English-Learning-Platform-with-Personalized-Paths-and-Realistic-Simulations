@@ -17,8 +17,6 @@ import { CountdownTimer } from "./CountdownTimer";
 import { AiWait } from "./AiWait";
 import { WordHoverLookup } from "./WordHoverLookup";
 import { RearrangePanel } from "./RearrangePanel";
-import { GrammarPanel } from "./GrammarPanel";
-import { ParaphraseBankPanel } from "./ParaphraseBankPanel";
 import { CountUp } from "./CountUp";
 import {
   PenTool,
@@ -469,8 +467,6 @@ export const WritingView: React.FC = () => {
       </div>
 
       <RearrangePanel skill="writing" />
-      <ParaphraseBankPanel />
-      <GrammarPanel />
     </div>
   );
 };

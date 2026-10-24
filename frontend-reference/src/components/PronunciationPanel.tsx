@@ -1,5 +1,6 @@
 // Phòng luyện phát âm cho người Việt (backlog 4.1-4.5): câu mẫu theo lỗi hay gặp + shadowing có so sóng âm,
 // game cặp âm dễ nhầm (browser TTS), và chế độ "nói thầm" (gõ thay nói để giữ streak).
+import { PhonemeHeatmap } from "./PhonemeHeatmap";
 import React, { useEffect, useRef, useState } from "react";
 import { Loader2, Mic, Square, Volume2 } from "lucide-react";
 import {
@@ -348,6 +349,7 @@ const VoiceDiary: React.FC = () => {
 export const PronunciationPanel: React.FC = () => (
   <div className="stagger-in surface p-7 space-y-8">
     <SentenceLab />
+    <div className="border-t border-dashed border-slate-200 pt-6"><PhonemeHeatmap /></div>
     <div className="border-t border-dashed border-slate-200 pt-6"><PairsGame /></div>
     <div className="border-t border-dashed border-slate-200 pt-6"><SilentMode /></div>
     <div className="border-t border-dashed border-slate-200 pt-6"><VoiceDiary /></div>

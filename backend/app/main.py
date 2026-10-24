@@ -12,8 +12,10 @@ from app.database import get_session_factory
 from app.routers.activity import router as activity_router
 from app.routers.adaptive import router as adaptive_router
 from app.routers.auth import router as auth_router
+from app.routers.economy import router as economy_router
 from app.routers.extension import router as extension_router
 from app.routers.gamification import router as gamification_router
+from app.routers.games import router as games_router
 from app.routers.grammar import router as grammar_router
 from app.routers.listening import router as listening_router
 from app.routers.movie_context import router as movie_context_router
@@ -21,6 +23,7 @@ from app.routers.notebook import router as notebook_router
 from app.routers.pronunciation import router as pronunciation_router
 from app.routers.classroom import router as classroom_router
 from app.routers.social import diary_router, friends_router
+from app.routers.readability import router as readability_router
 from app.routers.reading import router as reading_router, stories_router
 from app.routers.speaking import router as speaking_router
 from app.routers.toeic import router as toeic_router
@@ -53,13 +56,16 @@ app.include_router(diary_router, prefix="/api")
 app.include_router(friends_router, prefix="/api")
 app.include_router(adaptive_router, prefix="/api")
 app.include_router(auth_router, prefix="/api")
+app.include_router(economy_router, prefix="/api")
 app.include_router(extension_router, prefix="/api")
 app.include_router(gamification_router, prefix="/api")
+app.include_router(games_router, prefix="/api")
 app.include_router(grammar_router, prefix="/api")
 app.include_router(listening_router, prefix="/api")
 app.include_router(movie_context_router, prefix="/api")
 app.include_router(notebook_router, prefix="/api")
 app.include_router(pronunciation_router, prefix="/api")
+app.include_router(readability_router, prefix="/api")
 app.include_router(reading_router, prefix="/api")
 app.include_router(stories_router, prefix="/api")
 app.include_router(speaking_router, prefix="/api")

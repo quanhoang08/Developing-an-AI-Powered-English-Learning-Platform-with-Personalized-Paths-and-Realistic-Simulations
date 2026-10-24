@@ -140,6 +140,8 @@ export function getAccessToken(): string | null {
 // Xóa token lúc logout hoặc khi backend trả 401 (token hết hạn/không hợp lệ).
 export function clearAccessToken(): void {
   localStorage.removeItem(ACCESS_TOKEN_KEY);
+  // Bản lưu offline (public/sw.js) có email và từ đã lưu của người dùng: xóa khi đăng xuất.
+  if (typeof caches !== "undefined") void caches.delete("lumina-offline-v1");
 }
 
 // Lỗi từ backend/mạng. `code` là nguyên nhân cụ thể (vd ollama_unreachable) để UI chọn thông điệp
@@ -212,6 +214,25 @@ export async function login(email: string, password: string): Promise<AuthTokens
   const tokens = await request<AuthTokens>("/api/auth/login", {
     method: "POST",
     body: JSON.stringify({ email, password }),
+  });
+  localStorage.setItem(ACCESS_TOKEN_KEY, tokens.access_token);
+  return tokens;
+}
+
+// Client ID của "Continue with Google" do backend cấu hình; null = chưa bật, UI ẩn nút Google.
+export async function getGoogleClientId(): Promise<string | null> {
+  try {
+    return (await request<{ client_id: string | null }>("/api/auth/google/config")).client_id;
+  } catch {
+    return null;
+  }
+}
+
+// Đổi ID token của Google lấy token của Lumina (backend xác minh với Google) và lưu như login().
+export async function googleLogin(credential: string): Promise<AuthTokens> {
+  const tokens = await request<AuthTokens>("/api/auth/google", {
+    method: "POST",
+    body: JSON.stringify({ credential }),
   });
   localStorage.setItem(ACCESS_TOKEN_KEY, tokens.access_token);
   return tokens;
@@ -1386,3 +1407,73 @@ export const addClassAssignment = (id: string, body: { title: string; descriptio
   request<{ id: string }>(`/api/classes/${id}/assignments`, { method: "POST", body: JSON.stringify(body) });
 export const deleteClassAssignment = (id: string, assignmentId: string) => request<void>(`/api/classes/${id}/assignments/${assignmentId}`, { method: "DELETE" });
 export const removeClassMember = (id: string, userId: string) => request<void>(`/api/classes/${id}/members/${userId}`, { method: "DELETE" });
+
+// Mini-game + nhiệm vụ ngày (backend/app/routers/games.py).
+export type WordleCell = "correct" | "present" | "absent";
+export interface WordleGuessResult { pattern: WordleCell[]; solved: boolean; answer: string | null; xp_awarded: number }
+export interface DailyQuest { id: string; title: string; progress: number; target: number; bonus_xp: number; claimed: boolean }
+export const getWordleStatus = () => request<{ length: number; max_guesses: number; solved_today: boolean }>("/api/games/wordle");
+export const guessWordle = (guess: string, attempt: number) =>
+  request<WordleGuessResult>("/api/games/wordle/guess", { method: "POST", body: JSON.stringify({ guess, attempt }) });
+export const completeMemoryMatch = (pairs: number, moves: number) =>
+  request<{ xp_awarded: number }>("/api/games/memory-match/complete", { method: "POST", body: JSON.stringify({ pairs, moves }) });
+export const listDailyQuests = () => request<DailyQuest[]>("/api/games/quests");
+export const claimDailyQuest = (id: string) => request<{ xp_awarded: number }>(`/api/games/quests/${id}/claim`, { method: "POST" });
+
+export const completeScoreGame = (game: string, score: number) =>
+  request<{ xp_awarded: number }>(`/api/games/${game}/complete`, { method: "POST", body: JSON.stringify({ score }) });
+export const wordChainTurn = (chain: string[], word: string) =>
+  request<{ reply: string | null }>("/api/games/word-chain/turn", { method: "POST", body: JSON.stringify({ chain, word }) });
+export interface DetectivePassage { passage_id: number; tokens: string[]; error_count: number }
+export interface DetectiveResult {
+  found: number; total: number; false_positives: number; xp_awarded: number;
+  answers: Array<{ index: number; wrong: string; correct: string }>;
+}
+export const getGrammarDetective = (exclude?: number) =>
+  request<DetectivePassage>(`/api/games/grammar-detective${exclude === undefined ? "" : `?exclude=${exclude}`}`);
+export const checkGrammarDetective = (passage_id: number, picks: number[]) =>
+  request<DetectiveResult>("/api/games/grammar-detective/check", { method: "POST", body: JSON.stringify({ passage_id, picks }) });
+export function speedQuizUrl() {
+  const base = BACKEND_URL ? BACKEND_URL.replace(/^http/, "ws") : `${location.protocol === "https:" ? "wss" : "ws"}://${location.host}`;
+  return `${base}/api/games/speed-quiz/ws?token=${encodeURIComponent(getAccessToken() ?? "")}`;
+}
+
+// Ví xu / tim / shop / gacha (backend/app/routers/economy.py).
+export interface ShopItem { id: string; name: string; slot: "avatar" | "frame" | "booster"; price: number; emoji: string; owned: boolean; equipped: boolean }
+export interface Wallet {
+  coins: number; hearts: number; max_hearts: number; next_heart_in_seconds: number | null; booster_seconds_left: number;
+  heart_refill_cost: number; gacha_cost: number; shop: ShopItem[];
+}
+export const getWallet = () => request<Wallet>("/api/economy/wallet");
+export const loseHeart = () => request<{ hearts: number }>("/api/economy/hearts/lose", { method: "POST" });
+export const refillHearts = () => request<{ hearts: number; coins: number }>("/api/economy/hearts/refill", { method: "POST" });
+export const buyShopItem = (id: string) => request<{ coins: number }>(`/api/economy/shop/${id}/buy`, { method: "POST" });
+export const equipItem = (id: string) => request<void>(`/api/economy/items/${id}/equip`, { method: "POST" });
+export const rollGacha = () =>
+  request<{ reward: { coins?: number; booster?: boolean; item?: string }; duplicate: boolean; coins: number }>("/api/economy/gacha", { method: "POST" });
+
+// Bang hội.
+export interface GuildInfo {
+  id: string; name: string; join_code: string | null; weekly_xp: number; max_members: number;
+  members: Array<{ user_id: string; name: string; weekly_xp: number; is_owner: boolean }>;
+}
+export const getMyGuild = () => request<GuildInfo | null>("/api/guilds/me");
+export const createGuild = (name: string) => request<GuildInfo>("/api/guilds", { method: "POST", body: JSON.stringify({ name }) });
+export const joinGuild = (code: string) => request<GuildInfo>("/api/guilds/join", { method: "POST", body: JSON.stringify({ code }) });
+export const leaveGuild = () => request<void>("/api/guilds/leave", { method: "POST" });
+export const getGuildLeaderboard = () => request<Array<{ name: string; weekly_xp: number; members: number; is_mine: boolean }>>("/api/guilds/leaderboard");
+
+export const getPhonemeHeatmap = () => request<Array<{ phoneme: string; attempts: number; avg_score: number | null }>>("/api/pronunciation/heatmap");
+
+export interface ReadabilityResult {
+  word_count: number; sentence_count: number; grade_level: number; long_sentences: number; passive_count: number;
+  adverbs: string[]; hard_words: string[]; cefr_counts: Record<string, number>;
+  sentences: Array<{ text: string; words: number; level: "ok" | "long" | "very_long"; passive: string[] }>;
+}
+export const checkReadability = (text: string) =>
+  request<ReadabilityResult>("/api/writing/readability", { method: "POST", body: JSON.stringify({ text }) });
+
+// Daily Micro-Quiz: cùng endpoint với extension (backend/app/routers/extension.py), hiện ở Dashboard.
+export const getMicroQuiz = () => request<{ prompt: string; options: string[] }>("/api/extension/quiz");
+export const answerMicroQuiz = (prompt: string, choice: string) =>
+  request<{ correct: boolean; answer: string; xp_awarded: number }>("/api/extension/quiz/answer", { method: "POST", body: JSON.stringify({ prompt, choice }) });

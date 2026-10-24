@@ -19,6 +19,12 @@ class LoginRequest(BaseModel):
 	client_type: Literal["web", "extension"] = "web"
 
 
+class GoogleLoginRequest(BaseModel):
+	# ID token (JWT) do Google Identity Services trả về ở trình duyệt.
+	credential: str = Field(min_length=20, max_length=4096)
+	client_type: Literal["web", "extension"] = "web"
+
+
 class RefreshRequest(BaseModel):
 	# Payload dùng để đổi refresh token lấy access token mới.
 	refresh_token: str = Field(min_length=1)

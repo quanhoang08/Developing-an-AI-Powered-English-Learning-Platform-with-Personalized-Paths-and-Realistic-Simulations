@@ -209,6 +209,7 @@ class PronunciationResult:
 	completeness: float
 	weak_words: list[str] = field(default_factory=list)
 	words: list[tuple[str, float]] = field(default_factory=list)  # (từ, điểm 0-100) khi chấm theo câu mẫu
+	phonemes: list[tuple[str, float]] = field(default_factory=list)  # (âm IPA, điểm 0-100) khi chấm theo câu mẫu
 
 
 def assess_pronunciation(audio_path: str, locale: str = "en-US", reference_text: str = "") -> PronunciationResult:
@@ -222,8 +223,10 @@ def assess_pronunciation(audio_path: str, locale: str = "en-US", reference_text:
 	assessment = {
 		"ReferenceText": reference_text,
 		"GradingSystem": "HundredMark",
-		"Granularity": "Word",
+		# Có câu mẫu thì lấy điểm tới từng âm vị (IPA) cho heatmap; chấm tự do chỉ cần mức từ.
+		"Granularity": "Phoneme" if reference_text else "Word",
 		"Dimension": "Comprehensive",
+		**({"PhonemeAlphabet": "IPA"} if reference_text else {}),
 	}
 	try:
 		response = httpx.post(
@@ -261,6 +264,12 @@ def assess_pronunciation(audio_path: str, locale: str = "en-US", reference_text:
 		completeness=float(best["CompletenessScore"]),
 		weak_words=weak_words,
 		words=[(w["Word"], float(w.get("AccuracyScore", 0))) for w in best.get("Words", [])],
+		phonemes=[
+			(p["Phoneme"], float(p["AccuracyScore"]))
+			for w in best.get("Words", [])
+			for p in w.get("Phonemes", [])
+			if "Phoneme" in p and "AccuracyScore" in p
+		],
 	)
 
 

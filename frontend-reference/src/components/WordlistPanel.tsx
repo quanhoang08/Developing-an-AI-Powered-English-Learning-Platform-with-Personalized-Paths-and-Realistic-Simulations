@@ -125,8 +125,8 @@ export const WordlistPanel: React.FC = () => {
   };
 
   return (
-    <section className="space-y-4 border-t border-dashed border-slate-200 pt-6">
-      <h3 className="font-display text-2xl font-bold text-slate-900">Exam word lists</h3>
+    <section className="surface p-6 md:p-7 space-y-4">
+      <h3 className="font-display text-xl font-bold text-slate-900">Exam word lists</h3>
       <div role="tablist" className="flex gap-2">
         {TABS.map((tab) => (
           <button

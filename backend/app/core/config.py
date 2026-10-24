@@ -27,6 +27,10 @@ class Settings(BaseSettings):
 	mail_from_name: str = "Lumina"
 	# True (production): chưa xác minh email thì không đăng nhập được.
 	require_email_verification: bool = False
+	# OAuth Client ID (Web) của Google Cloud để "Continue with Google"; rỗng = ẩn nút, chỉ còn email/mật khẩu.
+	google_client_id: str = ""
+	# True: địa chỉ @gmail.com bắt buộc đăng ký/đăng nhập bằng Google (Google xác minh chủ email). False để test bằng mật khẩu.
+	require_google_for_gmail: bool = False
 	# Số request/phút/IP cho mỗi endpoint /auth/*; 0 = tắt (production đặt ~20).
 	auth_rate_limit_per_minute: int = 0
 	refresh_token_expire_days: int = 30

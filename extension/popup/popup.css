@@ -110,3 +110,8 @@ details {
   color: #475569;
   margin-top: 4px;
 }
+
+.quiz-title { font-size: 14px; margin: 12px 0 4px; }
+.quiz-prompt { font-size: 18px; font-weight: 700; margin: 0 0 6px; }
+.quiz-options { display: grid; gap: 4px; }
+.quiz-option { text-align: left; }

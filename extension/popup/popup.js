@@ -27,6 +27,47 @@ async function refreshTabCaptionButton() {
   $("tabCaptionBtn").dataset.active = String(active);
 }
 
+// Daily Micro-Quiz: 1 câu từ - nghĩa; trả lời đúng cộng XP vào tài khoản web (backend giới hạn 5 câu/ngày có XP).
+async function loadQuiz() {
+  $("quizResult").textContent = "";
+  $("quizNext").hidden = true;
+  try {
+    const quiz = await send({ type: "QUIZ_GET" });
+    $("quizPrompt").textContent = quiz.prompt;
+    $("quizOptions").replaceChildren(
+      ...quiz.options.map((option) => {
+        const button = document.createElement("button");
+        button.className = "btn btn-secondary quiz-option";
+        button.textContent = option;
+        button.addEventListener("click", () => answerQuiz(quiz.prompt, option));
+        return button;
+      }),
+    );
+  } catch (error) {
+    $("quizPrompt").textContent = "";
+    $("quizResult").textContent = `Không tải được quiz: ${error.message}`;
+  }
+}
+
+async function answerQuiz(prompt, choice) {
+  document.querySelectorAll(".quiz-option").forEach((button) => (button.disabled = true));
+  try {
+    const result = await send({ type: "QUIZ_ANSWER", prompt, choice });
+    $("quizResult").textContent = result.correct
+      ? `Đúng! ${result.xp_awarded ? `+${result.xp_awarded} XP` : "(hết XP hôm nay)"}`
+      : `Chưa đúng. Đáp án: ${result.answer}`;
+  } catch (error) {
+    $("quizResult").textContent = `Lỗi: ${error.message}`;
+  }
+  $("quizNext").hidden = false;
+}
+
+$("quizNext").addEventListener("click", loadQuiz);
+$("sidePanelBtn").addEventListener("click", async () => {
+  const tab = (await chrome.tabs.query({ active: true, currentWindow: true }))[0];
+  await chrome.sidePanel.open({ windowId: tab.windowId });
+});
+
 async function render() {
   const [{ loggedIn, email, apiBaseUrl }, stored] = await Promise.all([
     send({ type: "AUTH_STATUS" }),
@@ -35,7 +76,11 @@ async function render() {
   $("enabled").checked = stored.enabled !== false;
   $("loggedIn").hidden = !loggedIn;
   $("tabCaptions").hidden = !loggedIn;
-  if (loggedIn) await refreshTabCaptionButton();
+  $("quiz").hidden = !loggedIn;
+  if (loggedIn) {
+    await refreshTabCaptionButton();
+    await loadQuiz();
+  }
   $("loggedOut").hidden = loggedIn;
   $("whoami").textContent = email || "";
   $("apiBaseUrl").value = apiBaseUrl || "";

@@ -18,6 +18,7 @@ const ReadingView = lazy(() => import("./components/ReadingView").then((m) => ({
 const ListeningView = lazy(() => import("./components/ListeningView").then((m) => ({ default: m.ListeningView })));
 const SpeakingView = lazy(() => import("./components/SpeakingView").then((m) => ({ default: m.SpeakingView })));
 const WritingView = lazy(() => import("./components/WritingView").then((m) => ({ default: m.WritingView })));
+const ExtrasView = lazy(() => import("./components/ExtrasView").then((m) => ({ default: m.ExtrasView })));
 const AnalyticsView = lazy(() => import("./components/AnalyticsView").then((m) => ({ default: m.AnalyticsView })));
 
 const FEATURE_NAMES: Record<Exclude<ActiveTab, "dashboard">, string> = {
@@ -27,6 +28,10 @@ const FEATURE_NAMES: Record<Exclude<ActiveTab, "dashboard">, string> = {
   speaking: "Speaking Studio",
   writing: "Writing Lab",
   analytics: "Adaptive Progress",
+  games: "Games & Rewards",
+  community: "Community",
+  exam: "Exam Prep",
+  tools: "Vocab & Grammar",
 };
 
 export function App() {
@@ -35,7 +40,6 @@ export function App() {
   const setActiveTab = (tab: ActiveTab) => {
     if (!isTimerLocked()) setActiveTabUnlocked(tab);
   };
-  const [searchQuery, setSearchQuery] = useState("");
   const [isFlashcardModalOpen, setIsFlashcardModalOpen] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [authVersion, setAuthVersion] = useState(0);
@@ -101,6 +105,11 @@ export function App() {
         return <WritingView />;
       case "analytics":
         return <AnalyticsView />;
+      case "games":
+      case "community":
+      case "exam":
+      case "tools":
+        return <ExtrasView section={activeTab} />;
       default:
         return (
           <DashboardView
@@ -132,8 +141,6 @@ export function App() {
       <div className="flex-1 flex flex-col min-w-0 overflow-y-auto">
         <Header
           activeTab={activeTab}
-          searchQuery={searchQuery}
-          setSearchQuery={setSearchQuery}
           openFlashcards={() => setIsFlashcardModalOpen(true)}
           onAuthChanged={() => setAuthVersion((version) => version + 1)}
           onOpenMenu={() => setIsSidebarOpen(true)}

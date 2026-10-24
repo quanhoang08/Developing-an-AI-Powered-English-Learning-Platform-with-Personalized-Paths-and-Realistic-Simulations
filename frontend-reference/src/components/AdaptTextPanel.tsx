@@ -25,8 +25,8 @@ export const AdaptTextPanel: React.FC = () => {
   };
 
   return (
-    <section className="rounded-2xl bg-white p-5 ring-1 ring-slate-900/10 space-y-3 text-sm">
-      <h3 className="font-bold text-slate-900">Adapt an article to your level</h3>
+    <section className="surface p-6 md:p-7 space-y-3 text-sm">
+      <h3 className="font-display text-xl font-bold text-slate-900">Adapt an article to your level</h3>
       <textarea
         value={text}
         onChange={(e) => setText(e.target.value)}

@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="vi">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Lumina - Trợ lý viết</title>
+    <style>
+      body { font-family: system-ui, sans-serif; margin: 0; padding: 12px; color: #1e293b; }
+      textarea { width: 100%; box-sizing: border-box; min-height: 120px; padding: 8px; border: 1px solid #cbd5e1; border-radius: 8px; font: inherit; }
+      button { margin: 8px 6px 8px 0; padding: 6px 12px; border: 0; border-radius: 8px; background: #256d59; color: #fff; cursor: pointer; }
+      button:disabled { opacity: 0.5; }
+      #out { white-space: pre-wrap; }
+      li { margin-bottom: 6px; }
+      s { color: #b91c1c; }
+      b { color: #047857; }
+    </style>
+  </head>
+  <body>
+    <h1 style="font-size: 16px">Trợ lý viết Lumina</h1>
+    <textarea id="text" placeholder="Gõ hoặc dán câu tiếng Anh..."></textarea>
+    <div>
+      <button id="grammar">Kiểm tra ngữ pháp</button>
+      <button id="translate">Dịch sang tiếng Việt</button>
+    </div>
+    <p id="status" role="status"></p>
+    <ul id="issues"></ul>
+    <p id="out"></p>
+    <script src="sidepanel.js"></script>
+  </body>
+</html>

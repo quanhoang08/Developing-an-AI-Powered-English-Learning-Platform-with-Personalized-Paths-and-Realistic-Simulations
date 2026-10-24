@@ -31,7 +31,7 @@
 -- dùng để khởi tạo DB (2 file có thể tạm lệch nhau về câu chữ/tổ chức, nhưng
 -- file .sql ở đây luôn là nguồn đúng về mặt DDL thực thi được).
 --
--- Sinh lần cuối: 2026-10-13, khớp Alembic revision 20261012_0035 (thêm bảng live_calls: lịch sử cuộc gọi thoại 2 chiều F22; trước đó 0034 documents.overview, 0033 nới source_type thêm doc/pdf, 0032 activity_log + mnemonic_reports).
+-- Sinh lần cuối: 2026-10-23, khớp Alembic revision 20261023_0036 (thêm wallets, user_items, guilds, guild_members, phoneme_stats: xu/tim/gacha/shop, bang hội, IPA heatmap).
 -- ============================================================================
 
 
@@ -43,16 +43,6 @@
 -- Dumped from database version 16.15 (Debian 16.15-1.pgdg12+2)
 -- Dumped by pg_dump version 16.15 (Debian 16.15-1.pgdg12+2)
 
-SET statement_timeout = 0;
-SET lock_timeout = 0;
-SET idle_in_transaction_session_timeout = 0;
-SET client_encoding = 'UTF8';
-SET standard_conforming_strings = on;
-SELECT pg_catalog.set_config('search_path', '', false);
-SET check_function_bodies = false;
-SET xmloption = content;
-SET client_min_messages = warning;
-SET row_security = off;
 
 --
 -- Name: uuid-ossp; Type: EXTENSION; Schema: -; Owner: -
@@ -96,9 +86,7 @@ END;
 $$;
 
 
-SET default_tablespace = '';
 
-SET default_table_access_method = heap;
 
 --
 -- Name: activity_log; Type: TABLE; Schema: public; Owner: -
@@ -358,6 +346,30 @@ CREATE TABLE public.grammar_attempts (
 
 
 --
+-- Name: guild_members; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.guild_members (
+    guild_id uuid NOT NULL,
+    user_id uuid NOT NULL,
+    joined_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+
+--
+-- Name: guilds; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.guilds (
+    id uuid DEFAULT public.uuid_generate_v4() NOT NULL,
+    name character varying(40) NOT NULL,
+    join_code character varying(8) NOT NULL,
+    owner_id uuid NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+
+--
 -- Name: ielts_attempts; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -513,6 +525,19 @@ CREATE TABLE public.personas (
     description text,
     is_active boolean DEFAULT true NOT NULL,
     created_at timestamp with time zone DEFAULT now()
+);
+
+
+--
+-- Name: phoneme_stats; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.phoneme_stats (
+    user_id uuid NOT NULL,
+    phoneme character varying(12) NOT NULL,
+    attempts integer DEFAULT 0 NOT NULL,
+    total_score double precision DEFAULT 0 NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL
 );
 
 
@@ -799,6 +824,18 @@ CREATE TABLE public.user_errors (
 
 
 --
+-- Name: user_items; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.user_items (
+    user_id uuid NOT NULL,
+    item_id character varying(40) NOT NULL,
+    equipped boolean DEFAULT false NOT NULL,
+    acquired_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+
+--
 -- Name: user_phrasebook_entries; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -912,6 +949,21 @@ CREATE TABLE public.voice_diary_entries (
     words_per_minute integer,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
     CONSTRAINT voice_diary_entries_duration_seconds_check CHECK (((duration_seconds >= 1) AND (duration_seconds <= 120)))
+);
+
+
+--
+-- Name: wallets; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.wallets (
+    user_id uuid NOT NULL,
+    coins integer DEFAULT 0 NOT NULL,
+    hearts integer DEFAULT 5 NOT NULL,
+    hearts_updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    booster_until timestamp with time zone,
+    CONSTRAINT wallets_coins_check CHECK ((coins >= 0)),
+    CONSTRAINT wallets_hearts_check CHECK ((hearts >= 0))
 );
 
 
@@ -1099,6 +1151,38 @@ ALTER TABLE ONLY public.grammar_attempts
 
 
 --
+-- Name: guild_members guild_members_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.guild_members
+    ADD CONSTRAINT guild_members_pkey PRIMARY KEY (guild_id, user_id);
+
+
+--
+-- Name: guild_members guild_members_user_id_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.guild_members
+    ADD CONSTRAINT guild_members_user_id_key UNIQUE (user_id);
+
+
+--
+-- Name: guilds guilds_join_code_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.guilds
+    ADD CONSTRAINT guilds_join_code_key UNIQUE (join_code);
+
+
+--
+-- Name: guilds guilds_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.guilds
+    ADD CONSTRAINT guilds_pkey PRIMARY KEY (id);
+
+
+--
 -- Name: ielts_attempts ielts_attempts_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -1184,6 +1268,14 @@ ALTER TABLE ONLY public.notebook_folders
 
 ALTER TABLE ONLY public.personas
     ADD CONSTRAINT personas_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: phoneme_stats phoneme_stats_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.phoneme_stats
+    ADD CONSTRAINT phoneme_stats_pkey PRIMARY KEY (user_id, phoneme);
 
 
 --
@@ -1355,6 +1447,14 @@ ALTER TABLE ONLY public.user_errors
 
 
 --
+-- Name: user_items user_items_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.user_items
+    ADD CONSTRAINT user_items_pkey PRIMARY KEY (user_id, item_id);
+
+
+--
 -- Name: user_phrasebook_entries user_phrasebook_entries_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -1424,6 +1524,14 @@ ALTER TABLE ONLY public.vocab_reviews
 
 ALTER TABLE ONLY public.voice_diary_entries
     ADD CONSTRAINT voice_diary_entries_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: wallets wallets_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.wallets
+    ADD CONSTRAINT wallets_pkey PRIMARY KEY (user_id);
 
 
 --
@@ -2075,6 +2183,30 @@ ALTER TABLE ONLY public.grammar_attempts
 
 
 --
+-- Name: guild_members guild_members_guild_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.guild_members
+    ADD CONSTRAINT guild_members_guild_id_fkey FOREIGN KEY (guild_id) REFERENCES public.guilds(id) ON DELETE CASCADE;
+
+
+--
+-- Name: guild_members guild_members_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.guild_members
+    ADD CONSTRAINT guild_members_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id) ON DELETE CASCADE;
+
+
+--
+-- Name: guilds guilds_owner_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.guilds
+    ADD CONSTRAINT guilds_owner_id_fkey FOREIGN KEY (owner_id) REFERENCES public.users(id) ON DELETE CASCADE;
+
+
+--
 -- Name: ielts_attempts ielts_attempts_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -2208,6 +2340,14 @@ ALTER TABLE ONLY public.notebook_chat_messages
 
 ALTER TABLE ONLY public.notebook_folders
     ADD CONSTRAINT notebook_folders_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id) ON DELETE CASCADE;
+
+
+--
+-- Name: phoneme_stats phoneme_stats_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.phoneme_stats
+    ADD CONSTRAINT phoneme_stats_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id) ON DELETE CASCADE;
 
 
 --
@@ -2379,6 +2519,14 @@ ALTER TABLE ONLY public.user_errors
 
 
 --
+-- Name: user_items user_items_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.user_items
+    ADD CONSTRAINT user_items_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id) ON DELETE CASCADE;
+
+
+--
 -- Name: user_phrasebook_entries user_phrasebook_entries_conversation_turn_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -2440,6 +2588,14 @@ ALTER TABLE ONLY public.vocab_reviews
 
 ALTER TABLE ONLY public.voice_diary_entries
     ADD CONSTRAINT voice_diary_entries_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id) ON DELETE CASCADE;
+
+
+--
+-- Name: wallets wallets_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.wallets
+    ADD CONSTRAINT wallets_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id) ON DELETE CASCADE;
 
 
 --

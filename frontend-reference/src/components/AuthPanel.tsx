@@ -1,8 +1,26 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { AnimatePresence, motion } from "motion/react";
 import { ArrowRight, BookOpen, Eye, EyeOff, Headphones, KeyRound, Loader2, Lock, LogIn, Mail, Mic, PenLine, X } from "lucide-react";
-import { forgotPassword, getAccessToken, login, register, resendVerification, resetPassword, verifyEmail } from "../api";
+import { forgotPassword, getAccessToken, getGoogleClientId, googleLogin, login, register, resendVerification, resetPassword, verifyEmail } from "../api";
+
+const GSI_SRC = "https://accounts.google.com/gsi/client";
+type GoogleId = {
+  initialize: (config: { client_id: string; callback: (response: { credential: string }) => void }) => void;
+  renderButton: (el: HTMLElement, options: Record<string, unknown>) => void;
+};
+const googleId = () => (window as unknown as { google?: { accounts?: { id?: GoogleId } } }).google?.accounts?.id;
+
+// Nạp script Google Identity Services một lần; resolve khi window.google sẵn sàng.
+const loadGsi = () =>
+  new Promise<void>((resolve, reject) => {
+    if (googleId()) return resolve();
+    const existing = document.querySelector<HTMLScriptElement>(`script[src="${GSI_SRC}"]`);
+    const script = existing ?? Object.assign(document.createElement("script"), { src: GSI_SRC, async: true });
+    script.addEventListener("load", () => resolve());
+    script.addEventListener("error", () => reject(new Error("Could not load Google sign-in")));
+    if (!existing) document.head.appendChild(script);
+  });
 
 interface AuthPanelProps {
   onAuthChanged: () => void;
@@ -58,6 +76,64 @@ export const AuthPanel: React.FC<AuthPanelProps> = ({ onAuthChanged }) => {
   const [isLoggedIn, setIsLoggedIn] = useState(Boolean(getAccessToken()));
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [googleClientId, setGoogleClientId] = useState<string | null>(null);
+  const googleButtonRef = useRef<HTMLDivElement>(null);
+
+  // Hoàn tất đăng nhập (mật khẩu hoặc Google): đóng popup, xóa trạng thái form, báo App/Sidebar cập nhật.
+  const finishLogin = () => {
+    setIsLoggedIn(true);
+    setIsOpen(false);
+    // Xóa trạng thái form: lần mở sau (sau khi đăng xuất) phải về màn đăng nhập sạch, không còn mật khẩu/bước cũ.
+    setMode("auth");
+    setIsRegistering(false);
+    setPassword("");
+    setShowPassword(false);
+    setCode("");
+    setNotice(null);
+    window.dispatchEvent(new Event("lumina-auth-changed"));
+    onAuthChanged();
+  };
+
+  // Nút Google chỉ hiện khi backend có GOOGLE_CLIENT_ID; popup mở ra mới nạp script (không tải khi chưa cần).
+  useEffect(() => {
+    if (!isOpen || mode !== "auth" || isLoggedIn) return;
+    let cancelled = false;
+    (async () => {
+      const clientId = googleClientId ?? (await getGoogleClientId());
+      if (cancelled || !clientId) return;
+      setGoogleClientId(clientId);
+      try {
+        await loadGsi();
+      } catch {
+        return; // chặn mạng/adblock: bỏ nút Google, đăng nhập mật khẩu vẫn dùng được
+      }
+      const gsi = googleId();
+      const target = googleButtonRef.current;
+      if (cancelled || !gsi || !target) return;
+      gsi.initialize({
+        client_id: clientId,
+        callback: async ({ credential }) => {
+          setError(null);
+          setIsSubmitting(true);
+          try {
+            await googleLogin(credential);
+            finishLogin();
+          } catch (googleError) {
+            setError(googleError instanceof Error ? googleError.message : "Google sign-in failed");
+          } finally {
+            setIsSubmitting(false);
+          }
+        },
+      });
+      target.replaceChildren();
+      gsi.renderButton(target, { theme: "outline", size: "large", shape: "pill", text: "continue_with", width: 320 });
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // finishLogin chỉ đụng setState + prop ổn định; không đưa vào deps để tránh khởi tạo lại Google mỗi lần render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen, mode, isLoggedIn, googleClientId]);
 
   useEffect(() => {
     // Cho phép bất kỳ view nào (vd LockedFeature, Sidebar) mở popup này mà không cần lift state.
@@ -108,17 +184,7 @@ export const AuthPanel: React.FC<AuthPanelProps> = ({ onAuthChanged }) => {
         await register(email, password, "");
       }
       await login(email, password);
-      setIsLoggedIn(true);
-      setIsOpen(false);
-      // Xóa trạng thái form: lần mở sau (sau khi đăng xuất) phải về màn đăng nhập sạch, không còn mật khẩu/bước cũ.
-      setMode("auth");
-      setIsRegistering(false);
-      setPassword("");
-      setShowPassword(false);
-      setCode("");
-      setNotice(null);
-      window.dispatchEvent(new Event("lumina-auth-changed"));
-      onAuthChanged();
+      finishLogin();
     } catch (submitError) {
       if ((submitError as { code?: string }).code === "email_not_verified") {
         // Production bắt buộc xác minh: register/login bị 403 -> chuyển sang bước nhập mã (register đã gửi mã sẵn).
@@ -131,6 +197,8 @@ export const AuthPanel: React.FC<AuthPanelProps> = ({ onAuthChanged }) => {
         setError(
           errorCode === "invalid_or_expired_code"
             ? "That code is wrong or has expired. Use \"Resend code\" to get a new one."
+            : errorCode === "use_google_signin" || (submitError as Error)?.message === "use_google_signin"
+              ? "Gmail addresses must sign in with Google. Use the Continue with Google button."
             : errorCode === "invalid_credentials" || (submitError as Error)?.message === "invalid_credentials"
               ? "Wrong email or password. Please try again."
               : submitError instanceof Error ? submitError.message : "Authentication failed",
@@ -330,6 +398,16 @@ export const AuthPanel: React.FC<AuthPanelProps> = ({ onAuthChanged }) => {
                     <span className="relative">{submitLabel}</span>
                     {!isSubmitting && <ArrowRight className="relative h-4 w-4 transition-transform group-hover:translate-x-1" />}
                   </motion.button>
+
+                  {mode === "auth" && googleClientId && (
+                    <div className="space-y-3">
+                      <div className="flex items-center gap-3 text-[11px] font-semibold text-slate-400" aria-hidden="true">
+                        <span className="h-px flex-1 bg-slate-200" /> or <span className="h-px flex-1 bg-slate-200" />
+                      </div>
+                      {/* Google tự vẽ nút vào div này; Google xác minh chủ email nên không cần mã OTP. */}
+                      <div ref={googleButtonRef} className="flex justify-center min-h-[44px]" />
+                    </div>
+                  )}
 
                   {(mode === "verify" || mode === "reset") && (
                     <button

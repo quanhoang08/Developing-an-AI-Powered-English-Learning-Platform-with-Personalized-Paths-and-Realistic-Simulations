@@ -27,6 +27,8 @@ def get_session_factory() -> async_sessionmaker[AsyncSession]:
 			settings.database_url,
 			echo=settings.debug,
 			pool_pre_ping=True,
+			# libpq connect_timeout (giây): DB sập thì báo lỗi sau ~3s thay vì treo request lâu.
+			connect_args={"connect_timeout": 3},
 		)
 		_session_factory = async_sessionmaker(
 			bind=engine,

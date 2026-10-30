@@ -7,6 +7,8 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 # Tập trung toàn bộ cấu hình runtime của backend vào một object duy nhất.
 # Pydantic Settings tự đọc biến môi trường và backend/.env, đồng thời kiểm tra kiểu dữ liệu.
 class Settings(BaseSettings):
+	# Mỗi thuộc tính = một biến môi trường cùng tên (không phân biệt hoa/thường); thiếu thì dùng giá trị mặc định.
+	# Alias: ENV/ENVIRONMENT -> environment, SECRET_KEY/JWT_SECRET_KEY -> secret_key.
 	app_name: str = "Lumina API"
 	environment: str = Field(default="development", validation_alias=AliasChoices("ENV", "ENVIRONMENT"))
 	debug: bool = False
@@ -146,6 +148,7 @@ class Settings(BaseSettings):
 
 @lru_cache
 def get_settings() -> Settings:
+	# Điểm truy cập cấu hình duy nhất: nạp 1 lần (lru_cache), chuẩn hoá URL DB, và chặn khởi động nếu cấu hình production không an toàn.
 	# Cache settings để mọi module dùng cùng một cấu hình trong suốt vòng đời process.
 	settings = Settings()
 	# Nhiều nhà cung cấp Postgres cấp URL dạng postgres:// hoặc postgresql://; SQLAlchemy cần chỉ rõ driver psycopg.

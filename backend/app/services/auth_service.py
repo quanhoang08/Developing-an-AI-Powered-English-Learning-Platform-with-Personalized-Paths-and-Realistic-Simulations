@@ -6,6 +6,7 @@ import secrets
 from datetime import datetime, timedelta, timezone
 
 import httpx
+from fastapi import BackgroundTasks
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -135,8 +136,12 @@ def _otp_hash(user: User, code: str) -> str:
 	return hash_refresh_token(f"{user.id}:{code}")
 
 
-async def _send_otp(db: AsyncSession, user: User, purpose: str) -> None:
+async def _send_otp(
+	db: AsyncSession, user: User, purpose: str, background: BackgroundTasks | None = None
+) -> None:
 	# Thu hồi mã cũ cùng mục đích, tạo mã mới (chỉ lưu hash) và gửi qua email.
+	# Có `background` thì gửi mail SAU khi trả response: Brevo/SMTP mất 3-5s và thời gian đó còn phân biệt
+	# được email có tài khoản hay không (timing side channel) nếu chờ ngay trong request.
 	await db.execute(
 		update(AuthToken)
 		.where(AuthToken.user_id == user.id, AuthToken.purpose == purpose, AuthToken.used_at.is_(None))
@@ -153,26 +158,35 @@ async def _send_otp(db: AsyncSession, user: User, purpose: str) -> None:
 	)
 	await db.commit()
 	what = "verify your email" if purpose == "verify_email" else "reset your password"
-	await send_email(
+	args = (
 		user.email,
 		f"Your Lumina code: {code}",
 		f"Your Lumina code to {what} is {code}. It expires in 10 minutes. If you did not ask for it, ignore this email.",
 	)
+	if background is not None:
+		background.add_task(send_email, *args)
+	else:
+		await send_email(*args)
 
 
-async def send_verification_email(db: AsyncSession, user: User) -> None:
-	await _send_otp(db, user, "verify_email")
+async def send_verification_email(db: AsyncSession, user: User, background: BackgroundTasks | None = None) -> None:
+	# Gọi ngay sau khi đăng ký: tạo OTP xác minh email; mail được gửi nền nếu truyền `background`.
+	await _send_otp(db, user, "verify_email", background)
 
 
-async def request_email_flow(db: AsyncSession, email: str, purpose: str) -> None:
+async def request_email_flow(
+	db: AsyncSession, email: str, purpose: str, background: BackgroundTasks | None = None
+) -> None:
 	# Endpoint công khai: email không tồn tại / đã xác minh -> im lặng, tránh dò email.
 	user = await db.scalar(select(User).where(User.email == email.lower()))
 	if user is None or (purpose == "verify_email" and user.email_verified_at is not None):
 		return
-	await _send_otp(db, user, purpose)
+	await _send_otp(db, user, purpose, background)
 
 
 async def _consume_otp(db: AsyncSession, email: str, code: str, purpose: str) -> User | None:
+	# Kiểm OTP mới nhất chưa dùng của user: hết hạn hoặc đã sai 5 lần -> None; sai mã -> tăng attempts rồi None;
+	# đúng -> đánh dấu đã dùng và trả user (caller tự commit). So sánh hằng thời gian (hmac.compare_digest) chống timing attack.
 	user = await db.scalar(select(User).where(User.email == email.lower()))
 	if user is None:
 		return None
@@ -192,6 +206,7 @@ async def _consume_otp(db: AsyncSession, email: str, code: str, purpose: str) ->
 
 
 async def verify_email(db: AsyncSession, email: str, code: str) -> bool:
+	# OTP đúng thì ghi email_verified_at và trả True; sai/hết hạn trả False.
 	user = await _consume_otp(db, email, code, "verify_email")
 	if user is None:
 		return False

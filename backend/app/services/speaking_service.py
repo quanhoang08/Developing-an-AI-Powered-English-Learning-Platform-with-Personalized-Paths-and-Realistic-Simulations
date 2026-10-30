@@ -10,6 +10,7 @@ from pathlib import Path
 
 from fastapi import UploadFile
 from sqlalchemy import func, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from starlette.concurrency import run_in_threadpool
 
@@ -31,6 +32,19 @@ logger = logging.getLogger(__name__)
 
 SESSION_IDLE_MINUTES = 30
 _ALLOWED_AUDIO_EXTENSIONS = {".wav", ".mp3", ".m4a", ".webm", ".ogg"}
+# Một lượt nói dài vài phút chỉ vài MB; chặn file lớn bất thường trước khi ghi đĩa/gửi STT.
+MAX_AUDIO_BYTES = 25 * 1024 * 1024
+
+
+async def read_audio_capped(audio: UploadFile) -> bytes:
+	"""Đọc file audio upload, ném audio_too_large nếu vượt MAX_AUDIO_BYTES, empty_audio nếu rỗng.
+	Dùng chung cho speaking, IELTS và pronunciation (đọc tối đa MAX+1 byte để biết có vượt không)."""
+	content = await audio.read(MAX_AUDIO_BYTES + 1)
+	if len(content) > MAX_AUDIO_BYTES:
+		raise ValueError("audio_too_large")
+	if not content:
+		raise ValueError("empty_audio")
+	return content
 _MAX_ADVICE_WORDS = 5
 _MEMORY_ERRORS = 5
 _NON_SPEECH_ERROR_TYPES = ("listening_comprehension", "reading_comprehension", "pronunciation")
@@ -38,6 +52,7 @@ _MAX_LITERAL_TRANSLATION = 3
 
 
 def _audio_dir() -> Path:
+	# Thư mục lưu audio lượt nói/phản hồi (STORAGE_AUDIO_DIR, tính từ thư mục backend); tự tạo nếu chưa có.
 	settings = get_settings()
 	root = Path(__file__).resolve().parents[2] / settings.storage_audio_dir
 	root.mkdir(parents=True, exist_ok=True)
@@ -52,6 +67,7 @@ def _clamp_score(value) -> float | None:
 		return None
 
 
+# Liệt kê kịch bản hội thoại (theo tên A-Z), lọc tuỳ chọn theo formality_level.
 async def list_scenarios(db: AsyncSession, formality_level: str | None) -> list[Scenario]:
 	query = select(Scenario).order_by(Scenario.title.asc())
 	if formality_level:
@@ -62,9 +78,13 @@ async def list_scenarios(db: AsyncSession, formality_level: str | None) -> list[
 async def create_session(
 	db: AsyncSession, user_id: uuid.UUID, scenario_id: uuid.UUID, persona_id: uuid.UUID | None
 ) -> ConversationSession:
+	# Mở phiên hội thoại mới theo kịch bản (và giọng persona tuỳ chọn); kịch bản/persona không tồn tại -> ValueError.
 	scenario = await db.get(Scenario, scenario_id)
 	if scenario is None:
 		raise ValueError("scenario_not_found")
+	# persona_id lạ sẽ vi phạm FK ở commit -> 500; kiểm trước để trả 404 persona_not_found.
+	if persona_id is not None and await db.get(Persona, persona_id) is None:
+		raise ValueError("persona_not_found")
 	session = ConversationSession(user_id=user_id, scenario_id=scenario_id, persona_id=persona_id)
 	db.add(session)
 	await db.commit()
@@ -75,6 +95,7 @@ async def create_session(
 async def get_owned_session(
 	db: AsyncSession, user_id: uuid.UUID, session_id: uuid.UUID
 ) -> ConversationSession:
+	# Lấy phiên của đúng user; phiên của người khác cũng báo session_not_found để không lộ sự tồn tại.
 	session = await db.scalar(
 		select(ConversationSession).where(
 			ConversationSession.id == session_id, ConversationSession.user_id == user_id
@@ -86,6 +107,7 @@ async def get_owned_session(
 
 
 async def list_turns(db: AsyncSession, session_id: uuid.UUID) -> list[ConversationTurn]:
+	# Các lượt của một phiên theo thứ tự nói (turn_index tăng dần).
 	result = await db.execute(
 		select(ConversationTurn)
 		.where(ConversationTurn.conversation_session_id == session_id)
@@ -95,6 +117,7 @@ async def list_turns(db: AsyncSession, session_id: uuid.UUID) -> list[Conversati
 
 
 def _build_pronunciation_advice(result: speech_service.PronunciationResult) -> str:
+	# Lời khuyên ngắn từ kết quả chấm: liệt kê các từ yếu nhất, hoặc khen nếu không có từ yếu.
 	if not result.weak_words:
 		return "Your pronunciation was clear. Keep it up!"
 	words = ", ".join(result.weak_words[:_MAX_ADVICE_WORDS])
@@ -214,6 +237,9 @@ async def submit_turn(
 	duration_seconds: int | None = None,
 	persona: str | None = None,
 ) -> ConversationTurn:
+	# Xử lý một lượt nói: kiểm phiên (còn hoạt động, chưa quá 30 phút nghỉ) -> kiểm/ghi audio (đuôi hợp lệ, <= MAX_AUDIO_BYTES)
+	# -> chạy song song [STT + LLM trả lời] và [chấm phát âm] -> TTS câu trả lời -> lưu lượt, ghi lỗi để ôn tập, cộng XP.
+	# Lỗi nghiệp vụ ném ValueError(mã) để router đổi thành HTTP status; lượt lỗi không được lưu.
 	started = time.perf_counter()
 	session = await get_owned_session(db, user_id, session_id)
 	if session.status != "in_progress":
@@ -233,9 +259,7 @@ async def submit_turn(
 	extension = Path(audio.filename or "").suffix.lower()
 	if extension not in _ALLOWED_AUDIO_EXTENSIONS:
 		raise ValueError("unsupported_audio_type")
-	content = await audio.read()
-	if not content:
-		raise ValueError("empty_audio")
+	content = await read_audio_capped(audio)
 	audio_path = _audio_dir() / f"turn_{uuid.uuid4()}{extension}"
 	audio_path.write_bytes(content)
 
@@ -273,6 +297,13 @@ async def submit_turn(
 		stt_provider_used=stt_provider,
 	)
 	db.add(turn)
+	# Hai lượt song song cùng session tính trùng turn_index -> vi phạm unique (session, turn_index).
+	# Flush sớm để bắt lỗi ngay tại đây và trả 409 thay vì 500 (lượt thua bị bỏ, lượt thắng giữ nguyên).
+	try:
+		await db.flush()
+	except IntegrityError as error:
+		await db.rollback()
+		raise ValueError("turn_conflict") from error
 	# literal_translation -> user_errors (loại vocabulary, detail đủ để Adaptive Engine sinh bài luyện).
 	literal_translation = [
 		{"original": item["original"], "natural": item["natural"], "explanation": item.get("explanation") or ""}
@@ -323,6 +354,7 @@ async def get_turn_reply_audio_path(
 async def list_slang(
 	db: AsyncSession, formality_level: str | None, topic: str | None
 ) -> list[SlangPhrase]:
+	# Thư viện slang/thành ngữ có sẵn, lọc tuỳ chọn theo mức trang trọng và chủ đề; sắp theo chữ cái.
 	query = select(SlangPhrase).order_by(SlangPhrase.phrase_text.asc())
 	if formality_level:
 		query = query.where(SlangPhrase.formality_level == formality_level)

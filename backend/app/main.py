@@ -1,8 +1,12 @@
 # Entry point FastAPI: khởi tạo app, gắn CORS và toàn bộ router nghiệp vụ dưới /api.
+import logging
+
 from fastapi import FastAPI, Request
 from fastapi.exception_handlers import http_exception_handler
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from sqlalchemy import text
+from sqlalchemy.exc import InterfaceError, OperationalError, TimeoutError as PoolTimeoutError
 from starlette.middleware.base import BaseHTTPMiddleware
 
 from app.core.config import get_settings
@@ -33,11 +37,13 @@ from app.routers.vocab import router as vocab_router
 from app.routers.writing import router as writing_router
 
 
+logger = logging.getLogger(__name__)
 settings = get_settings()
 # Tạo FastAPI application và gắn metadata từ cấu hình môi trường.
 app = FastAPI(
 	title=settings.app_name,
-	debug=settings.debug,
+	# Cố ý KHÔNG truyền debug=settings.debug: Starlette ưu tiên trang traceback debug hơn handler 500 bên dưới,
+	# nên DEBUG=true (chỉ cần để log SQL) sẽ làm lộ traceback cho client.
 )
 # Thêm TRƯỚC CORS để CORS là lớp ngoài cùng: response 403 của scope vẫn có CORS header.
 app.add_middleware(BaseHTTPMiddleware, dispatch=extension_scope_middleware)
@@ -80,6 +86,31 @@ async def handle_ai_service_error(request: Request, error: AIServiceError):
 	# Lưới an toàn: lỗi AI không router nào bắt vẫn ra JSON có mã + thông điệp (giữ CORS header)
 	# thay vì 500 thô khiến browser chỉ thấy "Failed to fetch".
 	return await http_exception_handler(request, ai_http_error(error))
+
+
+@app.exception_handler(OperationalError)
+@app.exception_handler(InterfaceError)
+@app.exception_handler(PoolTimeoutError)
+async def handle_database_unavailable(request: Request, error: Exception):
+	# DB sập/không kết nối được/hết pool: trả 503 JSON cùng dạng {"detail": {code, message, retryable}}
+	# như lỗi AI, thay vì 500 kèm traceback (lộ host, SQL, đường dẫn nội bộ). Chi tiết chỉ ghi log server.
+	logger.error("database unavailable on %s %s: %s", request.method, request.url.path, type(error).__name__)
+	return JSONResponse(
+		status_code=503,
+		content={"detail": {"code": "database_unavailable", "message": "The service is temporarily unavailable. Try again in a moment.", "retryable": True}},
+		headers={"Retry-After": "5"},
+	)
+
+
+@app.exception_handler(Exception)
+async def handle_unexpected_error(request: Request, error: Exception):
+	# Lưới an toàn cuối: lỗi không lường trước ra 500 JSON gọn, không bao giờ lộ traceback cho client
+	# (app không bật debug của Starlette, xem FastAPI(...) ở trên). Traceback đầy đủ ở log.
+	logger.exception("unhandled error on %s %s", request.method, request.url.path)
+	return JSONResponse(
+		status_code=500,
+		content={"detail": {"code": "internal_error", "message": "Something went wrong on our side.", "retryable": False}},
+	)
 
 
 @app.on_event("startup")

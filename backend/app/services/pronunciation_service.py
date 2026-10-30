@@ -125,9 +125,7 @@ async def assess(db: AsyncSession, user_id: uuid.UUID, sentence_id: str, audio: 
 	extension = Path(audio.filename or "").suffix.lower()
 	if extension not in _ALLOWED_EXTENSIONS:
 		raise ValueError("unsupported_audio_type")
-	content = await audio.read()
-	if not content:
-		raise ValueError("empty_audio")
+	content = await speaking_service.read_audio_capped(audio)
 	path = speaking_service._audio_dir() / f"pron_{uuid.uuid4()}{extension}"
 	path.write_bytes(content)
 	try:

@@ -11,6 +11,7 @@ WINDOW_SECONDS = 60
 
 
 async def auth_rate_limit(request: Request) -> None:
+	# Dependency gắn vào router /auth: cửa sổ trượt 60s đếm request theo (IP, đường dẫn); vượt ngưỡng -> 429 + Retry-After.
 	# Giới hạn theo IP + đường dẫn; AUTH_RATE_LIMIT_PER_MINUTE=0 thì tắt (mặc định, để dev/test không bị chặn).
 	limit = get_settings().auth_rate_limit_per_minute
 	if limit <= 0:

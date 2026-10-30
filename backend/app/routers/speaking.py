@@ -39,6 +39,9 @@ _BUSINESS_ERROR_STATUS = {
 	"turn_audio_not_found": status.HTTP_404_NOT_FOUND,
 	"turn_not_found": status.HTTP_404_NOT_FOUND,
 	"slang_phrase_not_found": status.HTTP_404_NOT_FOUND,
+	"audio_too_large": status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+	"persona_not_found": status.HTTP_404_NOT_FOUND,
+	"turn_conflict": status.HTTP_409_CONFLICT,
 	"session_not_active": status.HTTP_409_CONFLICT,
 	"session_expired": status.HTTP_409_CONFLICT,
 	"empty_transcription": status.HTTP_422_UNPROCESSABLE_ENTITY,
@@ -47,6 +50,7 @@ _BUSINESS_ERROR_STATUS = {
 
 
 def _raise_business_error(error: ValueError) -> None:
+	# Đổi ValueError(mã nghiệp vụ) từ service thành HTTPException; mã không có trong bảng trên -> 400 với detail = mã.
 	code = str(error)
 	raise HTTPException(
 		status_code=_BUSINESS_ERROR_STATUS.get(code, status.HTTP_400_BAD_REQUEST), detail=code
@@ -54,6 +58,7 @@ def _raise_business_error(error: ValueError) -> None:
 
 
 def _turn_response(turn: ConversationTurn) -> TurnResponse:
+	# ORM ConversationTurn -> DTO trả client (điểm số ép float, danh sách gợi ý/dịch sát nghĩa chuyển thành model).
 	return TurnResponse(
 		turn_id=str(turn.id),
 		user_transcript=turn.user_transcript,
@@ -82,6 +87,7 @@ async def list_scenarios(
 	current_user: User = Depends(get_current_user),
 	db: AsyncSession = Depends(get_db),
 ) -> list[ScenarioResponse]:
+	# GET /speaking/scenarios: danh sách kịch bản để chọn trước khi luyện nói.
 	scenarios = await speaking_service.list_scenarios(db, formality_level)
 	return [
 		ScenarioResponse(
@@ -104,6 +110,7 @@ async def create_session(
 	current_user: User = Depends(get_current_user),
 	db: AsyncSession = Depends(get_db),
 ) -> SessionCreateResponse:
+	# POST /speaking/sessions: mở phiên hội thoại mới; id không phải UUID -> 400, kịch bản/persona không có -> 404.
 	try:
 		session = await speaking_service.create_session(
 			db,
@@ -128,6 +135,8 @@ async def submit_turn(
 	current_user: User = Depends(get_current_user),
 	db: AsyncSession = Depends(get_db),
 ) -> TurnResponse:
+	# POST /speaking/sessions/{id}/turns: nhận audio (multipart), trả bản ghi chữ, điểm phát âm/ý định/lịch sự,
+	# câu trả lời của AI kèm URL audio. provider chọn LLM (gemini/ollama), duration_seconds để tính thời gian học.
 	try:
 		turn = await speaking_service.submit_turn(
 			db, current_user.id, session_id, audio, provider, duration_seconds, persona
@@ -143,6 +152,7 @@ async def get_session(
 	current_user: User = Depends(get_current_user),
 	db: AsyncSession = Depends(get_db),
 ) -> SessionDetailResponse:
+	# GET /speaking/sessions/{id}: xem lại phiên và toàn bộ lượt (chỉ chủ phiên, người khác nhận 404).
 	try:
 		session = await speaking_service.get_owned_session(db, current_user.id, session_id)
 	except ValueError as error:
@@ -177,6 +187,7 @@ async def list_slang(
 	current_user: User = Depends(get_current_user),
 	db: AsyncSession = Depends(get_db),
 ) -> list[SlangPhraseResponse]:
+	# GET /speaking/slang: thư viện slang/thành ngữ, lọc theo formality_level và topic.
 	items = await speaking_service.list_slang(db, formality_level, topic)
 	return [
 		SlangPhraseResponse(
@@ -193,6 +204,7 @@ async def list_slang(
 
 
 def _entry_response(entry, source_reference: str | None) -> PhrasebookEntryResponse:
+	# Mục sổ tay -> DTO; source_reference lấy từ thư viện slang gốc (None nếu là cụm tự thêm).
 	return PhrasebookEntryResponse(
 		id=str(entry.id),
 		slang_phrase_id=str(entry.slang_phrase_id) if entry.slang_phrase_id else None,
@@ -213,6 +225,7 @@ async def save_phrase(
 	current_user: User = Depends(get_current_user),
 	db: AsyncSession = Depends(get_db),
 ) -> PhrasebookEntryResponse:
+	# POST /speaking/phrasebook: lưu cụm từ vào sổ tay cá nhân, từ thư viện slang (slang_phrase_id) hoặc tự nhập (phrase_text).
 	try:
 		entry, library = await speaking_service.save_phrase(
 			db,
@@ -234,6 +247,7 @@ async def list_phrasebook(
 	current_user: User = Depends(get_current_user),
 	db: AsyncSession = Depends(get_db),
 ) -> list[PhrasebookEntryResponse]:
+	# GET /speaking/phrasebook: sổ tay của riêng user, lọc tuỳ chọn theo formality_level.
 	rows = await speaking_service.list_phrasebook(db, current_user.id, formality_level)
 	return [_entry_response(entry, source) for entry, source in rows]
 
@@ -256,6 +270,7 @@ async def live_captions(websocket: WebSocket) -> None:
 async def list_live_calls(
 	current_user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)
 ) -> list[LiveCallItem]:
+	# GET /speaking/live/calls: lịch sử cuộc gọi thoại trực tiếp của user kèm bản ghi chữ từng câu.
 	return [
 		LiveCallItem(
 			id=str(call.id),
@@ -273,6 +288,7 @@ async def list_live_calls(
 async def create_ielts_exam(
 	request: IeltsExamRequest, current_user: User = Depends(get_current_user)
 ) -> IeltsExamResponse:
+	# POST /speaking/ielts/exam: LLM sinh đề 3 phần (câu hỏi Part 1, cue card Part 2, câu hỏi Part 3); lỗi AI -> 503.
 	try:
 		return IeltsExamResponse(**await llm_service.generate_ielts_exam(request.topic))
 	except llm_service.AIServiceError as error:
@@ -285,6 +301,7 @@ async def submit_ielts_answer(
 	duration_seconds: int | None = Query(default=None, gt=0),
 	current_user: User = Depends(get_current_user),
 ) -> IeltsAnswerResponse:
+	# POST /speaking/ielts/answer: nhận audio một câu trả lời, trả bản ghi chữ, điểm phát âm, từ/phút, từ đệm.
 	try:
 		return IeltsAnswerResponse(**await ielts_service.transcribe_answer(audio, duration_seconds))
 	except ValueError as error:
@@ -297,6 +314,7 @@ async def estimate_ielts_band(
 	current_user: User = Depends(get_current_user),
 	db: AsyncSession = Depends(get_db),
 ) -> IeltsEstimateResponse:
+	# POST /speaking/ielts/estimate: gửi các câu trả lời đã chuyển chữ, nhận band từng tiêu chí + overall và lưu bài.
 	try:
 		return IeltsEstimateResponse(
 			**await ielts_service.estimate(
@@ -311,6 +329,7 @@ async def estimate_ielts_band(
 async def list_ielts_attempts(
 	current_user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)
 ) -> list[IeltsAttemptItem]:
+	# GET /speaking/ielts/attempts: lịch sử các bài IELTS Speaking đã chấm (mới nhất trước).
 	return [
 		IeltsAttemptItem(
 			id=str(a.id),

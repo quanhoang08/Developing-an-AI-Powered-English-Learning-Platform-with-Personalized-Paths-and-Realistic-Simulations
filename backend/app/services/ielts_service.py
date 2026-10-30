@@ -43,12 +43,12 @@ def overall_band(content: list[float], pronunciation: float | None) -> float:
 
 
 async def transcribe_answer(audio: UploadFile, duration_seconds: int | None) -> dict:
+	# Một câu trả lời IELTS bằng giọng nói: lưu audio -> STT -> chấm phát âm -> tính từ/phút (nếu biết thời lượng)
+	# và chỉ số trôi chảy (từ đệm, đa dạng từ). Chưa lưu DB; điểm band chỉ tính ở estimate().
 	extension = Path(audio.filename or "").suffix.lower()
 	if extension not in _ALLOWED_EXTENSIONS:
 		raise ValueError("unsupported_audio_type")
-	content = await audio.read()
-	if not content:
-		raise ValueError("empty_audio")
+	content = await speaking_service.read_audio_capped(audio)
 	path = speaking_service._audio_dir() / f"ielts_{uuid.uuid4()}{extension}"
 	path.write_bytes(content)
 	try:
@@ -69,6 +69,8 @@ async def transcribe_answer(audio: UploadFile, duration_seconds: int | None) -> 
 
 
 async def estimate(db: AsyncSession, user_id: uuid.UUID, answers: list[dict], topic: str | None) -> dict:
+	# Ước band cả bài: LLM chấm 3 tiêu chí (trôi chảy, từ vựng, ngữ pháp), phát âm lấy từ điểm Azure,
+	# gộp thành overall; lưu một IeltsAttempt và trả kèm điểm lần trước để so sánh tiến bộ.
 	result = await llm_service.estimate_ielts_band(answers)
 	bands = {
 		"fluency_coherence": to_band(result.get("fluency_coherence")),
@@ -121,6 +123,7 @@ def speech_summary(answers: list[dict]) -> dict:
 
 
 async def list_attempts(db: AsyncSession, user_id: uuid.UUID, limit: int = 20) -> list[IeltsAttempt]:
+	# Các bài IELTS Speaking gần nhất của user (mới nhất trước, tối đa `limit`).
 	result = await db.scalars(
 		select(IeltsAttempt)
 		.where(IeltsAttempt.user_id == user_id)

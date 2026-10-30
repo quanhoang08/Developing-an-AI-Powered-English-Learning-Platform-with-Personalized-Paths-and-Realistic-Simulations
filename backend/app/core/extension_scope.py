@@ -11,11 +11,13 @@ _ALLOWED_PREFIXES = ("/api/extension/",)
 
 
 def is_extension_allowed(path: str) -> bool:
+	# True nếu đường dẫn nằm trong allow-list của extension (khớp chính xác hoặc theo prefix); bỏ dấu "/" cuối trước khi so.
 	path = path.rstrip("/") or "/"
 	return path in _ALLOWED_EXACT or path.startswith(_ALLOWED_PREFIXES)
 
 
 async def extension_scope_middleware(request: Request, call_next: RequestResponseEndpoint):
+	# Chạy trước mọi route: token extension gọi ngoài allow-list -> 403 extension_token_scope_denied; còn lại cho đi tiếp.
 	# Không có Bearer (login/register/refresh/preflight/health) -> để route tự xử lý.
 	scheme, _, token = request.headers.get("authorization", "").partition(" ")
 	if (

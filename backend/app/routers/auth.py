@@ -1,5 +1,5 @@
 import httpx
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.dependencies import get_current_user
@@ -83,7 +83,7 @@ async def google_login(
 
 @router.post("/register", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
 async def register(
-	request: RegisterRequest, db: AsyncSession = Depends(get_db)
+	request: RegisterRequest, background: BackgroundTasks, db: AsyncSession = Depends(get_db)
 ) -> UserResponse:
 	# Endpoint đăng ký: validate schema trước, sau đó giao nghiệp vụ cho auth_service.
 	_require_google_for_gmail(request.email)
@@ -98,7 +98,7 @@ async def register(
 				detail="email_already_registered",
 			) from error
 		raise
-	await send_verification_email(db, user)
+	await send_verification_email(db, user, background)
 	return user_response(user)
 
 
@@ -138,21 +138,25 @@ async def refresh(
 
 @router.post("/verify-email", status_code=status.HTTP_204_NO_CONTENT)
 async def verify_email_endpoint(request: OtpRequest, db: AsyncSession = Depends(get_db)) -> None:
+	# Nhập mã OTP 6 số gửi qua email để xác minh tài khoản; mã sai/hết hạn/quá 5 lần thử -> 400 invalid_or_expired_code.
 	if not await verify_email(db, request.email, request.code):
 		raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="invalid_or_expired_code")
 
 
 @router.post("/resend-verification", status_code=status.HTTP_204_NO_CONTENT)
-async def resend_verification(request: EmailRequest, db: AsyncSession = Depends(get_db)) -> None:
-	await request_email_flow(db, request.email, "verify_email")
+async def resend_verification(request: EmailRequest, background: BackgroundTasks, db: AsyncSession = Depends(get_db)) -> None:
+	# Gửi lại mã xác minh email; luôn 204 dù email có tồn tại hay không (không lộ danh sách tài khoản).
+	await request_email_flow(db, request.email, "verify_email", background)
 
 
 @router.post("/forgot-password", status_code=status.HTTP_204_NO_CONTENT)
-async def forgot_password(request: EmailRequest, db: AsyncSession = Depends(get_db)) -> None:
-	await request_email_flow(db, request.email, "reset_password")
+async def forgot_password(request: EmailRequest, background: BackgroundTasks, db: AsyncSession = Depends(get_db)) -> None:
+	# Bước 1 quên mật khẩu: gửi mã OTP đặt lại mật khẩu qua email; luôn 204 để không dò được email nào có tài khoản.
+	await request_email_flow(db, request.email, "reset_password", background)
 
 
 @router.post("/reset-password", status_code=status.HTTP_204_NO_CONTENT)
 async def reset_password_endpoint(request: ResetPasswordRequest, db: AsyncSession = Depends(get_db)) -> None:
+	# Bước 2 quên mật khẩu: đúng OTP thì đổi mật khẩu và thu hồi mọi phiên cũ; sai/hết hạn -> 400 invalid_or_expired_code.
 	if not await reset_password(db, request.email, request.code, request.new_password):
 		raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="invalid_or_expired_code")

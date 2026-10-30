@@ -17,6 +17,7 @@ async def get_current_user(
 	token: str = Depends(oauth2_scheme),
 	db: AsyncSession = Depends(get_db),
 ) -> User:
+	# Trả User đang đăng nhập cho route (Depends); token thiếu/sai/hết hạn hoặc user đã bị xoá -> 401 invalid_token.
 	# Dependency bảo vệ các endpoint riêng tư: decode JWT rồi tải user từ database.
 	user_id = decode_access_token(token)
 	if user_id is None:

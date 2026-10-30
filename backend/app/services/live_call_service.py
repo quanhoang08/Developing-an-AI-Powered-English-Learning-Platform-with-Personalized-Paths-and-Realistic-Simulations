@@ -202,7 +202,9 @@ async def run_call(websocket: WebSocket) -> None:
 	await websocket.accept()
 	try:
 		hello = await asyncio.wait_for(websocket.receive_json(), _HELLO_TIMEOUT_SECONDS)
-	except (asyncio.TimeoutError, WebSocketDisconnect, ValueError, KeyError):
+	except WebSocketDisconnect:
+		return  # client đã ngắt trước khi gửi hello: đóng lần nữa sẽ ném RuntimeError "Unexpected ASGI message"
+	except (asyncio.TimeoutError, ValueError, KeyError):
 		await websocket.close(code=1008)
 		return
 	if not isinstance(hello, dict):

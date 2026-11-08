@@ -44,14 +44,14 @@ async def weekly_stats(db: AsyncSession, user: User) -> dict:
 	}
 
 
-async def create_class(db: AsyncSession, teacher: User, name: str) -> Classroom:
+async def create_class(db: AsyncSession, owner: User, name: str) -> Classroom:
 	for _ in range(5):
 		code = "".join(secrets.choice(_CODE_ALPHABET) for _ in range(6))
 		if await db.scalar(select(Classroom.id).where(Classroom.join_code == code)) is None:
 			break
 	else:
 		raise ValueError("code_generation_failed")
-	room = Classroom(teacher_id=teacher.id, name=name.strip(), join_code=code)
+	room = Classroom(owner_id=owner.id, name=name.strip(), join_code=code)
 	db.add(room)
 	await db.commit()
 	await db.refresh(room)
@@ -62,14 +62,14 @@ async def join_class(db: AsyncSession, user: User, code: str) -> Classroom:
 	room = await db.scalar(select(Classroom).where(Classroom.join_code == code.strip().upper()))
 	if room is None:
 		raise ValueError("class_not_found")
-	if room.teacher_id != user.id and await db.get(ClassMember, (room.id, user.id)) is None:
+	if room.owner_id != user.id and await db.get(ClassMember, (room.id, user.id)) is None:
 		db.add(ClassMember(class_id=room.id, user_id=user.id))
 		await db.commit()
 	return room
 
 
 async def my_classes(db: AsyncSession, user_id: uuid.UUID) -> dict:
-	teaching = list(await db.scalars(select(Classroom).where(Classroom.teacher_id == user_id).order_by(Classroom.created_at.desc())))
+	teaching = list(await db.scalars(select(Classroom).where(Classroom.owner_id == user_id).order_by(Classroom.created_at.desc())))
 	joined = list(
 		await db.scalars(
 			select(Classroom)
@@ -95,7 +95,7 @@ async def _get_room(db: AsyncSession, user_id: uuid.UUID, class_id: uuid.UUID) -
 	room = await db.get(Classroom, class_id)
 	if room is None:
 		raise ValueError("class_not_found")
-	if room.teacher_id == user_id:
+	if room.owner_id == user_id:
 		return room, True
 	if await db.get(ClassMember, (class_id, user_id)) is None:
 		raise ValueError("class_not_found")
@@ -129,21 +129,21 @@ async def _done_ids(db: AsyncSession, assignment: ClassAssignment, user_ids: lis
 
 
 async def class_detail(db: AsyncSession, user_id: uuid.UUID, class_id: uuid.UUID) -> dict:
-	room, is_teacher = await _get_room(db, user_id, class_id)
+	room, is_owner = await _get_room(db, user_id, class_id)
 	assignments = list(
 		await db.scalars(select(ClassAssignment).where(ClassAssignment.class_id == class_id).order_by(ClassAssignment.created_at.desc()))
 	)
 	members = (
 		list(await db.scalars(select(User).join(ClassMember, ClassMember.user_id == User.id).where(ClassMember.class_id == class_id)))
-		if is_teacher
+		if is_owner
 		else []
 	)
-	done = {a.id: await _done_ids(db, a, [m.id for m in members] if is_teacher else [user_id]) for a in assignments}
+	done = {a.id: await _done_ids(db, a, [m.id for m in members] if is_owner else [user_id]) for a in assignments}
 	detail = {
 		"id": str(room.id),
 		"name": room.name,
-		"is_teacher": is_teacher,
-		"join_code": room.join_code if is_teacher else None,
+		"is_owner": is_owner,
+		"join_code": room.join_code if is_owner else None,
 		"assignments": [
 			{
 				"id": str(a.id),
@@ -153,13 +153,13 @@ async def class_detail(db: AsyncSession, user_id: uuid.UUID, class_id: uuid.UUID
 				"due_date": a.due_date.isoformat() if a.due_date else None,
 				"auto_graded": a.skill is not None,
 				# Học sinh: mình đã làm chưa. Giáo viên: bao nhiêu học sinh đã làm / tổng.
-				**({"done_count": len(done[a.id]), "total_students": len(members)} if is_teacher else {"done": user_id in done[a.id]}),
+				**({"done_count": len(done[a.id]), "total_students": len(members)} if is_owner else {"done": user_id in done[a.id]}),
 			}
 			for a in assignments
 		],
 		"students": [],
 	}
-	if is_teacher:
+	if is_owner:
 		for member in members:
 			stats = await weekly_stats(db, member)
 			finished = sum(member.id in done[a.id] for a in assignments)
@@ -173,9 +173,9 @@ async def class_detail(db: AsyncSession, user_id: uuid.UUID, class_id: uuid.UUID
 async def add_assignment(
 	db: AsyncSession, user_id: uuid.UUID, class_id: uuid.UUID, title: str, description: str | None, skill: str | None, due: date | None
 ) -> ClassAssignment:
-	_, is_teacher = await _get_room(db, user_id, class_id)
-	if not is_teacher:
-		raise ValueError("not_teacher")
+	_, is_owner = await _get_room(db, user_id, class_id)
+	if not is_owner:
+		raise ValueError("not_owner")
 	item = ClassAssignment(class_id=class_id, title=title.strip(), description=description, skill=skill, due_date=due)
 	db.add(item)
 	await db.commit()
@@ -184,19 +184,19 @@ async def add_assignment(
 
 
 async def delete_assignment(db: AsyncSession, user_id: uuid.UUID, class_id: uuid.UUID, assignment_id: uuid.UUID) -> None:
-	_, is_teacher = await _get_room(db, user_id, class_id)
+	_, is_owner = await _get_room(db, user_id, class_id)
 	item = await db.get(ClassAssignment, assignment_id)
-	if not is_teacher or item is None or item.class_id != class_id:
-		raise ValueError("not_teacher" if not is_teacher else "assignment_not_found")
+	if not is_owner or item is None or item.class_id != class_id:
+		raise ValueError("not_owner" if not is_owner else "assignment_not_found")
 	await db.delete(item)
 	await db.commit()
 
 
 async def remove_member(db: AsyncSession, user_id: uuid.UUID, class_id: uuid.UUID, member_id: uuid.UUID) -> None:
 	"""Giáo viên xoá học sinh, hoặc học sinh tự rời lớp."""
-	_, is_teacher = await _get_room(db, user_id, class_id)
-	if not is_teacher and member_id != user_id:
-		raise ValueError("not_teacher")
+	_, is_owner = await _get_room(db, user_id, class_id)
+	if not is_owner and member_id != user_id:
+		raise ValueError("not_owner")
 	member = await db.get(ClassMember, (class_id, member_id))
 	if member is None:
 		raise ValueError("member_not_found")
@@ -205,8 +205,8 @@ async def remove_member(db: AsyncSession, user_id: uuid.UUID, class_id: uuid.UUI
 
 
 async def delete_class(db: AsyncSession, user_id: uuid.UUID, class_id: uuid.UUID) -> None:
-	room, is_teacher = await _get_room(db, user_id, class_id)
-	if not is_teacher:
-		raise ValueError("not_teacher")
+	room, is_owner = await _get_room(db, user_id, class_id)
+	if not is_owner:
+		raise ValueError("not_owner")
 	await db.delete(room)
 	await db.commit()

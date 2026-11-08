@@ -40,13 +40,13 @@ def test_weekly_xp_on_leaderboard(vocab_client: TestClient) -> None:
 
 
 def test_assignment_autograde_by_skill(vocab_client: TestClient) -> None:
-	_, teacher = signup(vocab_client)
+	_, owner = signup(vocab_client)
 	_, student = signup(vocab_client)
-	room = vocab_client.post("/api/classes", headers=teacher, json={"name": "Auto"}).json()
+	room = vocab_client.post("/api/classes", headers=owner, json={"name": "Auto"}).json()
 	cid = room["id"]
 	vocab_client.post("/api/classes/join", headers=student, json={"code": room["join_code"]})
-	vocab_client.post(f"/api/classes/{cid}/assignments", headers=teacher, json={"title": "Write", "skill": "writing"})
-	vocab_client.post(f"/api/classes/{cid}/assignments", headers=teacher, json={"title": "Free"})
+	vocab_client.post(f"/api/classes/{cid}/assignments", headers=owner, json={"title": "Write", "skill": "writing"})
+	vocab_client.post(f"/api/classes/{cid}/assignments", headers=owner, json={"title": "Free"})
 
 	def states(headers) -> dict:
 		return {a["title"]: a for a in vocab_client.get(f"/api/classes/{cid}", headers=headers).json()["assignments"]}
@@ -62,10 +62,10 @@ def test_assignment_autograde_by_skill(vocab_client: TestClient) -> None:
 
 	_in_db(seed)
 	assert states(student)["Write"]["done"] is True and states(student)["Free"]["done"] is False
-	teacher_view = vocab_client.get(f"/api/classes/{cid}", headers=teacher).json()
-	by_title = {a["title"]: a for a in teacher_view["assignments"]}
+	owner_view = vocab_client.get(f"/api/classes/{cid}", headers=owner).json()
+	by_title = {a["title"]: a for a in owner_view["assignments"]}
 	assert (by_title["Write"]["done_count"], by_title["Write"]["total_students"]) == (1, 1) and by_title["Free"]["done_count"] == 0
-	assert (teacher_view["students"][0]["assignments_done"], teacher_view["students"][0]["assignments_total"]) == (1, 2)
+	assert (owner_view["students"][0]["assignments_done"], owner_view["students"][0]["assignments_total"]) == (1, 2)
 
 
 def test_reported_mnemonic_hidden_after_threshold(vocab_client: TestClient) -> None:

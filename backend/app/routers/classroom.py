@@ -14,7 +14,7 @@ from app.services import classroom_service
 # Chế độ lớp học (backlog nhóm 5).
 router = APIRouter(prefix="/classes", tags=["classes"])
 
-_STATUS = {"class_not_found": 404, "assignment_not_found": 404, "member_not_found": 404, "not_teacher": 403}
+_STATUS = {"class_not_found": 404, "assignment_not_found": 404, "member_not_found": 404, "not_owner": 403}
 
 
 def _raise(error: ValueError) -> None:

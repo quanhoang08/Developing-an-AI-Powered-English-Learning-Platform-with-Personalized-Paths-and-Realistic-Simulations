@@ -20,7 +20,7 @@ const FEATURES: Feature[] = [
   { label: "IELTS and TOEIC prep", tab: "exam", keywords: "ielts toeic mock test band exam goal study plan thi thu luyen thi" },
   { label: "Games: Wordle, Memory Match, Word Rain, Bubble Pop...", tab: "games", keywords: "game wordle memory match word rain bubble pop word search chain detective dictation racer voice runner speed quiz 1v1 tro choi" },
   { label: "Rewards: coins, shop, gacha, hearts, daily quests", tab: "games", keywords: "coins shop gacha hearts booster avatar quests xu cua hang nhiem vu" },
-  { label: "Community: friends, classes, study guild", tab: "community", keywords: "friends leaderboard class classroom teacher guild clan ban be lop hoc bang hoi" },
+  { label: "Community: friends, classes, study guild", tab: "community", keywords: "friends leaderboard class classroom guild clan ban be lop hoc nhom bang hoi" },
   { label: "Adaptive Progress (error journal, quizzes, analytics)", tab: "analytics", keywords: "analytics progress adaptive errors quiz restore streak so loi tien do" },
 ];
 

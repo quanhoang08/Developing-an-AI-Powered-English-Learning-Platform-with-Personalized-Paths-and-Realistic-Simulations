@@ -37,12 +37,12 @@ class Friendship(Base):
 
 
 class Classroom(Base):
-	"""Lớp học: người tạo là giáo viên, học sinh vào bằng join_code (backlog nhóm 5)."""
+	"""Lớp học: người tạo là chủ lớp (owner), thành viên vào bằng join_code (backlog nhóm 5)."""
 
 	__tablename__ = "classes"
 
 	id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), **_UUID_PK)
-	teacher_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"))
+	owner_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"))
 	name: Mapped[str] = mapped_column(String(100))
 	join_code: Mapped[str] = mapped_column(String(8), unique=True)
 	created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=text("now()"))

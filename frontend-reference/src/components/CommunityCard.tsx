@@ -94,13 +94,13 @@ const Classes: React.FC<{ onError: (m: string) => void }> = ({ onError }) => {
       <h4 className="font-bold text-slate-900">Classes</h4>
       <div className="flex flex-wrap gap-2">
         <input value={name} onChange={(e) => setName(e.target.value)} placeholder="New class name" className={input} />
-        <button disabled={!name.trim()} className={btn} onClick={() => void act(async () => { await createClass(name.trim()); setName(""); await load(); })}>Create (I'm the teacher)</button>
+        <button disabled={!name.trim()} className={btn} onClick={() => void act(async () => { await createClass(name.trim()); setName(""); await load(); })}>Create (I'm the owner)</button>
         <input value={code} onChange={(e) => setCode(e.target.value.toUpperCase())} maxLength={8} placeholder="Join code" className={`${input} w-28`} />
         <button disabled={code.length < 4} className={btn} onClick={() => void act(async () => { await joinClass(code); setCode(""); await load(); })}>Join</button>
       </div>
       <div className="flex flex-wrap gap-2">
         {mine?.teaching.map((c) => (
-          <button key={c.id} onClick={() => void show(c.id)} className="px-3 py-1.5 rounded-full bg-indigo-100 text-indigo-900 text-xs font-bold cursor-pointer">{c.name} · code {c.join_code} · {c.members} students</button>
+          <button key={c.id} onClick={() => void show(c.id)} className="px-3 py-1.5 rounded-full bg-indigo-100 text-indigo-900 text-xs font-bold cursor-pointer">{c.name} · code {c.join_code} · {c.members} members</button>
         ))}
         {mine?.joined.map((c) => (
           <button key={c.id} onClick={() => void show(c.id)} className="px-3 py-1.5 rounded-full bg-slate-100 text-slate-800 text-xs font-bold cursor-pointer">{c.name}</button>
@@ -113,13 +113,13 @@ const Classes: React.FC<{ onError: (m: string) => void }> = ({ onError }) => {
           {open.assignments.map((a) => (
             <div key={a.id} className="text-sm flex items-center gap-2">
               <span>{a.title}{a.skill && ` (${a.skill})`}{a.due_date && ` — due ${a.due_date}`}</span>
-              {a.auto_graded && (open.is_teacher
+              {a.auto_graded && (open.is_owner
                 ? <span className="num text-xs text-slate-500">{a.done_count}/{a.total_students} done</span>
                 : <span className={`text-xs font-bold ${a.done ? "text-emerald-700" : "text-slate-400"}`}>{a.done ? "✓ Done" : "Not done yet"}</span>)}
-              {open.is_teacher && <button className="text-xs text-rose-700 cursor-pointer" onClick={() => void act(async () => { await deleteClassAssignment(open.id, a.id); await show(open.id); })}>Delete</button>}
+              {open.is_owner && <button className="text-xs text-rose-700 cursor-pointer" onClick={() => void act(async () => { await deleteClassAssignment(open.id, a.id); await show(open.id); })}>Delete</button>}
             </div>
           ))}
-          {open.is_teacher && (
+          {open.is_owner && (
             <>
               <div className="flex flex-wrap gap-2">
                 <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Assignment title" className={`${input} flex-1`} />
@@ -132,7 +132,7 @@ const Classes: React.FC<{ onError: (m: string) => void }> = ({ onError }) => {
                   onClick={() => void act(async () => { await addClassAssignment(open.id, { title: title.trim(), skill: skill || undefined, due_date: due || undefined }); setTitle(""); await show(open.id); })}>Assign</button>
               </div>
               <table className="w-full text-xs text-left">
-                <thead><tr className="text-slate-500"><th>Student</th><th>Streak</th><th>XP</th><th>Min/wk</th><th>Mistakes</th><th>Words</th><th>Tasks</th><th /></tr></thead>
+                <thead><tr className="text-slate-500"><th>Member</th><th>Streak</th><th>XP</th><th>Min/wk</th><th>Mistakes</th><th>Words</th><th>Tasks</th><th /></tr></thead>
                 <tbody>
                   {open.students.map((s) => (
                     <tr key={s.user_id} className="border-t border-slate-100">
@@ -143,7 +143,7 @@ const Classes: React.FC<{ onError: (m: string) => void }> = ({ onError }) => {
                   ))}
                 </tbody>
               </table>
-              <p className="text-[11px] text-slate-400">Minutes only count for students who turned on timer mode. Tasks with a skill are marked done automatically once the student practises that skill after the task was set.</p>
+              <p className="text-[11px] text-slate-400">Minutes only count for members who turned on timer mode. Tasks with a skill are marked done automatically once the member practises that skill after the task was set.</p>
             </>
           )}
         </div>

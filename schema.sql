@@ -151,7 +151,7 @@ CREATE TABLE public.class_members (
 
 CREATE TABLE public.classes (
     id uuid DEFAULT public.uuid_generate_v4() NOT NULL,
-    teacher_id uuid NOT NULL,
+    owner_id uuid NOT NULL,
     name character varying(100) NOT NULL,
     join_code character varying(8) NOT NULL,
     created_at timestamp with time zone DEFAULT now() NOT NULL
@@ -1880,10 +1880,10 @@ CREATE INDEX ix_class_members_user ON public.class_members USING btree (user_id)
 
 
 --
--- Name: ix_classes_teacher; Type: INDEX; Schema: public; Owner: -
+-- Name: ix_classes_owner; Type: INDEX; Schema: public; Owner: -
 --
 
-CREATE INDEX ix_classes_teacher ON public.classes USING btree (teacher_id);
+CREATE INDEX ix_classes_owner ON public.classes USING btree (owner_id);
 
 
 --
@@ -2039,11 +2039,11 @@ ALTER TABLE ONLY public.class_members
 
 
 --
--- Name: classes classes_teacher_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+-- Name: classes classes_owner_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.classes
-    ADD CONSTRAINT classes_teacher_id_fkey FOREIGN KEY (teacher_id) REFERENCES public.users(id) ON DELETE CASCADE;
+    ADD CONSTRAINT classes_owner_id_fkey FOREIGN KEY (owner_id) REFERENCES public.users(id) ON DELETE CASCADE;
 
 
 --

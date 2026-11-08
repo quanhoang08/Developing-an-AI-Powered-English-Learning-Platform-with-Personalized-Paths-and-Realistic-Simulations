@@ -1397,7 +1397,7 @@ export const getLeaderboard = (period: "all" | "week" = "all") => request<Leader
 // Bài có `skill` tự chấm: học sinh nhận `done`, giáo viên nhận `done_count`/`total_students`.
 export interface ClassAssignment { id: string; title: string; description: string | null; skill: string | null; due_date: string | null; auto_graded: boolean; done?: boolean; done_count?: number; total_students?: number }
 export interface ClassStudent { user_id: string; name: string; streak: number; total_xp: number; minutes: number; mistakes_logged: number; words_saved: number; assignments_done: number; assignments_total: number }
-export interface ClassDetail { id: string; name: string; is_teacher: boolean; join_code: string | null; assignments: ClassAssignment[]; students: ClassStudent[] }
+export interface ClassDetail { id: string; name: string; is_owner: boolean; join_code: string | null; assignments: ClassAssignment[]; students: ClassStudent[] }
 export interface MyClasses { teaching: Array<{ id: string; name: string; join_code: string; members: number }>; joined: Array<{ id: string; name: string }> }
 export const getMyClasses = () => request<MyClasses>("/api/classes");
 export const createClass = (name: string) => request<{ id: string; join_code: string }>("/api/classes", { method: "POST", body: JSON.stringify({ name }) });

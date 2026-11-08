@@ -49,10 +49,10 @@ def test_friends_and_leaderboard(vocab_client: TestClient) -> None:
 
 
 def test_classroom_flow(vocab_client: TestClient) -> None:
-	_, teacher = signup(vocab_client)
+	_, owner = signup(vocab_client)
 	_, student = signup(vocab_client)
 	_, outsider = signup(vocab_client)
-	room = vocab_client.post("/api/classes", headers=teacher, json={"name": "Class 9A"}).json()
+	room = vocab_client.post("/api/classes", headers=owner, json={"name": "Study Group A"}).json()
 	assert len(room["join_code"]) == 6
 	assert vocab_client.post("/api/classes/join", headers=student, json={"code": "ZZZZZZ"}).status_code == 404
 	assert vocab_client.post("/api/classes/join", headers=student, json={"code": room["join_code"].lower()}).status_code == 200
@@ -60,16 +60,16 @@ def test_classroom_flow(vocab_client: TestClient) -> None:
 	assert vocab_client.get(f"/api/classes/{cid}", headers=outsider).status_code == 404
 	assert vocab_client.post(f"/api/classes/{cid}/assignments", headers=student, json={"title": "x"}).status_code == 403
 	made = vocab_client.post(
-		f"/api/classes/{cid}/assignments", headers=teacher, json={"title": "Read unit 3", "skill": "reading", "due_date": "2030-01-01"}
+		f"/api/classes/{cid}/assignments", headers=owner, json={"title": "Read unit 3", "skill": "reading", "due_date": "2030-01-01"}
 	)
 	assert made.status_code == 201
-	as_teacher = vocab_client.get(f"/api/classes/{cid}", headers=teacher).json()
-	assert as_teacher["join_code"] and len(as_teacher["students"]) == 1 and as_teacher["assignments"][0]["title"] == "Read unit 3"
+	as_owner = vocab_client.get(f"/api/classes/{cid}", headers=owner).json()
+	assert as_owner["join_code"] and len(as_owner["students"]) == 1 and as_owner["assignments"][0]["title"] == "Read unit 3"
 	as_student = vocab_client.get(f"/api/classes/{cid}", headers=student).json()
 	assert as_student["join_code"] is None and as_student["students"] == [] and len(as_student["assignments"]) == 1
 	mine = vocab_client.get("/api/classes", headers=student).json()
-	assert [c["name"] for c in mine["joined"]] == ["Class 9A"]
-	student_id = as_teacher["students"][0]["user_id"]
+	assert [c["name"] for c in mine["joined"]] == ["Study Group A"]
+	student_id = as_owner["students"][0]["user_id"]
 	assert vocab_client.delete(f"/api/classes/{cid}/members/{student_id}", headers=outsider).status_code == 404
 	assert vocab_client.delete(f"/api/classes/{cid}/members/{student_id}", headers=student).status_code == 204  # tự rời lớp
-	assert vocab_client.delete(f"/api/classes/{cid}", headers=teacher).status_code == 204
+	assert vocab_client.delete(f"/api/classes/{cid}", headers=owner).status_code == 204
